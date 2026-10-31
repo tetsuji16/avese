@@ -89,6 +89,9 @@ pub struct App {
     hot: Option<usize>,
     drag: Option<usize>,
     started_hwnd: bool,
+    data: Option<Vec<u8>>,
+    canvas_tex: Option<egui::TextureHandle>,
+    status_msg: String,
 }
 
 pub fn exe_dir() -> PathBuf {
@@ -140,6 +143,9 @@ impl App {
             hot: None,
             drag: None,
             started_hwnd: false,
+            data: None,
+            canvas_tex: None,
+            status_msg: String::new(),
         }
     }
 
@@ -147,13 +153,39 @@ impl App {
         ViewState::from_store(&self.store)
     }
 
-    fn load_files(&mut self, files: Vec<PathBuf>) {
+    /// Render the held bytes with the current settings; errors go to the status bar.
+    fn render_data(&mut self, ctx: &Context) {
+        let Some(bytes) = self.data.as_ref() else { return };
+        let st = crate::engine::pipeline::RenderSettings::from_store(&self.store);
+        let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| crate::engine::pipeline::render_file(bytes, &st)))
+            .unwrap_or_else(|_| Err("描画中にエラーが発生しました".to_string()));
+        match res {
+            Ok(c) => {
+                let img = egui::ColorImage::from_rgba_premultiplied([c.width as usize, c.height as usize], &c.to_rgba_bytes());
+                self.canvas_tex = Some(ctx.load_texture("canvas", img, egui::TextureOptions::NEAREST));
+                self.status_msg.clear();
+            }
+            Err(e) => {
+                self.canvas_tex = None;
+                self.status_msg = e;
+            }
+        }
+    }
+
+    fn load_files(&mut self, ctx: &Context, files: Vec<PathBuf>) {
         match files.len() {
             0 => {}
             1 => {
                 let n = files[0].file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-                self.title = format!("AV似非 - {n}");
-                self.store.set_enabled("TBRedraw", true);
+                match std::fs::read(&files[0]) {
+                    Ok(b) => {
+                        self.title = format!("AV似非 - {n}");
+                        self.store.set_enabled("TBRedraw", true);
+                        self.data = Some(b);
+                        self.render_data(ctx);
+                    }
+                    Err(e) => self.status_msg = format!("読み込めません: {e}"),
+                }
             }
             _ => {
                 self.store.lists.insert("savelist".into(), files.iter().map(|p| p.display().to_string()).collect());
@@ -183,7 +215,7 @@ impl App {
         }
     }
 
-    fn action(&mut self, name: &str) {
+    fn action(&mut self, ctx: &Context, name: &str) {
         if let Some(item) = item_of(name) {
             let mut vs = self.vs();
             vs.click(item);
@@ -194,7 +226,7 @@ impl App {
         match name {
             "menload1" | "TBload1" | "menreload" | "TBReload" => {
                 let f = self.dlg.modal(dialogs::pick_open_files);
-                self.load_files(f);
+                self.load_files(ctx, f);
             }
             "menload2" => self.dlg.avi = true,
             "mensave" | "TBsave" => {
@@ -206,7 +238,11 @@ impl App {
             "menclose" => {
                 self.title = NODATA.into();
                 self.store.set_enabled("TBRedraw", false);
+                self.data = None;
+                self.canvas_tex = None;
+                self.status_msg.clear();
             }
+            "menredraw" | "TBRedraw" => self.render_data(ctx),
             "menconfig" | "TBConfig" => self.dlg.open_config(&self.store),
             "menconfigsave" => {
                 let p = self.ini_path.clone();
@@ -228,7 +264,7 @@ impl App {
             }
             "menhelp" | "TBHelp" => self.open_help(),
             "menversion" => self.dlg.about = true,
-            _ => {} // redraw: the canvas has no drawing engine yet
+            _ => {}
         }
     }
 
@@ -636,7 +672,7 @@ impl eframe::App for App {
             self.first = false;
             dialogs::apply_interlocks(&mut self.store);
             let files = std::mem::take(&mut self.start_files);
-            self.load_files(files);
+            self.load_files(&ctx, files);
         }
         if !self.started_hwnd {
             self.dlg.main_hwnd = plat::find(None);
@@ -658,11 +694,26 @@ impl eframe::App for App {
         let cbar = Rect::from_min_size(Pos2::new(full.min.x, mbar.max.y), Vec2::new(full.width(), BAR_H));
         let sbar = Rect::from_min_max(Pos2::new(full.min.x, full.max.y - STATUS_H), full.max);
         let sbox = Rect::from_min_max(Pos2::new(full.min.x, cbar.max.y), Pos2::new(full.max.x, sbar.min.y));
-        // scroll box (canvas: blank in this GUI-only version)
+        // scroll box
         fill(&p, sbox, FACE);
         sunken(&p, sbox);
+        if let Some(tex) = &self.canvas_tex {
+            let f = |n: &str| self.store.text(n).trim().parse::<f32>().ok().filter(|v| *v > 0.0).unwrap_or(1.0);
+            let (mh, mv) = (f("EDh"), f("EDv"));
+            let sz = tex.size_vec2() * Vec2::new(mh, mv);
+            let inner = sbox.shrink(2.0);
+            ui.scope_builder(egui::UiBuilder::new().max_rect(inner), |ui| {
+                egui::ScrollArea::both().auto_shrink([false, false]).show(ui, |ui| {
+                    ui.add(egui::Image::new((tex.id(), sz)));
+                });
+            });
+        }
         self.control_bar(ui, cbar, &mut acts, locked);
         self.status_bar(ui, sbar);
+        if !self.status_msg.is_empty() {
+            let tr = Rect::from_min_max(Pos2::new(sbar.min.x + 202.0, sbar.min.y + 2.0), Pos2::new(sbar.max.x - 16.0, sbar.max.y));
+            p.with_clip_rect(tr).text(Pos2::new(tr.min.x + 4.0, tr.center().y), egui::Align2::LEFT_CENTER, &self.status_msg, egui::FontId::proportional(12.0), egui::Color32::BLACK);
+        }
         if let Some(a) = self.menu_bar(ui, mbar, locked) {
             acts.push(a);
         }
@@ -670,7 +721,7 @@ impl eframe::App for App {
         if !locked {
             let dropped: Vec<PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).collect());
             if !dropped.is_empty() {
-                self.load_files(dropped);
+                self.load_files(&ctx, dropped);
             }
         }
         let center = {
@@ -681,13 +732,17 @@ impl eframe::App for App {
             // actions first so newly opened dialogs appear in the same frame
             if !locked {
                 for a in acts {
-                    self.action(&a);
+                    self.action(&ctx, &a);
                 }
             }
         }
+        let cfg_was_open = self.dlg.config.is_some();
         {
             let mut sh = Shared { forms: &self.forms, store: &mut self.store, assets: &self.assets, center };
             self.dlg.show(&ctx, &mut sh);
+        }
+        if cfg_was_open && self.dlg.config.is_none() && self.data.is_some() {
+            self.render_data(&ctx);
         }
         if self.dlg.any() {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
