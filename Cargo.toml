@@ -2,6 +2,7 @@
 name = "avese"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
 
 [dependencies]
 eframe = { version = "0.37", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
