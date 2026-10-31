@@ -1,0 +1,176 @@
+{
+"class": "Tdlginputstr",
+"name": "dlginputstr",
+"props": {
+"Left": 548,
+"Top": 656,
+"BorderStyle": {
+"ident": "bsDialog"
+},
+"Caption": "ラベルの追加",
+"ClientHeight": 71,
+"ClientWidth": 384,
+"Color": {
+"ident": "clBtnFace"
+},
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clWindowText"
+},
+"Font.Height": -12,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"Icon.Data": {
+"binary": 766
+},
+"OldCreateOrder": true,
+"Position": {
+"ident": "poScreenCenter"
+},
+"OnClose": {
+"ident": "FormClose"
+},
+"PixelsPerInch": 96,
+"TextHeight": 12
+},
+"kids": [
+{
+"class": "TLabel",
+"name": "Label26",
+"props": {
+"Tag": 1,
+"Left": 62,
+"Top": 11,
+"Width": 7,
+"Height": 12,
+"Caption": "X",
+"ParentShowHint": false,
+"ShowHint": true
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label1",
+"props": {
+"Tag": 1,
+"Left": 174,
+"Top": 11,
+"Width": 7,
+"Height": 12,
+"Caption": "Y",
+"ParentShowHint": false,
+"ShowHint": true
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label2",
+"props": {
+"Tag": 1,
+"Left": 14,
+"Top": 43,
+"Width": 36,
+"Height": 12,
+"Caption": "文字列",
+"ParentShowHint": false,
+"ShowHint": true
+},
+"kids": []
+},
+{
+"class": "TButton",
+"name": "OKBtn",
+"props": {
+"Left": 300,
+"Top": 8,
+"Width": 75,
+"Height": 25,
+"Caption": "OK",
+"Default": true,
+"ModalResult": 1,
+"TabOrder": 0,
+"OnClick": {
+"ident": "OKBtnClick"
+}
+},
+"kids": []
+},
+{
+"class": "TButton",
+"name": "CancelBtn",
+"props": {
+"Left": 300,
+"Top": 38,
+"Width": 75,
+"Height": 25,
+"Cancel": true,
+"Caption": "キャンセル",
+"ModalResult": 2,
+"TabOrder": 1,
+"OnClick": {
+"ident": "CancelBtnClick"
+}
+},
+"kids": []
+},
+{
+"class": "TEdit",
+"name": "EDY",
+"props": {
+"Left": 188,
+"Top": 8,
+"Width": 61,
+"Height": 20,
+"Hint": "表示間隔",
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 2,
+"Text": "0",
+"OnKeyPress": {
+"ident": "EDYKeyPress"
+}
+},
+"kids": []
+},
+{
+"class": "TEdit",
+"name": "EDX",
+"props": {
+"Left": 76,
+"Top": 8,
+"Width": 61,
+"Height": 20,
+"Hint": "表示間隔",
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 3,
+"Text": "0",
+"OnKeyPress": {
+"ident": "EDYKeyPress"
+}
+},
+"kids": []
+},
+{
+"class": "TEdit",
+"name": "EDstr",
+"props": {
+"Left": 64,
+"Top": 40,
+"Width": 225,
+"Height": 20,
+"Hint": "表示間隔",
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 4
+},
+"kids": []
+}
+]
+}

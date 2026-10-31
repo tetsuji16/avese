@@ -1,0 +1,337 @@
+{
+"class": "TdlgAVI",
+"name": "dlgAVI",
+"props": {
+"Left": 610,
+"Top": 217,
+"Width": 326,
+"Height": 396,
+"Caption": "連続処理",
+"Color": {
+"ident": "clBtnFace"
+},
+"Constraints.MinHeight": 200,
+"Constraints.MinWidth": 300,
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clWindowText"
+},
+"Font.Height": -12,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"Icon.Data": {
+"binary": 766
+},
+"OldCreateOrder": false,
+"Position": {
+"ident": "poDefaultPosOnly"
+},
+"Scaled": false,
+"OnClose": {
+"ident": "FormClose"
+},
+"PixelsPerInch": 96,
+"TextHeight": 12
+},
+"kids": [
+{
+"class": "TPanel",
+"name": "Panel1",
+"props": {
+"Left": 0,
+"Top": 267,
+"Width": 318,
+"Height": 100,
+"Align": {
+"ident": "alBottom"
+},
+"BevelOuter": {
+"ident": "bvNone"
+},
+"TabOrder": 1
+},
+"kids": [
+{
+"class": "TBevel",
+"name": "Bevel1",
+"props": {
+"Left": 0,
+"Top": 40,
+"Width": 318,
+"Height": 60
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label1",
+"props": {
+"Left": 8,
+"Top": 50,
+"Width": 102,
+"Height": 12,
+"Caption": "フレームレート（fps）"
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label2",
+"props": {
+"Left": 96,
+"Top": 78,
+"Width": 24,
+"Height": 12,
+"Caption": "横幅"
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label42",
+"props": {
+"Tag": 1,
+"Left": 184,
+"Top": 78,
+"Width": 36,
+"Height": 12,
+"Caption": "X  高さ"
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label43",
+"props": {
+"Tag": 1,
+"Left": 280,
+"Top": 81,
+"Width": 30,
+"Height": 12,
+"Caption": "pixels"
+},
+"kids": []
+},
+{
+"class": "TButton",
+"name": "makeAVI",
+"props": {
+"Left": 256,
+"Top": 44,
+"Width": 57,
+"Height": 25,
+"Caption": "AVI作成",
+"TabOrder": 7,
+"OnClick": {
+"ident": "makeAVIClick"
+}
+},
+"kids": []
+},
+{
+"class": "TButton",
+"name": "DeleteList",
+"props": {
+"Left": 176,
+"Top": 6,
+"Width": 40,
+"Height": 25,
+"Caption": "削除",
+"TabOrder": 4,
+"OnClick": {
+"ident": "DeleteListClick"
+}
+},
+"kids": []
+},
+{
+"class": "TButton",
+"name": "makeBMP",
+"props": {
+"Left": 256,
+"Top": 6,
+"Width": 57,
+"Height": 25,
+"Caption": "BMP作成",
+"TabOrder": 5,
+"OnClick": {
+"ident": "makeBMPClick"
+}
+},
+"kids": []
+},
+{
+"class": "TButton",
+"name": "SortList",
+"props": {
+"Left": 8,
+"Top": 6,
+"Width": 40,
+"Height": 25,
+"Caption": "ソート",
+"TabOrder": 0,
+"OnClick": {
+"ident": "SortListClick"
+}
+},
+"kids": []
+},
+{
+"class": "TButton",
+"name": "listup",
+"props": {
+"Left": 56,
+"Top": 6,
+"Width": 25,
+"Height": 25,
+"Caption": "↑",
+"TabOrder": 1,
+"OnClick": {
+"ident": "listupClick"
+}
+},
+"kids": []
+},
+{
+"class": "TButton",
+"name": "listdown",
+"props": {
+"Tag": 1,
+"Left": 88,
+"Top": 6,
+"Width": 25,
+"Height": 25,
+"Caption": "↓",
+"TabOrder": 2,
+"OnClick": {
+"ident": "listupClick"
+}
+},
+"kids": []
+},
+{
+"class": "TSpinEdit",
+"name": "SEframerate",
+"props": {
+"Left": 114,
+"Top": 46,
+"Width": 41,
+"Height": 21,
+"MaxValue": 60,
+"MinValue": 1,
+"TabOrder": 6,
+"Value": 1
+},
+"kids": []
+},
+{
+"class": "TButton",
+"name": "addlist",
+"props": {
+"Tag": 2,
+"Left": 120,
+"Top": 6,
+"Width": 40,
+"Height": 25,
+"Caption": "追加",
+"TabOrder": 3,
+"OnClick": {
+"ident": "addlistClick"
+}
+},
+"kids": []
+},
+{
+"class": "TSpinEdit",
+"name": "SEAVIwitdh",
+"props": {
+"Left": 128,
+"Top": 74,
+"Width": 50,
+"Height": 21,
+"MaxLength": 4,
+"MaxValue": 5000,
+"MinValue": 1,
+"TabOrder": 9,
+"Value": 500
+},
+"kids": []
+},
+{
+"class": "TSpinEdit",
+"name": "SEAVIheight",
+"props": {
+"Left": 226,
+"Top": 74,
+"Width": 50,
+"Height": 21,
+"MaxLength": 4,
+"MaxValue": 5000,
+"MinValue": 1,
+"TabOrder": 10,
+"Value": 500
+},
+"kids": []
+},
+{
+"class": "TCheckBox",
+"name": "CBAVIsize",
+"props": {
+"Left": 8,
+"Top": 76,
+"Width": 81,
+"Height": 17,
+"Caption": "サイズ指定",
+"TabOrder": 8
+},
+"kids": []
+}
+]
+},
+{
+"class": "TListBox",
+"name": "savelist",
+"props": {
+"Left": 0,
+"Top": 0,
+"Width": 318,
+"Height": 267,
+"Align": {
+"ident": "alClient"
+},
+"ItemHeight": 12,
+"TabOrder": 0
+},
+"kids": []
+},
+{
+"class": "TSaveDialog",
+"name": "SaveAVIDialog",
+"props": {
+"DefaultExt": "avi",
+"FileName": "default",
+"Filter": "AVI-Files (*.avi)|*.avi",
+"Left": 8,
+"Top": 8
+},
+"kids": []
+},
+{
+"class": "TFileDrop",
+"name": "FileDropList",
+"props": {
+"Accept": false,
+"OnFileDrop": {
+"ident": "FileDropListFileDrop"
+},
+"Left": 40,
+"Top": 8
+},
+"kids": []
+}
+]
+}

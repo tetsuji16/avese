@@ -1,0 +1,1420 @@
+{
+"class": "TForm1",
+"name": "Form1",
+"props": {
+"Left": 201,
+"Top": 123,
+"Width": 560,
+"Height": 402,
+"Cursor": {
+"ident": "crHourGlass"
+},
+"Caption": "AV似非 - nodata",
+"Color": {
+"ident": "clBtnFace"
+},
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clWindowText"
+},
+"Font.Height": -12,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"Icon.Data": {
+"binary": 766
+},
+"Menu": {
+"ident": "MainMenu1"
+},
+"OldCreateOrder": true,
+"Position": {
+"ident": "poDefault"
+},
+"Scaled": false,
+"ShowHint": true,
+"OnCloseQuery": {
+"ident": "FormCloseQuery"
+},
+"OnCreate": {
+"ident": "FormCreate"
+},
+"OnDestroy": {
+"ident": "FormDestroy"
+},
+"OnMouseWheel": {
+"ident": "FormMouseWheel"
+},
+"PixelsPerInch": 96,
+"TextHeight": 12
+},
+"kids": [
+{
+"class": "TStatusBar",
+"name": "StatusBar1",
+"props": {
+"Left": 0,
+"Top": 332,
+"Width": 552,
+"Height": 22,
+"Panels": {
+"collection": [
+{
+"Width": 100
+},
+{
+"Width": 100
+},
+{
+"Width": 100
+}
+]
+},
+"SimplePanel": false
+},
+"kids": []
+},
+{
+"class": "TControlBar",
+"name": "ControlBar1",
+"props": {
+"Left": 0,
+"Top": 0,
+"Width": 552,
+"Height": 64,
+"Align": {
+"ident": "alTop"
+},
+"AutoSize": true,
+"ParentShowHint": false,
+"RowSize": 30,
+"ShowHint": true,
+"TabOrder": 1
+},
+"kids": [
+{
+"class": "TToolBar",
+"name": "ToolBar1",
+"props": {
+"Left": 11,
+"Top": 2,
+"Width": 90,
+"Height": 26,
+"AutoSize": true,
+"ButtonHeight": 26,
+"ButtonWidth": 27,
+"Caption": "ToolBar1",
+"Constraints.MaxWidth": 90,
+"Constraints.MinWidth": 90,
+"EdgeBorders": {
+"set": []
+},
+"Flat": true,
+"Images": {
+"ident": "ImageList1"
+},
+"TabOrder": 0,
+"Wrapable": false
+},
+"kids": [
+{
+"class": "TToolButton",
+"name": "TBload1",
+"props": {
+"Tag": 1,
+"Left": 0,
+"Top": 0,
+"Hint": "データファイルのロード",
+"AllowAllUp": true,
+"Caption": "データロード(&L)...",
+"ImageIndex": 0,
+"MenuItem": {
+"ident": "menload1"
+},
+"ParentShowHint": false,
+"ShowHint": true
+},
+"kids": []
+},
+{
+"class": "TToolButton",
+"name": "TBsave",
+"props": {
+"Left": 27,
+"Top": 0,
+"Hint": "画像のセーブ",
+"AllowAllUp": true,
+"Caption": "画像のセーブ（&S）...",
+"ImageIndex": 1,
+"MenuItem": {
+"ident": "mensave"
+},
+"ParentShowHint": false,
+"ShowHint": true
+},
+"kids": []
+},
+{
+"class": "TToolButton",
+"name": "TSep1",
+"props": {
+"Left": 54,
+"Top": 0,
+"Width": 8,
+"AllowAllUp": true,
+"Caption": "TSep1",
+"ImageIndex": 3,
+"Style": {
+"ident": "tbsSeparator"
+}
+},
+"kids": []
+},
+{
+"class": "TToolButton",
+"name": "TBclip",
+"props": {
+"Left": 62,
+"Top": 0,
+"Hint": "クリップボードにコピー",
+"AllowAllUp": true,
+"Caption": "クリップボードにコピー(&C)",
+"ImageIndex": 2,
+"MenuItem": {
+"ident": "menClipbrd"
+},
+"ParentShowHint": false,
+"ShowHint": true
+},
+"kids": []
+}
+]
+},
+{
+"class": "TToolBar",
+"name": "ToolBar2",
+"props": {
+"Left": 114,
+"Top": 2,
+"Width": 300,
+"Height": 26,
+"ButtonHeight": 21,
+"ButtonWidth": 36,
+"Caption": "ToolBar2",
+"Constraints.MaxWidth": 300,
+"Constraints.MinWidth": 300,
+"EdgeBorders": {
+"set": []
+},
+"Flat": true,
+"TabOrder": 1,
+"Wrapable": false
+},
+"kids": [
+{
+"class": "TComboBox",
+"name": "CBmode",
+"props": {
+"Left": 0,
+"Top": 0,
+"Width": 70,
+"Height": 20,
+"Hint": "サイズ指定",
+"Style": {
+"ident": "csDropDownList"
+},
+"ItemHeight": 12,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 0,
+"OnChange": {
+"ident": "CBmodeChange"
+},
+"Items.Strings": [
+"width",
+"height"
+]
+},
+"kids": []
+},
+{
+"class": "TSpinEdit",
+"name": "SEsize",
+"props": {
+"Left": 70,
+"Top": 0,
+"Width": 54,
+"Height": 21,
+"Hint": "代表長さ（ピクセル）",
+"MaxValue": 50000,
+"MinValue": 1,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 3,
+"Value": 300
+},
+"kids": []
+},
+{
+"class": "TToolButton",
+"name": "ToolButton2",
+"props": {
+"Left": 124,
+"Top": 0,
+"Width": 8,
+"Caption": "ToolButton2",
+"Style": {
+"ident": "tbsSeparator"
+}
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label64",
+"props": {
+"Left": 132,
+"Top": 0,
+"Width": 47,
+"Height": 21,
+"Align": {
+"ident": "alTop"
+},
+"AutoSize": false,
+"BiDiMode": {
+"ident": "bdLeftToRight"
+},
+"Caption": "  縦倍率",
+"ParentBiDiMode": false,
+"Layout": {
+"ident": "tlCenter"
+}
+},
+"kids": []
+},
+{
+"class": "TEdit",
+"name": "EDv",
+"props": {
+"Left": 179,
+"Top": 0,
+"Width": 31,
+"Height": 20,
+"Hint": "描画倍率設定（円筒座標では無視される）",
+"AutoSize": false,
+"Constraints.MaxHeight": 20,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 1,
+"Text": "1",
+"OnKeyPress": {
+"ident": "EDvKeyPress"
+}
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label65",
+"props": {
+"Left": 210,
+"Top": 0,
+"Width": 50,
+"Height": 21,
+"Align": {
+"ident": "alTop"
+},
+"AutoSize": false,
+"BiDiMode": {
+"ident": "bdLeftToRight"
+},
+"Caption": "  横倍率",
+"ParentBiDiMode": false,
+"Layout": {
+"ident": "tlCenter"
+}
+},
+"kids": []
+},
+{
+"class": "TEdit",
+"name": "EDh",
+"props": {
+"Left": 260,
+"Top": 0,
+"Width": 31,
+"Height": 20,
+"Hint": "描画倍率設定（円筒座標では無視される）",
+"AutoSize": false,
+"Constraints.MaxHeight": 20,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 2,
+"Text": "1"
+},
+"kids": []
+}
+]
+},
+{
+"class": "TToolBar",
+"name": "ToolBar3",
+"props": {
+"Left": 141,
+"Top": 32,
+"Width": 257,
+"Height": 26,
+"AutoSize": true,
+"ButtonHeight": 26,
+"ButtonWidth": 31,
+"Caption": "ToolBar3",
+"Constraints.MaxWidth": 257,
+"Constraints.MinWidth": 257,
+"EdgeBorders": {
+"set": []
+},
+"Flat": true,
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clWindowText"
+},
+"Font.Height": -11,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"Images": {
+"ident": "ImageList1"
+},
+"List": true,
+"ParentFont": false,
+"TabOrder": 2,
+"Wrapable": false
+},
+"kids": [
+{
+"class": "TToolButton",
+"name": "TBengraph",
+"props": {
+"Left": 0,
+"Top": 0,
+"Hint": "分布図",
+"AllowAllUp": true,
+"AutoSize": true,
+"Caption": "分布図(&D)",
+"Down": true,
+"ImageIndex": 6,
+"Marked": true,
+"MenuItem": {
+"ident": "menengraph"
+},
+"ParentShowHint": false,
+"ShowHint": true
+},
+"kids": []
+},
+{
+"class": "TToolButton",
+"name": "TBenscatter",
+"props": {
+"Left": 31,
+"Top": 0,
+"Hint": "散布図",
+"AllowAllUp": true,
+"AutoSize": true,
+"Caption": "散布図(&S)",
+"ImageIndex": 9,
+"MenuItem": {
+"ident": "menenscatter"
+},
+"ParentShowHint": false,
+"ShowHint": true
+},
+"kids": []
+},
+{
+"class": "TToolButton",
+"name": "TBenpanel",
+"props": {
+"Left": 62,
+"Top": 0,
+"Hint": "パネル状",
+"AllowAllUp": true,
+"AutoSize": true,
+"Caption": "パネル状(&P)",
+"ImageIndex": 7,
+"MenuItem": {
+"ident": "menenpanel"
+},
+"ParentShowHint": false,
+"ShowHint": true
+},
+"kids": []
+},
+{
+"class": "TToolButton",
+"name": "ToolButton1",
+"props": {
+"Left": 93,
+"Top": 0,
+"Width": 8,
+"AllowAllUp": true,
+"Caption": "ToolButton1",
+"ImageIndex": 12,
+"Style": {
+"ident": "tbsSeparator"
+}
+},
+"kids": []
+},
+{
+"class": "TToolButton",
+"name": "TBenvector",
+"props": {
+"Left": 101,
+"Top": 0,
+"Hint": "ベクトル",
+"AllowAllUp": true,
+"AutoSize": true,
+"Caption": "ベクトル(&V)",
+"ImageIndex": 10,
+"MenuItem": {
+"ident": "menenvector"
+},
+"ParentShowHint": false,
+"ShowHint": true
+},
+"kids": []
+},
+{
+"class": "TToolButton",
+"name": "TBentoko",
+"props": {
+"Left": 132,
+"Top": 0,
+"Hint": "等高線",
+"AllowAllUp": true,
+"AutoSize": true,
+"Caption": "等高線(&C)",
+"ImageIndex": 8,
+"MenuItem": {
+"ident": "menentoko"
+},
+"ParentShowHint": false,
+"ShowHint": true
+},
+"kids": []
+},
+{
+"class": "TToolButton",
+"name": "TBenaxis",
+"props": {
+"Left": 163,
+"Top": 0,
+"Hint": "座標軸",
+"AllowAllUp": true,
+"AutoSize": true,
+"Caption": "座標軸(&A)",
+"ImageIndex": 11,
+"MenuItem": {
+"ident": "menenaxis"
+},
+"ParentShowHint": false,
+"ShowHint": true
+},
+"kids": []
+},
+{
+"class": "TToolButton",
+"name": "TBengrid",
+"props": {
+"Left": 194,
+"Top": 0,
+"Hint": "グリッド",
+"AllowAllUp": true,
+"AutoSize": true,
+"Caption": "グリッド(&G)",
+"ImageIndex": 12,
+"MenuItem": {
+"ident": "menengrid"
+},
+"ParentShowHint": false,
+"ShowHint": true
+},
+"kids": []
+},
+{
+"class": "TToolButton",
+"name": "TBenpoint",
+"props": {
+"Left": 225,
+"Top": 0,
+"Hint": "ポイント",
+"AllowAllUp": true,
+"AutoSize": true,
+"Caption": "ポイント(&T)",
+"ImageIndex": 15,
+"MenuItem": {
+"ident": "menenpoint"
+},
+"ParentShowHint": false,
+"ShowHint": true
+},
+"kids": []
+}
+]
+},
+{
+"class": "TToolBar",
+"name": "ToolBar4",
+"props": {
+"Left": 11,
+"Top": 32,
+"Width": 117,
+"Height": 26,
+"AutoSize": true,
+"ButtonHeight": 26,
+"ButtonWidth": 27,
+"Caption": "ToolBar2",
+"Constraints.MaxWidth": 117,
+"Constraints.MinWidth": 117,
+"EdgeBorders": {
+"set": []
+},
+"Flat": true,
+"Images": {
+"ident": "ImageList1"
+},
+"TabOrder": 3,
+"Wrapable": false
+},
+"kids": [
+{
+"class": "TToolButton",
+"name": "TBenflat",
+"props": {
+"Left": 0,
+"Top": 0,
+"Hint": "平面図で表示",
+"Caption": "平面図(&F)",
+"Down": true,
+"ImageIndex": 16,
+"Marked": true,
+"MenuItem": {
+"ident": "menenflat"
+},
+"ParentShowHint": false,
+"ShowHint": false
+},
+"kids": []
+},
+{
+"class": "TToolButton",
+"name": "TBenland",
+"props": {
+"Left": 27,
+"Top": 0,
+"Hint": "簡易立体表示",
+"Caption": "俯瞰図(&B)",
+"ImageIndex": 17,
+"MenuItem": {
+"ident": "menenland"
+},
+"ParentShowHint": false,
+"ShowHint": false
+},
+"kids": []
+},
+{
+"class": "TToolButton",
+"name": "ToolButton3",
+"props": {
+"Left": 54,
+"Top": 0,
+"Width": 8,
+"Caption": "ToolButton3",
+"ImageIndex": 18,
+"Style": {
+"ident": "tbsSeparator"
+}
+},
+"kids": []
+},
+{
+"class": "TToolButton",
+"name": "TBcartesian",
+"props": {
+"Left": 62,
+"Top": 0,
+"Caption": "カーテシアン座標系",
+"Down": true,
+"ImageIndex": 18,
+"Marked": true,
+"MenuItem": {
+"ident": "mencartesian"
+},
+"ParentShowHint": false,
+"ShowHint": false
+},
+"kids": []
+},
+{
+"class": "TToolButton",
+"name": "TBcylindrical",
+"props": {
+"Left": 89,
+"Top": 0,
+"Caption": "円筒座標系",
+"ImageIndex": 19,
+"MenuItem": {
+"ident": "mencylindrical"
+},
+"ParentShowHint": false,
+"ShowHint": false
+},
+"kids": []
+}
+]
+},
+{
+"class": "TToolBar",
+"name": "ToolBar5",
+"props": {
+"Left": 427,
+"Top": 2,
+"Width": 109,
+"Height": 26,
+"AutoSize": true,
+"ButtonHeight": 26,
+"ButtonWidth": 27,
+"Caption": "ToolBar2",
+"Constraints.MaxWidth": 109,
+"Constraints.MinWidth": 109,
+"EdgeBorders": {
+"set": []
+},
+"Flat": true,
+"Images": {
+"ident": "ImageList1"
+},
+"TabOrder": 4,
+"Wrapable": false
+},
+"kids": [
+{
+"class": "TToolButton",
+"name": "TBRedraw",
+"props": {
+"Left": 0,
+"Top": 0,
+"Hint": "再描画",
+"AllowAllUp": true,
+"Caption": "再描画",
+"Enabled": false,
+"ImageIndex": 3,
+"MenuItem": {
+"ident": "menredraw"
+},
+"ParentShowHint": false,
+"ShowHint": true
+},
+"kids": []
+},
+{
+"class": "TToolButton",
+"name": "TBReload",
+"props": {
+"Left": 27,
+"Top": 0,
+"Hint": "再読み込み",
+"AllowAllUp": true,
+"Caption": "再読み込み",
+"ImageIndex": 14,
+"MenuItem": {
+"ident": "menreload"
+}
+},
+"kids": []
+},
+{
+"class": "TToolButton",
+"name": "TBConfig",
+"props": {
+"Left": 54,
+"Top": 0,
+"Hint": "設定の変更",
+"AllowAllUp": true,
+"Caption": "詳細設定（&C）...",
+"ImageIndex": 4,
+"MenuItem": {
+"ident": "menconfig"
+},
+"ParentShowHint": false,
+"ShowHint": true
+},
+"kids": []
+},
+{
+"class": "TToolButton",
+"name": "TBHelp",
+"props": {
+"Left": 81,
+"Top": 0,
+"Hint": "ヘルプ",
+"AllowAllUp": true,
+"Caption": "ヘルプ(&H)",
+"ImageIndex": 5,
+"MenuItem": {
+"ident": "menhelp"
+},
+"ParentShowHint": false,
+"ShowHint": true
+},
+"kids": []
+}
+]
+}
+]
+},
+{
+"class": "TScrollBox",
+"name": "ScrollBox1",
+"props": {
+"Left": 0,
+"Top": 64,
+"Width": 552,
+"Height": 268,
+"Align": {
+"ident": "alClient"
+},
+"TabOrder": 2
+},
+"kids": [
+{
+"class": "TImage",
+"name": "Image1",
+"props": {
+"Left": 0,
+"Top": 0,
+"Width": 10,
+"Height": 5,
+"Hint": "Non",
+"ParentShowHint": false,
+"ShowHint": false,
+"OnMouseMove": {
+"ident": "Image1MouseMove"
+}
+},
+"kids": []
+}
+]
+},
+{
+"class": "TMainMenu",
+"name": "MainMenu1",
+"props": {
+"AutoHotkeys": {
+"ident": "maManual"
+},
+"Images": {
+"ident": "ImageList1"
+},
+"Left": 24,
+"Top": 296
+},
+"kids": [
+{
+"class": "TMenuItem",
+"name": "mentopload",
+"props": {
+"Caption": "ファイル（&F）"
+},
+"kids": [
+{
+"class": "TMenuItem",
+"name": "menload1",
+"props": {
+"Tag": 1,
+"Caption": "データロード(&L)...",
+"SubMenuImages": {
+"ident": "ImageList1"
+},
+"Hint": "データファイルのロード",
+"ImageIndex": 0,
+"ShortCut": 16460,
+"OnClick": {
+"ident": "menload1Click"
+}
+},
+"kids": []
+},
+{
+"class": "TMenuItem",
+"name": "menload2",
+"props": {
+"Caption": "複数データロード"
+},
+"kids": []
+},
+{
+"class": "TMenuItem",
+"name": "mensave",
+"props": {
+"Caption": "画像のセーブ（&S）...",
+"SubMenuImages": {
+"ident": "ImageList1"
+},
+"Hint": "画像のセーブ",
+"ImageIndex": 1,
+"ShortCut": 16467,
+"OnClick": {
+"ident": "mensaveClick"
+}
+},
+"kids": []
+},
+{
+"class": "TMenuItem",
+"name": "menclose",
+"props": {
+"Caption": "データを閉じる(&X)",
+"SubMenuImages": {
+"ident": "ImageList1"
+},
+"Hint": "データを閉じる",
+"OnClick": {
+"ident": "mencloseClick"
+}
+},
+"kids": []
+},
+{
+"class": "TMenuItem",
+"name": "N9",
+"props": {
+"Caption": "-"
+},
+"kids": []
+},
+{
+"class": "TMenuItem",
+"name": "menClipbrd",
+"props": {
+"Caption": "クリップボードにコピー(&C)",
+"Hint": "クリップボードにコピー",
+"ImageIndex": 2,
+"ShortCut": 16451,
+"OnClick": {
+"ident": "menClipbrdClick"
+}
+},
+"kids": []
+}
+]
+},
+{
+"class": "TMenuItem",
+"name": "mentopconfig",
+"props": {
+"Caption": "設定（&O）"
+},
+"kids": [
+{
+"class": "TMenuItem",
+"name": "menconfig",
+"props": {
+"Caption": "詳細設定（&C）...",
+"Hint": "設定の変更",
+"ImageIndex": 4,
+"ShortCut": 16463,
+"OnClick": {
+"ident": "menconfigClick"
+}
+},
+"kids": []
+},
+{
+"class": "TMenuItem",
+"name": "N8",
+"props": {
+"Caption": "-"
+},
+"kids": []
+},
+{
+"class": "TMenuItem",
+"name": "menconfigsave",
+"props": {
+"Caption": "設定の保存（&S）",
+"Hint": "設定の保存",
+"OnClick": {
+"ident": "menconfigsaveClick"
+}
+},
+"kids": []
+},
+{
+"class": "TMenuItem",
+"name": "N7",
+"props": {
+"Caption": "-"
+},
+"kids": []
+},
+{
+"class": "TMenuItem",
+"name": "menconfigloadas",
+"props": {
+"Caption": "設定の読込（&L）...",
+"Hint": "設定の読込",
+"OnClick": {
+"ident": "menconfigloadasClick"
+}
+},
+"kids": []
+},
+{
+"class": "TMenuItem",
+"name": "menconfigsaveas",
+"props": {
+"Caption": "設定に名前を付けて保存（&A）...",
+"Hint": "設定に名前を付けて保存",
+"OnClick": {
+"ident": "menconfigsaveasClick"
+}
+},
+"kids": []
+}
+]
+},
+{
+"class": "TMenuItem",
+"name": "mentopview",
+"props": {
+"Caption": "表示（&V）"
+},
+"kids": [
+{
+"class": "TMenuItem",
+"name": "menenflat",
+"props": {
+"Caption": "平面図(&F)",
+"Checked": true,
+"Hint": "平面図で表示",
+"ImageIndex": 16,
+"OnClick": {
+"ident": "menenflatClick"
+}
+},
+"kids": []
+},
+{
+"class": "TMenuItem",
+"name": "menenland",
+"props": {
+"Caption": "俯瞰図(&B)",
+"Hint": "簡易立体表示",
+"ImageIndex": 17,
+"OnClick": {
+"ident": "menenlandClick"
+}
+},
+"kids": []
+},
+{
+"class": "TMenuItem",
+"name": "N4",
+"props": {
+"Caption": "-"
+},
+"kids": []
+},
+{
+"class": "TMenuItem",
+"name": "mencartesian",
+"props": {
+"Caption": "カーテシアン座標系",
+"Checked": true,
+"ImageIndex": 18,
+"OnClick": {
+"ident": "mencartesianClick"
+}
+},
+"kids": []
+},
+{
+"class": "TMenuItem",
+"name": "mencylindrical",
+"props": {
+"Caption": "円筒座標系",
+"ImageIndex": 19,
+"OnClick": {
+"ident": "mencylindricalClick"
+}
+},
+"kids": []
+},
+{
+"class": "TMenuItem",
+"name": "N3",
+"props": {
+"Caption": "-"
+},
+"kids": []
+},
+{
+"class": "TMenuItem",
+"name": "menengraph",
+"props": {
+"Caption": "分布図(&D)",
+"Checked": true,
+"Hint": "分布図",
+"ImageIndex": 6,
+"OnClick": {
+"ident": "mengraphClick"
+}
+},
+"kids": []
+},
+{
+"class": "TMenuItem",
+"name": "menenscatter",
+"props": {
+"Caption": "散布図(&S)",
+"Hint": "散布図",
+"ImageIndex": 9,
+"OnClick": {
+"ident": "menenscatterClick"
+}
+},
+"kids": []
+},
+{
+"class": "TMenuItem",
+"name": "menenpanel",
+"props": {
+"Caption": "パネル状(&P)",
+"Hint": "パネル状",
+"ImageIndex": 7,
+"OnClick": {
+"ident": "menenpanelClick"
+}
+},
+"kids": []
+},
+{
+"class": "TMenuItem",
+"name": "N1",
+"props": {
+"Caption": "-"
+},
+"kids": []
+},
+{
+"class": "TMenuItem",
+"name": "menenvector",
+"props": {
+"Caption": "ベクトル(&V)",
+"Hint": "ベクトル",
+"ImageIndex": 10,
+"OnClick": {
+"ident": "menenvectorClick"
+}
+},
+"kids": []
+},
+{
+"class": "TMenuItem",
+"name": "menentoko",
+"props": {
+"Caption": "等高線(&C)",
+"Hint": "等高線",
+"ImageIndex": 8,
+"OnClick": {
+"ident": "menentokoClick"
+}
+},
+"kids": []
+},
+{
+"class": "TMenuItem",
+"name": "menenaxis",
+"props": {
+"Caption": "座標軸(&A)",
+"Hint": "座標軸",
+"ImageIndex": 11,
+"OnClick": {
+"ident": "menenaxisClick"
+}
+},
+"kids": []
+},
+{
+"class": "TMenuItem",
+"name": "menengrid",
+"props": {
+"Caption": "グリッド(&G)",
+"Hint": "グリッド",
+"ImageIndex": 12,
+"OnClick": {
+"ident": "menengridClick"
+}
+},
+"kids": []
+},
+{
+"class": "TMenuItem",
+"name": "menenpoint",
+"props": {
+"Caption": "ポイント(&T)",
+"Hint": "ポイント",
+"ImageIndex": 15,
+"OnClick": {
+"ident": "menenpointClick"
+}
+},
+"kids": []
+},
+{
+"class": "TMenuItem",
+"name": "N2",
+"props": {
+"Caption": "-"
+},
+"kids": []
+},
+{
+"class": "TMenuItem",
+"name": "menenlegend",
+"props": {
+"Caption": "凡例表示(&L)",
+"Checked": true,
+"Hint": "凡例表示",
+"OnClick": {
+"ident": "menenlegendClick"
+}
+},
+"kids": []
+},
+{
+"class": "TMenuItem",
+"name": "menenlabel",
+"props": {
+"Caption": "ラベル表示(&E)",
+"Checked": true,
+"Hint": "文字列表示",
+"OnClick": {
+"ident": "menenlabelClick"
+}
+},
+"kids": []
+}
+]
+},
+{
+"class": "TMenuItem",
+"name": "mentopredraw",
+"props": {
+"Caption": "再描画（&R）",
+"ImageIndex": 3
+},
+"kids": [
+{
+"class": "TMenuItem",
+"name": "menredraw",
+"props": {
+"Caption": "再描画",
+"Enabled": false,
+"Hint": "再描画",
+"ImageIndex": 3,
+"ShortCut": 16466,
+"OnClick": {
+"ident": "menredrawClick"
+}
+},
+"kids": []
+},
+{
+"class": "TMenuItem",
+"name": "N5",
+"props": {
+"Caption": "-"
+},
+"kids": []
+},
+{
+"class": "TMenuItem",
+"name": "menreload",
+"props": {
+"Caption": "再読み込み",
+"Hint": "再読み込み",
+"ImageIndex": 14,
+"ShortCut": 16462,
+"OnClick": {
+"ident": "menload1Click"
+}
+},
+"kids": []
+}
+]
+},
+{
+"class": "TMenuItem",
+"name": "mentophelp",
+"props": {
+"Caption": "ヘルプ（&H）"
+},
+"kids": [
+{
+"class": "TMenuItem",
+"name": "menhelp",
+"props": {
+"Caption": "ヘルプ(&H)",
+"Hint": "ヘルプ",
+"ImageIndex": 5,
+"OnClick": {
+"ident": "menhelpClick"
+}
+},
+"kids": []
+},
+{
+"class": "TMenuItem",
+"name": "menversion",
+"props": {
+"Caption": "バージョン情報（&A）...",
+"Hint": "バージョン情報",
+"OnClick": {
+"ident": "menversionClick"
+}
+},
+"kids": []
+}
+]
+}
+]
+},
+{
+"class": "TOpenDialog",
+"name": "dlgOpen",
+"props": {
+"Filter": "AV似非データファイル(*.txt;*.dat)|*.txt;*.dat|テキストファイル(*.txt)|*.txt|データファイル(*.dat)|*.dat|すべてのファイル(*.*)|*.*",
+"Options": {
+"set": [
+"ofHideReadOnly",
+"ofAllowMultiSelect",
+"ofFileMustExist",
+"ofEnableSizing"
+]
+},
+"Left": 56,
+"Top": 296
+},
+"kids": []
+},
+{
+"class": "TSaveDialog",
+"name": "dlgsave",
+"props": {
+"FileName": "default",
+"Filter": "ビットマップファイル(*.bmp)|*.bmp|RLE 圧縮 ビットマップファイル(*.bmp)|*.bmp|ウィンドウズメタファイル(*.wmf)|*.wmf|エンハンストメタファイル(*.emf)|*.emf|PNGファイル(*.png)|*.png",
+"Left": 88,
+"Top": 296
+},
+"kids": []
+},
+{
+"class": "TAutoIni",
+"name": "AutoIni1",
+"props": {
+"CheckControls": {
+"set": [
+"ccEdit",
+"ccComboBox"
+]
+},
+"CheckWinState": true,
+"CheckTag": false,
+"EnableTag": 0,
+"MakeIniWinDir": false,
+"Left": 152,
+"Top": 296
+},
+"kids": []
+},
+{
+"class": "TImageList",
+"name": "ImageList1",
+"props": {
+"Height": 20,
+"Width": 20,
+"Left": 120,
+"Top": 296,
+"Bitmap": {
+"binary": 40006
+}
+},
+"kids": []
+},
+{
+"class": "TFileDrop",
+"name": "FileDrop1",
+"props": {
+"OnFileDrop": {
+"ident": "FileDrop1FileDrop"
+},
+"Left": 184,
+"Top": 296
+},
+"kids": []
+},
+{
+"class": "TSaveDialog",
+"name": "dlgconfigsave",
+"props": {
+"DefaultExt": "ini",
+"FileName": "avese",
+"Filter": "設定ファイル(*.ini)|*.ini",
+"Left": 88,
+"Top": 264
+},
+"kids": []
+},
+{
+"class": "TOpenDialog",
+"name": "dlgconfigload",
+"props": {
+"DefaultExt": "ini",
+"FileName": "avese",
+"Filter": "設定ファイル(*.ini)|*.ini",
+"Options": {
+"set": [
+"ofHideReadOnly",
+"ofFileMustExist",
+"ofEnableSizing"
+]
+},
+"Left": 56,
+"Top": 264
+},
+"kids": []
+},
+{
+"class": "TInterpolate",
+"name": "Interpolate1",
+"props": {
+"Method": {
+"ident": "CSpline"
+},
+"Left": 216,
+"Top": 296
+},
+"kids": []
+}
+]
+}

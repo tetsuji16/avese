@@ -1,0 +1,304 @@
+{
+"class": "TAboutBox",
+"name": "AboutBox",
+"props": {
+"Left": 638,
+"Top": 255,
+"ActiveControl": {
+"ident": "OKButton"
+},
+"BorderStyle": {
+"ident": "bsDialog"
+},
+"Caption": "ﾊﾞｰｼﾞｮﾝ情報",
+"ClientHeight": 229,
+"ClientWidth": 292,
+"Color": {
+"ident": "clBtnFace"
+},
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -12,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"OldCreateOrder": true,
+"Position": {
+"ident": "poScreenCenter"
+},
+"Scaled": false,
+"OnClose": {
+"ident": "FormClose"
+},
+"PixelsPerInch": 96,
+"TextHeight": 12
+},
+"kids": [
+{
+"class": "TLabel",
+"name": "ProductName",
+"props": {
+"Left": 0,
+"Top": 0,
+"Width": 292,
+"Height": 33,
+"Align": {
+"ident": "alTop"
+},
+"Alignment": {
+"ident": "taCenter"
+},
+"AutoSize": false,
+"Caption": "AV似非（えーぶい・えせ）",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -16,
+"Font.Name": "ＭＳ Ｐ明朝",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false,
+"Layout": {
+"ident": "tlBottom"
+},
+"IsControl": true
+},
+"kids": []
+},
+{
+"class": "TBevel",
+"name": "Bevel1",
+"props": {
+"Left": 8,
+"Top": 8,
+"Width": 274,
+"Height": 129
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Version",
+"props": {
+"Left": 100,
+"Top": 39,
+"Width": 91,
+"Height": 16,
+"Caption": "Version  0.93",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -16,
+"Font.Name": "ＭＳ Ｐ明朝",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false,
+"IsControl": true
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label1",
+"props": {
+"Left": 100,
+"Top": 62,
+"Width": 144,
+"Height": 13,
+"Caption": "Copyright  (c) 1997-2002",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -13,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false
+},
+"kids": []
+},
+{
+"class": "TImage",
+"name": "Image1",
+"props": {
+"Left": 20,
+"Top": 44,
+"Width": 64,
+"Height": 64,
+"Picture.Data": {
+"binary": 2178
+}
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label2",
+"props": {
+"Left": 128,
+"Top": 80,
+"Width": 45,
+"Height": 13,
+"Caption": "おりいる",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -13,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label3",
+"props": {
+"Left": 0,
+"Top": 142,
+"Width": 292,
+"Height": 14,
+"Align": {
+"ident": "alBottom"
+},
+"Alignment": {
+"ident": "taCenter"
+},
+"AutoSize": false,
+"Caption": "このソフトはフリーウエアです。"
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label4",
+"props": {
+"Left": 0,
+"Top": 156,
+"Width": 292,
+"Height": 14,
+"Align": {
+"ident": "alBottom"
+},
+"Alignment": {
+"ident": "taCenter"
+},
+"AutoSize": false,
+"Caption": "個人・商用を問わず、利用は無料です。"
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label5",
+"props": {
+"Left": 0,
+"Top": 170,
+"Width": 292,
+"Height": 14,
+"Align": {
+"ident": "alBottom"
+},
+"Alignment": {
+"ident": "taCenter"
+},
+"AutoSize": false,
+"Caption": "このソフトを利用する事によって生じた"
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label6",
+"props": {
+"Left": 0,
+"Top": 184,
+"Width": 292,
+"Height": 45,
+"Align": {
+"ident": "alBottom"
+},
+"Alignment": {
+"ident": "taCenter"
+},
+"AutoSize": false,
+"Caption": "いかなる損害も、作者は責任を負いません。"
+},
+"kids": []
+},
+{
+"class": "TButton",
+"name": "OKButton",
+"props": {
+"Left": 118,
+"Top": 200,
+"Width": 64,
+"Height": 24,
+"Caption": "OK",
+"Default": true,
+"ModalResult": 1,
+"TabOrder": 0,
+"OnClick": {
+"ident": "OKButtonClick"
+},
+"IsControl": true
+},
+"kids": []
+},
+{
+"class": "TEdit",
+"name": "Edit2",
+"props": {
+"Left": 28,
+"Top": 115,
+"Width": 253,
+"Height": 16,
+"AutoSize": false,
+"BorderStyle": {
+"ident": "bsNone"
+},
+"Color": {
+"ident": "clMenu"
+},
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -13,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false,
+"ReadOnly": true,
+"TabOrder": 1,
+"Text": "http://hp.vector.co.jp/authors/VA011972/"
+},
+"kids": []
+}
+]
+}

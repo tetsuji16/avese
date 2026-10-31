@@ -1,0 +1,4101 @@
+{
+"class": "TDlgconfig",
+"name": "Dlgconfig",
+"props": {
+"Left": 516,
+"Top": 121,
+"BorderIcons": {
+"set": [
+"biSystemMenu",
+"biMinimize"
+]
+},
+"BorderStyle": {
+"ident": "bsDialog"
+},
+"Caption": "設定",
+"ClientHeight": 320,
+"ClientWidth": 401,
+"Color": {
+"ident": "clBtnFace"
+},
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -12,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"Icon.Data": {
+"binary": 766
+},
+"OldCreateOrder": true,
+"Position": {
+"ident": "poScreenCenter"
+},
+"Scaled": false,
+"OnClose": {
+"ident": "FormClose"
+},
+"OnCreate": {
+"ident": "FormCreate"
+},
+"OnShow": {
+"ident": "FormShow"
+},
+"PixelsPerInch": 96,
+"TextHeight": 12
+},
+"kids": [
+{
+"class": "TButton",
+"name": "OKBtn",
+"props": {
+"Left": 240,
+"Top": 290,
+"Width": 74,
+"Height": 24,
+"Anchors": {
+"set": [
+"akRight",
+"akBottom"
+]
+},
+"Caption": "OK",
+"Default": true,
+"ModalResult": 1,
+"TabOrder": 0,
+"OnClick": {
+"ident": "OKBtnClick"
+}
+},
+"kids": []
+},
+{
+"class": "TButton",
+"name": "CancelBtn",
+"props": {
+"Left": 319,
+"Top": 290,
+"Width": 74,
+"Height": 24,
+"Anchors": {
+"set": [
+"akRight",
+"akBottom"
+]
+},
+"Cancel": true,
+"Caption": "ｷｬﾝｾﾙ",
+"ModalResult": 2,
+"TabOrder": 1,
+"OnClick": {
+"ident": "CancelBtnClick"
+}
+},
+"kids": []
+},
+{
+"class": "TPageControl",
+"name": "TPCconfig",
+"props": {
+"Left": 5,
+"Top": 5,
+"Width": 391,
+"Height": 276,
+"ActivePage": {
+"ident": "TSlegend"
+},
+"MultiLine": true,
+"TabHeight": 18,
+"TabOrder": 2,
+"OnChange": {
+"ident": "TPCconfigChange"
+}
+},
+"kids": [
+{
+"class": "TTabSheet",
+"name": "TSland",
+"props": {
+"Caption": "俯瞰図",
+"ImageIndex": 1
+},
+"kids": [
+{
+"class": "TCheckBox",
+"name": "CBland",
+"props": {
+"Left": 7,
+"Top": 7,
+"Width": 66,
+"Height": 17,
+"Caption": "俯瞰図",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -12,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false,
+"TabOrder": 0,
+"OnClick": {
+"ident": "CBlandClick"
+}
+},
+"kids": []
+},
+{
+"class": "TGroupBox",
+"name": "GroupBox7",
+"props": {
+"Left": 5,
+"Top": 32,
+"Width": 372,
+"Height": 192,
+"Caption": "俯瞰図",
+"TabOrder": 1
+},
+"kids": [
+{
+"class": "TLabel",
+"name": "Label59",
+"props": {
+"Tag": 1,
+"Left": 14,
+"Top": 27,
+"Width": 69,
+"Height": 12,
+"Caption": "俯瞰図の高さ"
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label60",
+"props": {
+"Tag": 1,
+"Left": 142,
+"Top": 30,
+"Width": 30,
+"Height": 12,
+"Caption": "pixels",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -12,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false
+},
+"kids": []
+},
+{
+"class": "TPaintBox",
+"name": "PBangle",
+"props": {
+"Left": 196,
+"Top": 56,
+"Width": 141,
+"Height": 104,
+"Color": {
+"ident": "clBtnFace"
+},
+"ParentColor": false,
+"OnPaint": {
+"ident": "PBanglePaint"
+}
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label62",
+"props": {
+"Tag": 1,
+"Left": 198,
+"Top": 27,
+"Width": 18,
+"Height": 12,
+"Caption": "η="
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label63",
+"props": {
+"Tag": 1,
+"Left": 270,
+"Top": 27,
+"Width": 18,
+"Height": 12,
+"Caption": "φ="
+},
+"kids": []
+},
+{
+"class": "TSpeedButton",
+"name": "BTDefAngle",
+"props": {
+"Left": 341,
+"Top": 162,
+"Width": 20,
+"Height": 20,
+"Hint": "角度をデフォルトに戻す",
+"Caption": "●",
+"ParentShowHint": false,
+"ShowHint": true,
+"OnClick": {
+"ident": "BTDefAngleClick"
+}
+},
+"kids": []
+},
+{
+"class": "TSpinEdit",
+"name": "SElandheight",
+"props": {
+"Left": 90,
+"Top": 23,
+"Width": 47,
+"Height": 21,
+"Hint": "俯瞰図の高さ方向のピクセル数（1～1000）",
+"MaxValue": 1000,
+"MinValue": 1,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 0,
+"Value": 100
+},
+"kids": []
+},
+{
+"class": "TTrackBar",
+"name": "TBeta",
+"props": {
+"Left": 192,
+"Top": 160,
+"Width": 149,
+"Height": 25,
+"Hint": "X軸とY軸の角度（-45～45度）",
+"Max": 45,
+"Min": -45,
+"Orientation": {
+"ident": "trHorizontal"
+},
+"ParentShowHint": false,
+"Frequency": 5,
+"Position": 30,
+"SelEnd": 0,
+"SelStart": 0,
+"ShowHint": true,
+"TabOrder": 4,
+"ThumbLength": 14,
+"TickMarks": {
+"ident": "tmTopLeft"
+},
+"TickStyle": {
+"ident": "tsAuto"
+},
+"OnChange": {
+"ident": "TBphiChange"
+}
+},
+"kids": []
+},
+{
+"class": "TTrackBar",
+"name": "TBphi",
+"props": {
+"Left": 338,
+"Top": 17,
+"Width": 25,
+"Height": 145,
+"Hint": "天頂角（0～85度）",
+"Max": 85,
+"Orientation": {
+"ident": "trVertical"
+},
+"ParentShowHint": false,
+"Frequency": 5,
+"Position": 30,
+"SelEnd": 0,
+"SelStart": 0,
+"ShowHint": true,
+"TabOrder": 5,
+"ThumbLength": 14,
+"TickMarks": {
+"ident": "tmTopLeft"
+},
+"TickStyle": {
+"ident": "tsAuto"
+},
+"OnChange": {
+"ident": "TBphiChange"
+}
+},
+"kids": []
+},
+{
+"class": "TSpinEdit",
+"name": "SEeta",
+"props": {
+"Left": 218,
+"Top": 23,
+"Width": 42,
+"Height": 21,
+"Hint": "X軸とY軸の角度（-45～45度）",
+"MaxValue": 45,
+"MinValue": -45,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 2,
+"Value": 30,
+"OnChange": {
+"ident": "SEetaChange"
+}
+},
+"kids": []
+},
+{
+"class": "TSpinEdit",
+"name": "SEphi",
+"props": {
+"Left": 292,
+"Top": 23,
+"Width": 42,
+"Height": 21,
+"Hint": "天頂角（0～85度）",
+"MaxValue": 85,
+"MinValue": 0,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 3,
+"Value": 30,
+"OnChange": {
+"ident": "SEetaChange"
+}
+},
+"kids": []
+},
+{
+"class": "TCheckBox",
+"name": "CBsurface",
+"props": {
+"Left": 15,
+"Top": 52,
+"Width": 74,
+"Height": 17,
+"Hint": "立体表示の形式",
+"Caption": "面で表示",
+"Checked": true,
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -12,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false,
+"ParentShowHint": false,
+"ShowHint": true,
+"State": {
+"ident": "cbChecked"
+},
+"TabOrder": 1,
+"OnClick": {
+"ident": "CBlandClick"
+}
+},
+"kids": []
+}
+]
+}
+]
+},
+{
+"class": "TTabSheet",
+"name": "TSgraph",
+"props": {
+"Caption": "分布図"
+},
+"kids": [
+{
+"class": "TCheckBox",
+"name": "CBgraph",
+"props": {
+"Left": 7,
+"Top": 7,
+"Width": 97,
+"Height": 17,
+"Caption": "分布図",
+"Checked": true,
+"State": {
+"ident": "cbChecked"
+},
+"TabOrder": 0,
+"OnClick": {
+"ident": "CBgraphClick"
+}
+},
+"kids": []
+},
+{
+"class": "TCheckBox",
+"name": "CBscatter",
+"props": {
+"Left": 211,
+"Top": 7,
+"Width": 78,
+"Height": 17,
+"Caption": "散布図",
+"TabOrder": 2,
+"OnClick": {
+"ident": "CBscatterClick"
+}
+},
+"kids": []
+},
+{
+"class": "TCheckBox",
+"name": "CBpanel",
+"props": {
+"Left": 107,
+"Top": 7,
+"Width": 70,
+"Height": 17,
+"Caption": "パネル状",
+"TabOrder": 1,
+"OnClick": {
+"ident": "CBpanelClick"
+}
+},
+"kids": []
+},
+{
+"class": "TGroupBox",
+"name": "GroupBox3",
+"props": {
+"Left": 5,
+"Top": 168,
+"Width": 372,
+"Height": 56,
+"Caption": "散布図",
+"TabOrder": 3
+},
+"kids": [
+{
+"class": "TLabel",
+"name": "Label61",
+"props": {
+"Tag": 1,
+"Left": 15,
+"Top": 27,
+"Width": 103,
+"Height": 12,
+"Caption": "散布図の点の大きさ",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -12,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label64",
+"props": {
+"Tag": 1,
+"Left": 191,
+"Top": 27,
+"Width": 24,
+"Height": 12,
+"Caption": "形状",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -12,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false
+},
+"kids": []
+},
+{
+"class": "TSpinEdit",
+"name": "SEdotsize",
+"props": {
+"Left": 128,
+"Top": 23,
+"Width": 41,
+"Height": 21,
+"Hint": "散布図の点の大きさのピクセル数（1～1000）",
+"MaxValue": 1000,
+"MinValue": 1,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 0,
+"Value": 3
+},
+"kids": []
+},
+{
+"class": "TComboBox",
+"name": "CBscattemode",
+"props": {
+"Left": 218,
+"Top": 23,
+"Width": 47,
+"Height": 20,
+"Hint": "点の形状",
+"Style": {
+"ident": "csDropDownList"
+},
+"DropDownCount": 9,
+"ItemHeight": 12,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 1,
+"Items.Strings": [
+"■",
+"●",
+"□",
+"○"
+]
+},
+"kids": []
+}
+]
+}
+]
+},
+{
+"class": "TTabSheet",
+"name": "TSvector",
+"props": {
+"Caption": "ベクトル"
+},
+"kids": [
+{
+"class": "TGroupBox",
+"name": "GroupBox1",
+"props": {
+"Left": 5,
+"Top": 32,
+"Width": 372,
+"Height": 192,
+"Caption": "ベクトル",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -12,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false,
+"TabOrder": 1
+},
+"kids": [
+{
+"class": "TShape",
+"name": "SPvectorcolor",
+"props": {
+"Left": 271,
+"Top": 80,
+"Width": 25,
+"Height": 15,
+"Brush.Color": {
+"ident": "clBlack"
+},
+"ParentShowHint": false,
+"Pen.Style": {
+"ident": "psInsideFrame"
+},
+"ShowHint": true
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label9",
+"props": {
+"Tag": 1,
+"Left": 202,
+"Top": 81,
+"Width": 65,
+"Height": 12,
+"Caption": "ベクトルの色",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -12,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false,
+"ParentShowHint": false,
+"ShowHint": false
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label10",
+"props": {
+"Tag": 1,
+"Left": 15,
+"Top": 81,
+"Width": 74,
+"Height": 12,
+"Caption": "ベクトルの長さ",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -12,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false,
+"ParentShowHint": false,
+"ShowHint": false
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label11",
+"props": {
+"Tag": 1,
+"Left": 192,
+"Top": 138,
+"Width": 6,
+"Height": 12,
+"Caption": "%",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -12,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false,
+"ParentShowHint": false,
+"ShowHint": false
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label12",
+"props": {
+"Tag": 1,
+"Left": 126,
+"Top": 135,
+"Width": 21,
+"Height": 12,
+"Caption": "長さ",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -12,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false,
+"ParentShowHint": false,
+"ShowHint": false
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label16",
+"props": {
+"Tag": 1,
+"Left": 141,
+"Top": 85,
+"Width": 6,
+"Height": 12,
+"Caption": "%",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -12,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false,
+"ParentShowHint": false,
+"ShowHint": false
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label4",
+"props": {
+"Tag": 1,
+"Left": 214,
+"Top": 135,
+"Width": 24,
+"Height": 12,
+"Caption": "角度",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -12,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false,
+"ParentShowHint": false,
+"ShowHint": false
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label5",
+"props": {
+"Tag": 1,
+"Left": 292,
+"Top": 138,
+"Width": 12,
+"Height": 12,
+"Caption": "度",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -12,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false,
+"ParentShowHint": false,
+"ShowHint": false
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label26",
+"props": {
+"Tag": 1,
+"Left": 182,
+"Top": 27,
+"Width": 42,
+"Height": 12,
+"Caption": "毎に描く",
+"ParentShowHint": false,
+"ShowHint": true
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label7",
+"props": {
+"Tag": 1,
+"Left": 246,
+"Top": 27,
+"Width": 68,
+"Height": 12,
+"Caption": "オフセット（X）",
+"ParentShowHint": false,
+"ShowHint": false
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label32",
+"props": {
+"Tag": 1,
+"Left": 182,
+"Top": 54,
+"Width": 42,
+"Height": 12,
+"Caption": "毎に描く",
+"ParentShowHint": false,
+"ShowHint": true
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label33",
+"props": {
+"Tag": 1,
+"Left": 246,
+"Top": 54,
+"Width": 68,
+"Height": 12,
+"Caption": "オフセット（Y）",
+"ParentShowHint": false,
+"ShowHint": false
+},
+"kids": []
+},
+{
+"class": "TShape",
+"name": "SPvectorheadcolor",
+"props": {
+"Left": 271,
+"Top": 161,
+"Width": 25,
+"Height": 15,
+"ParentShowHint": false,
+"Pen.Style": {
+"ident": "psInsideFrame"
+},
+"ShowHint": false
+},
+"kids": []
+},
+{
+"class": "TSpeedButton",
+"name": "CCBvector",
+"props": {
+"Left": 308,
+"Top": 79,
+"Width": 48,
+"Height": 19,
+"Hint": "ベクトル線の色を変更",
+"Caption": "変更(&V)",
+"ParentShowHint": false,
+"ShowHint": true,
+"OnClick": {
+"ident": "CCBvectorClick"
+}
+},
+"kids": []
+},
+{
+"class": "TSpeedButton",
+"name": "CCBvectorhead",
+"props": {
+"Left": 308,
+"Top": 160,
+"Width": 48,
+"Height": 19,
+"Hint": "矢印の色を変更",
+"Caption": "変更(&H)",
+"ParentShowHint": false,
+"ShowHint": true,
+"OnClick": {
+"ident": "CCBvectorheadClick"
+}
+},
+"kids": []
+},
+{
+"class": "TEdit",
+"name": "EDvector",
+"props": {
+"Left": 103,
+"Top": 77,
+"Width": 31,
+"Height": 20,
+"Hint": "ベクトルの長さ（代表長さの20分の1）",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -12,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 6,
+"Text": "100",
+"OnKeyPress": {
+"ident": "EDscalewKeyPress"
+}
+},
+"kids": []
+},
+{
+"class": "TEdit",
+"name": "EDhead",
+"props": {
+"Left": 154,
+"Top": 131,
+"Width": 31,
+"Height": 20,
+"Hint": "線分の長さに対する先端部分の大きさ",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -12,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 10,
+"Text": "40",
+"OnKeyPress": {
+"ident": "EDscalewKeyPress"
+}
+},
+"kids": []
+},
+{
+"class": "TEdit",
+"name": "EDstepx",
+"props": {
+"Left": 148,
+"Top": 24,
+"Width": 26,
+"Height": 20,
+"Hint": "表示間隔",
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 1,
+"Text": "1",
+"OnKeyPress": {
+"ident": "EDscalewKeyPress"
+}
+},
+"kids": []
+},
+{
+"class": "TEdit",
+"name": "EDoffsetx",
+"props": {
+"Left": 322,
+"Top": 24,
+"Width": 26,
+"Height": 20,
+"Hint": "オフセット",
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 2,
+"Text": "0",
+"OnKeyPress": {
+"ident": "EDscalewKeyPress"
+}
+},
+"kids": []
+},
+{
+"class": "TCheckBox",
+"name": "CBskipx",
+"props": {
+"Left": 15,
+"Top": 25,
+"Width": 118,
+"Height": 17,
+"Hint": "間引く",
+"Caption": "X（θ）方向に間引く",
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 0
+},
+"kids": []
+},
+{
+"class": "TCheckBox",
+"name": "CBskipy",
+"props": {
+"Left": 15,
+"Top": 52,
+"Width": 118,
+"Height": 17,
+"Hint": "間引く",
+"Caption": "Y（ｒ）方向に間引く",
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 3
+},
+"kids": []
+},
+{
+"class": "TEdit",
+"name": "EDstepy",
+"props": {
+"Left": 148,
+"Top": 51,
+"Width": 26,
+"Height": 20,
+"Hint": "表示間隔",
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 4,
+"Text": "1",
+"OnKeyPress": {
+"ident": "EDscalewKeyPress"
+}
+},
+"kids": []
+},
+{
+"class": "TEdit",
+"name": "EDoffsety",
+"props": {
+"Left": 322,
+"Top": 51,
+"Width": 26,
+"Height": 20,
+"Hint": "オフセット",
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 5,
+"Text": "0",
+"OnKeyPress": {
+"ident": "EDscalewKeyPress"
+}
+},
+"kids": []
+},
+{
+"class": "TCheckBox",
+"name": "CBfix",
+"props": {
+"Left": 15,
+"Top": 161,
+"Width": 147,
+"Height": 17,
+"Hint": "ベクトル値の大きさによって線分の長さを変更しない",
+"Caption": "矢印の大きさを統一する",
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 12
+},
+"kids": []
+},
+{
+"class": "TCheckBox",
+"name": "CBpaint",
+"props": {
+"Left": 199,
+"Top": 161,
+"Width": 70,
+"Height": 17,
+"Hint": "矢印を塗りつぶす（塗りつぶさない場合は鉤型）",
+"Caption": "矢印の色",
+"Checked": true,
+"ParentShowHint": false,
+"ShowHint": true,
+"State": {
+"ident": "cbChecked"
+},
+"TabOrder": 13,
+"OnClick": {
+"ident": "CBpaintClick"
+}
+},
+"kids": []
+},
+{
+"class": "TSpinEdit",
+"name": "SEvectorheadangle",
+"props": {
+"Left": 246,
+"Top": 131,
+"Width": 41,
+"Height": 21,
+"Hint": "矢印の先端の開き角度",
+"MaxValue": 90,
+"MinValue": 0,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 11,
+"Value": 15
+},
+"kids": []
+},
+{
+"class": "TCheckBox",
+"name": "CBenVMax",
+"props": {
+"Left": 15,
+"Top": 106,
+"Width": 98,
+"Height": 17,
+"Hint": "基準値を指定する",
+"Caption": "基準値を指定",
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 7,
+"OnClick": {
+"ident": "CBenVMaxClick"
+}
+},
+"kids": []
+},
+{
+"class": "TEdit",
+"name": "EDenVMax",
+"props": {
+"Left": 110,
+"Top": 104,
+"Width": 99,
+"Height": 20,
+"Hint": "ベクトルの基準値",
+"Color": {
+"ident": "clBtnFace"
+},
+"ParentShowHint": false,
+"ReadOnly": true,
+"ShowHint": true,
+"TabOrder": 8,
+"Text": "1.0"
+},
+"kids": []
+},
+{
+"class": "TCheckBox",
+"name": "CBvectorhead",
+"props": {
+"Left": 15,
+"Top": 133,
+"Width": 94,
+"Height": 17,
+"Hint": "矢印をつける（付けない場合は線分のみ）",
+"Caption": "矢印をつける",
+"Checked": true,
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -12,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false,
+"ParentShowHint": false,
+"ShowHint": true,
+"State": {
+"ident": "cbChecked"
+},
+"TabOrder": 9
+},
+"kids": []
+}
+]
+},
+{
+"class": "TCheckBox",
+"name": "CBvector",
+"props": {
+"Left": 7,
+"Top": 7,
+"Width": 108,
+"Height": 17,
+"Caption": "ベクトル線を描く",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -12,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false,
+"TabOrder": 0,
+"OnClick": {
+"ident": "CBvectorClick"
+}
+},
+"kids": []
+}
+]
+},
+{
+"class": "TTabSheet",
+"name": "TStoko",
+"props": {
+"Caption": "等高線"
+},
+"kids": [
+{
+"class": "TCheckBox",
+"name": "CBtoko",
+"props": {
+"Left": 7,
+"Top": 7,
+"Width": 97,
+"Height": 17,
+"Caption": "等高線を描く",
+"TabOrder": 0,
+"OnClick": {
+"ident": "CBtokoClick"
+}
+},
+"kids": []
+},
+{
+"class": "TGroupBox",
+"name": "GroupBox4",
+"props": {
+"Left": 5,
+"Top": 32,
+"Width": 372,
+"Height": 192,
+"Caption": "等高線",
+"TabOrder": 1
+},
+"kids": [
+{
+"class": "TLabel",
+"name": "Label37",
+"props": {
+"Tag": 1,
+"Left": 203,
+"Top": 163,
+"Width": 60,
+"Height": 12,
+"Caption": "等高線の色",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -12,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false
+},
+"kids": []
+},
+{
+"class": "TShape",
+"name": "SPtokocolor",
+"props": {
+"Left": 276,
+"Top": 163,
+"Width": 25,
+"Height": 15,
+"Brush.Color": {
+"ident": "clBlack"
+},
+"Pen.Style": {
+"ident": "psInsideFrame"
+}
+},
+"kids": []
+},
+{
+"class": "TSpeedButton",
+"name": "CCBtoko",
+"props": {
+"Left": 311,
+"Top": 161,
+"Width": 48,
+"Height": 19,
+"Hint": "等高線の色を変更",
+"Caption": "変更(&T)",
+"OnClick": {
+"ident": "CCBtokoClick"
+}
+},
+"kids": []
+},
+{
+"class": "TEdit",
+"name": "EDdt",
+"props": {
+"Left": 115,
+"Top": 51,
+"Width": 99,
+"Height": 20,
+"Hint": "等高線の間隔",
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 3,
+"Text": "1.0"
+},
+"kids": []
+},
+{
+"class": "TRadioButton",
+"name": "RBctmode1",
+"props": {
+"Left": 15,
+"Top": 24,
+"Width": 101,
+"Height": 17,
+"Hint": "等高線の本数を指定する",
+"Caption": "等高線の数",
+"Checked": true,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 0,
+"TabStop": true
+},
+"kids": []
+},
+{
+"class": "TRadioButton",
+"name": "RBctmode2",
+"props": {
+"Left": 15,
+"Top": 52,
+"Width": 96,
+"Height": 17,
+"Hint": "等高線の間隔を指定する",
+"Caption": "等高線の間隔",
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 2
+},
+"kids": []
+},
+{
+"class": "TCheckBox",
+"name": "CBentokomin",
+"props": {
+"Left": 15,
+"Top": 81,
+"Width": 202,
+"Height": 17,
+"Hint": "等高線を描くZ値の範囲を指定する",
+"Caption": "等高線の範囲の最小値を指定する",
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 4,
+"OnClick": {
+"ident": "CBentokominClick"
+}
+},
+"kids": []
+},
+{
+"class": "TCheckBox",
+"name": "CBentokomax",
+"props": {
+"Left": 15,
+"Top": 108,
+"Width": 202,
+"Height": 17,
+"Hint": "等高線を描くZ値の範囲を指定する",
+"Caption": "等高線の範囲の最大値を指定する",
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 6,
+"OnClick": {
+"ident": "CBentokomaxClick"
+}
+},
+"kids": []
+},
+{
+"class": "TEdit",
+"name": "EDtokomin",
+"props": {
+"Left": 226,
+"Top": 79,
+"Width": 99,
+"Height": 20,
+"Hint": "Z値の範囲（最小）",
+"Color": {
+"ident": "clBtnFace"
+},
+"ParentShowHint": false,
+"ReadOnly": true,
+"ShowHint": true,
+"TabOrder": 5,
+"Text": "0.0"
+},
+"kids": []
+},
+{
+"class": "TEdit",
+"name": "EDtokomax",
+"props": {
+"Left": 226,
+"Top": 106,
+"Width": 99,
+"Height": 20,
+"Hint": "Z値の範囲（最大）",
+"Color": {
+"ident": "clBtnFace"
+},
+"ParentShowHint": false,
+"ReadOnly": true,
+"ShowHint": true,
+"TabOrder": 7,
+"Text": "1.0"
+},
+"kids": []
+},
+{
+"class": "TSpinEdit",
+"name": "SEtoko",
+"props": {
+"Left": 114,
+"Top": 23,
+"Width": 50,
+"Height": 21,
+"Hint": "俯瞰図の高さ方向のピクセル数（1～1000）",
+"MaxValue": 1000,
+"MinValue": 1,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 1,
+"Value": 10
+},
+"kids": []
+}
+]
+}
+]
+},
+{
+"class": "TTabSheet",
+"name": "TSaxis",
+"props": {
+"Caption": "座標系"
+},
+"kids": [
+{
+"class": "TCheckBox",
+"name": "CBaxis",
+"props": {
+"Left": 7,
+"Top": 7,
+"Width": 97,
+"Height": 17,
+"Caption": "座標軸を描く",
+"TabOrder": 0,
+"OnClick": {
+"ident": "CBaxisClick"
+}
+},
+"kids": []
+},
+{
+"class": "TGroupBox",
+"name": "GroupBox2",
+"props": {
+"Left": 5,
+"Top": 92,
+"Width": 372,
+"Height": 132,
+"Caption": "座標軸",
+"TabOrder": 2
+},
+"kids": [
+{
+"class": "TLabel",
+"name": "Label34",
+"props": {
+"Tag": 1,
+"Left": 134,
+"Top": 27,
+"Width": 115,
+"Height": 12,
+"Caption": "座標軸の矢印の大きさ",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -12,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label50",
+"props": {
+"Tag": 1,
+"Left": 313,
+"Top": 30,
+"Width": 30,
+"Height": 12,
+"Caption": "pixels",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -12,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label53",
+"props": {
+"Left": 144,
+"Top": 60,
+"Width": 45,
+"Height": 12,
+"Caption": "X軸/R軸"
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label54",
+"props": {
+"Left": 232,
+"Top": 60,
+"Width": 19,
+"Height": 12,
+"Caption": "Y軸"
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label55",
+"props": {
+"Left": 304,
+"Top": 60,
+"Width": 19,
+"Height": 12,
+"Caption": "Z軸"
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label58",
+"props": {
+"Tag": 1,
+"Left": 14,
+"Top": 27,
+"Width": 36,
+"Height": 12,
+"Caption": "線の幅",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -12,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false
+},
+"kids": []
+},
+{
+"class": "TCheckBox",
+"name": "CBaxistitle",
+"props": {
+"Left": 15,
+"Top": 77,
+"Width": 122,
+"Height": 17,
+"Hint": "軸タイトルを表示する",
+"Caption": "軸タイトルを付ける",
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 3
+},
+"kids": []
+},
+{
+"class": "TEdit",
+"name": "EDXtitle",
+"props": {
+"Left": 136,
+"Top": 76,
+"Width": 68,
+"Height": 20,
+"Hint": "軸タイトル",
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 4,
+"Text": "X"
+},
+"kids": []
+},
+{
+"class": "TEdit",
+"name": "EDYtitle",
+"props": {
+"Left": 208,
+"Top": 76,
+"Width": 68,
+"Height": 20,
+"Hint": "軸タイトル",
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 5,
+"Text": "Y"
+},
+"kids": []
+},
+{
+"class": "TEdit",
+"name": "EDZtitle",
+"props": {
+"Left": 280,
+"Top": 76,
+"Width": 68,
+"Height": 20,
+"Hint": "軸タイトル",
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 6,
+"Text": "Z"
+},
+"kids": []
+},
+{
+"class": "TSpinEdit",
+"name": "SEaxisheadsize",
+"props": {
+"Left": 255,
+"Top": 23,
+"Width": 50,
+"Height": 21,
+"Hint": "軸の矢印の大きさ",
+"MaxValue": 1000,
+"MinValue": 0,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 1,
+"Value": 15
+},
+"kids": []
+},
+{
+"class": "TSpinEdit",
+"name": "SEaxislinewidth",
+"props": {
+"Left": 56,
+"Top": 24,
+"Width": 41,
+"Height": 21,
+"Hint": "軸の太さ",
+"MaxValue": 100,
+"MinValue": 1,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 0,
+"Value": 2
+},
+"kids": []
+},
+{
+"class": "TCheckBox",
+"name": "CBaxsiscross",
+"props": {
+"Left": 15,
+"Top": 53,
+"Width": 58,
+"Height": 17,
+"Hint": "軸の形式",
+"Caption": "十字",
+"Checked": true,
+"ParentShowHint": false,
+"ShowHint": true,
+"State": {
+"ident": "cbChecked"
+},
+"TabOrder": 2
+},
+"kids": []
+}
+]
+},
+{
+"class": "TGroupBox",
+"name": "GroupBox10",
+"props": {
+"Left": 5,
+"Top": 32,
+"Width": 372,
+"Height": 45,
+"Caption": "座標系",
+"TabOrder": 1
+},
+"kids": [
+{
+"class": "TRadioButton",
+"name": "RBcartesian",
+"props": {
+"Left": 47,
+"Top": 18,
+"Width": 130,
+"Height": 17,
+"Hint": "座標系",
+"Caption": "カーテシアン座標系",
+"Checked": true,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 0,
+"TabStop": true,
+"OnClick": {
+"ident": "RBcartesianClick"
+}
+},
+"kids": []
+},
+{
+"class": "TRadioButton",
+"name": "RBcylindrical",
+"props": {
+"Left": 215,
+"Top": 18,
+"Width": 114,
+"Height": 17,
+"Hint": "座標系",
+"Caption": "円筒座標系",
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 1,
+"OnClick": {
+"ident": "RBcartesianClick"
+}
+},
+"kids": []
+}
+]
+}
+]
+},
+{
+"class": "TTabSheet",
+"name": "TSgrid",
+"props": {
+"Caption": "グリッド",
+"ImageIndex": 7
+},
+"kids": [
+{
+"class": "TCheckBox",
+"name": "CBgrid",
+"props": {
+"Left": 7,
+"Top": 7,
+"Width": 97,
+"Height": 17,
+"Hint": "グリッド",
+"Caption": "グリッドを描く",
+"TabOrder": 0,
+"OnClick": {
+"ident": "CBgridClick"
+}
+},
+"kids": []
+},
+{
+"class": "TGroupBox",
+"name": "GroupBox5",
+"props": {
+"Left": 5,
+"Top": 32,
+"Width": 372,
+"Height": 192,
+"Caption": "グリッド",
+"TabOrder": 2
+},
+"kids": [
+{
+"class": "TLabel",
+"name": "Label56",
+"props": {
+"Tag": 1,
+"Left": 14,
+"Top": 27,
+"Width": 36,
+"Height": 12,
+"Caption": "線の幅",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -12,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label57",
+"props": {
+"Tag": 1,
+"Left": 90,
+"Top": 114,
+"Width": 21,
+"Height": 12,
+"Caption": "長さ",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -12,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label36",
+"props": {
+"Left": 144,
+"Top": 144,
+"Width": 45,
+"Height": 12,
+"Caption": "X軸/R軸"
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label71",
+"props": {
+"Left": 216,
+"Top": 144,
+"Width": 49,
+"Height": 12,
+"Caption": "Y軸/θ軸"
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label72",
+"props": {
+"Left": 300,
+"Top": 144,
+"Width": 19,
+"Height": 12,
+"Caption": "Z軸"
+},
+"kids": []
+},
+{
+"class": "TSpinEdit",
+"name": "SEgridlinewidth",
+"props": {
+"Left": 56,
+"Top": 24,
+"Width": 41,
+"Height": 21,
+"Hint": "グリッドの太さ",
+"MaxValue": 100,
+"MinValue": 1,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 0,
+"Value": 1
+},
+"kids": []
+},
+{
+"class": "TSpinEdit",
+"name": "SEgridlinelength",
+"props": {
+"Left": 115,
+"Top": 111,
+"Width": 41,
+"Height": 21,
+"Hint": "メモリの長さ",
+"MaxValue": 100,
+"MinValue": -100,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 4,
+"Value": 5
+},
+"kids": []
+},
+{
+"class": "TCheckBox",
+"name": "CBgridmesh",
+"props": {
+"Left": 248,
+"Top": 24,
+"Width": 61,
+"Height": 17,
+"Hint": "グリッドの表示形式",
+"Caption": "メッシュ",
+"Checked": true,
+"ParentShowHint": false,
+"ShowHint": true,
+"State": {
+"ident": "cbChecked"
+},
+"TabOrder": 1
+},
+"kids": []
+},
+{
+"class": "TCheckBox",
+"name": "CBgridbox",
+"props": {
+"Left": 248,
+"Top": 52,
+"Width": 81,
+"Height": 17,
+"Hint": "グリッドの表示形式",
+"Caption": "Box（外接）",
+"Checked": true,
+"ParentShowHint": false,
+"ShowHint": true,
+"State": {
+"ident": "cbChecked"
+},
+"TabOrder": 2
+},
+"kids": []
+},
+{
+"class": "TCheckBox",
+"name": "CBgridscale",
+"props": {
+"Left": 16,
+"Top": 112,
+"Width": 61,
+"Height": 17,
+"Hint": "軸目盛",
+"Caption": "軸目盛",
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 3
+},
+"kids": []
+},
+{
+"class": "TCheckBox",
+"name": "CBaxisscale",
+"props": {
+"Left": 15,
+"Top": 161,
+"Width": 98,
+"Height": 17,
+"Hint": "軸目盛の数字を付ける",
+"Caption": "軸目盛の数字",
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 5,
+"OnClick": {
+"ident": "CBaxisscaleClick"
+}
+},
+"kids": []
+},
+{
+"class": "TComboBox",
+"name": "CBmemoryX",
+"props": {
+"Left": 138,
+"Top": 159,
+"Width": 60,
+"Height": 20,
+"Hint": "目盛間隔",
+"Style": {
+"ident": "csDropDownList"
+},
+"DropDownCount": 9,
+"ItemHeight": 12,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 6,
+"Items.Strings": [
+"自動",
+"×10",
+"×5",
+"×2",
+"標準",
+"×0.5",
+"×0.2",
+"×0.1"
+]
+},
+"kids": []
+},
+{
+"class": "TComboBox",
+"name": "CBmemoryY",
+"props": {
+"Left": 210,
+"Top": 159,
+"Width": 60,
+"Height": 20,
+"Hint": "目盛間隔",
+"Style": {
+"ident": "csDropDownList"
+},
+"DropDownCount": 9,
+"ItemHeight": 12,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 7,
+"Items.Strings": [
+"自動",
+"×10",
+"×5",
+"×2",
+"標準",
+"×0.5",
+"×0.2",
+"×0.1"
+]
+},
+"kids": []
+},
+{
+"class": "TComboBox",
+"name": "CBmemoryZ",
+"props": {
+"Left": 282,
+"Top": 159,
+"Width": 60,
+"Height": 20,
+"Hint": "目盛間隔",
+"Style": {
+"ident": "csDropDownList"
+},
+"DropDownCount": 9,
+"ItemHeight": 12,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 8,
+"Items.Strings": [
+"自動",
+"×10",
+"×5",
+"×2",
+"標準",
+"×0.5",
+"×0.2",
+"×0.1"
+]
+},
+"kids": []
+}
+]
+},
+{
+"class": "TCheckBox",
+"name": "CBpoint",
+"props": {
+"Left": 127,
+"Top": 7,
+"Width": 106,
+"Height": 17,
+"Hint": "データ点",
+"Caption": "データ点を表示",
+"ParentShowHint": false,
+"ShowHint": false,
+"TabOrder": 1,
+"OnClick": {
+"ident": "CBpointClick"
+}
+},
+"kids": []
+}
+]
+},
+{
+"class": "TTabSheet",
+"name": "TSlegend",
+"props": {
+"Caption": "凡例",
+"ImageIndex": 8
+},
+"kids": [
+{
+"class": "TCheckBox",
+"name": "CBlegend",
+"props": {
+"Left": 7,
+"Top": 7,
+"Width": 122,
+"Height": 17,
+"Caption": "凡例を表示する",
+"Checked": true,
+"State": {
+"ident": "cbChecked"
+},
+"TabOrder": 0,
+"OnClick": {
+"ident": "CBlegendClick"
+}
+},
+"kids": []
+},
+{
+"class": "TGroupBox",
+"name": "GroupBox6",
+"props": {
+"Left": 5,
+"Top": 32,
+"Width": 372,
+"Height": 193,
+"Caption": "凡例",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -12,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false,
+"TabOrder": 1
+},
+"kids": [
+{
+"class": "TLabel",
+"name": "Label22",
+"props": {
+"Tag": 1,
+"Left": 15,
+"Top": 108,
+"Width": 24,
+"Height": 12,
+"Caption": "横幅"
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label24",
+"props": {
+"Tag": 1,
+"Left": 208,
+"Top": 170,
+"Width": 18,
+"Height": 12,
+"Caption": "min"
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label25",
+"props": {
+"Tag": 1,
+"Left": 336,
+"Top": 170,
+"Width": 21,
+"Height": 12,
+"Caption": "max"
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label27",
+"props": {
+"Tag": 1,
+"Left": 15,
+"Top": 81,
+"Width": 116,
+"Height": 12,
+"Caption": "グラデーションのタイプ"
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label40",
+"props": {
+"Tag": 1,
+"Left": 15,
+"Top": 135,
+"Width": 82,
+"Height": 12,
+"Caption": "使用する色の数"
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label41",
+"props": {
+"Tag": 1,
+"Left": 160,
+"Top": 135,
+"Width": 12,
+"Height": 12,
+"Caption": "色"
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label42",
+"props": {
+"Tag": 1,
+"Left": 96,
+"Top": 108,
+"Width": 36,
+"Height": 12,
+"Caption": "X  高さ"
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label43",
+"props": {
+"Tag": 1,
+"Left": 190,
+"Top": 111,
+"Width": 30,
+"Height": 12,
+"Caption": "pixels"
+},
+"kids": []
+},
+{
+"class": "TImage",
+"name": "Image1",
+"props": {
+"Left": 218,
+"Top": 154,
+"Width": 130,
+"Height": 15
+},
+"kids": []
+},
+{
+"class": "TCheckBox",
+"name": "CBreverse",
+"props": {
+"Left": 211,
+"Top": 132,
+"Width": 70,
+"Height": 17,
+"Hint": "最大値から最小値までの色の順番を反転する",
+"Caption": "反転する",
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 8,
+"OnClick": {
+"ident": "FormShow"
+}
+},
+"kids": []
+},
+{
+"class": "TComboBox",
+"name": "CBtype",
+"props": {
+"Left": 138,
+"Top": 77,
+"Width": 119,
+"Height": 20,
+"Hint": "コンターのグラデーションタイプを指定（3x3通り）",
+"Style": {
+"ident": "csDropDownList"
+},
+"DropDownCount": 9,
+"ItemHeight": 12,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 4,
+"OnChange": {
+"ident": "CBtypeChange"
+},
+"Items.Strings": [
+"smooth colors-1",
+"smooth colors-2",
+"smooth colors-3",
+"gray-1",
+"gray-2",
+"gray-3",
+"spectral colors-1",
+"spectral colors-2",
+"spectral colors-3"
+]
+},
+"kids": []
+},
+{
+"class": "TCheckBox",
+"name": "CBfold",
+"props": {
+"Left": 291,
+"Top": 132,
+"Width": 70,
+"Height": 17,
+"Hint": "中央から両脇に向かって色を変える",
+"Caption": "折り返す",
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 9,
+"OnClick": {
+"ident": "CBfoldClick"
+}
+},
+"kids": []
+},
+{
+"class": "TEdit",
+"name": "EDenZmin",
+"props": {
+"Left": 130,
+"Top": 23,
+"Width": 99,
+"Height": 20,
+"Hint": "Zの範囲値（最小）",
+"Color": {
+"ident": "clBtnFace"
+},
+"ParentShowHint": false,
+"ReadOnly": true,
+"ShowHint": true,
+"TabOrder": 1,
+"Text": "0.0"
+},
+"kids": []
+},
+{
+"class": "TEdit",
+"name": "EDenZmax",
+"props": {
+"Left": 130,
+"Top": 50,
+"Width": 99,
+"Height": 20,
+"Hint": "Zの範囲値（最大）",
+"Color": {
+"ident": "clBtnFace"
+},
+"ParentShowHint": false,
+"ReadOnly": true,
+"ShowHint": true,
+"TabOrder": 3,
+"Text": "1.0"
+},
+"kids": []
+},
+{
+"class": "TCheckBox",
+"name": "CBenZmin",
+"props": {
+"Left": 15,
+"Top": 25,
+"Width": 112,
+"Height": 17,
+"Hint": "Z値の範囲を指定する（範囲外は白抜きになる）",
+"Caption": "Zの最小値を指定",
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 0,
+"OnClick": {
+"ident": "CBenZminClick"
+}
+},
+"kids": []
+},
+{
+"class": "TCheckBox",
+"name": "CBenZmax",
+"props": {
+"Left": 15,
+"Top": 52,
+"Width": 112,
+"Height": 17,
+"Hint": "Z値の範囲を指定する（範囲外は白抜きになる）",
+"Caption": "Zの最大値を指定",
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 2,
+"OnClick": {
+"ident": "CBenZmaxClick"
+}
+},
+"kids": []
+},
+{
+"class": "TSpinEdit",
+"name": "SEcolor",
+"props": {
+"Left": 106,
+"Top": 132,
+"Width": 47,
+"Height": 21,
+"Hint": "コンターの使用する色数（2～200）",
+"MaxValue": 200,
+"MinValue": 2,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 7,
+"Value": 200,
+"OnChange": {
+"ident": "SEcolorChange"
+}
+},
+"kids": []
+},
+{
+"class": "TSpinEdit",
+"name": "SElegendw",
+"props": {
+"Left": 44,
+"Top": 105,
+"Width": 47,
+"Height": 21,
+"Hint": "凡例の横幅（3～）",
+"MaxValue": 50000,
+"MinValue": 3,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 5,
+"Value": 200
+},
+"kids": []
+},
+{
+"class": "TSpinEdit",
+"name": "SElegendh",
+"props": {
+"Left": 137,
+"Top": 105,
+"Width": 47,
+"Height": 21,
+"Hint": "凡例の高さ（3～）",
+"MaxValue": 50000,
+"MinValue": 3,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 6,
+"Value": 15
+},
+"kids": []
+}
+]
+}
+]
+},
+{
+"class": "TTabSheet",
+"name": "TabSheet2",
+"props": {
+"Caption": "ラベル",
+"ImageIndex": 11
+},
+"kids": [
+{
+"class": "TCheckBox",
+"name": "CBLabel",
+"props": {
+"Left": 7,
+"Top": 7,
+"Width": 97,
+"Height": 17,
+"Caption": "ラベルを描く",
+"Checked": true,
+"State": {
+"ident": "cbChecked"
+},
+"TabOrder": 0,
+"OnClick": {
+"ident": "CBLabelClick"
+}
+},
+"kids": []
+},
+{
+"class": "TGroupBox",
+"name": "GroupBox9",
+"props": {
+"Left": 5,
+"Top": 32,
+"Width": 372,
+"Height": 192,
+"Caption": "ラベル",
+"TabOrder": 1
+},
+"kids": [
+{
+"class": "TBevel",
+"name": "Bevel2",
+"props": {
+"Left": 8,
+"Top": 22,
+"Width": 52,
+"Height": 18,
+"Style": {
+"ident": "bsRaised"
+}
+},
+"kids": []
+},
+{
+"class": "TBevel",
+"name": "Bevel3",
+"props": {
+"Left": 60,
+"Top": 22,
+"Width": 51,
+"Height": 18,
+"Style": {
+"ident": "bsRaised"
+}
+},
+"kids": []
+},
+{
+"class": "TBevel",
+"name": "Bevel4",
+"props": {
+"Left": 111,
+"Top": 22,
+"Width": 253,
+"Height": 18,
+"Style": {
+"ident": "bsRaised"
+}
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label23",
+"props": {
+"Left": 18,
+"Top": 24,
+"Width": 31,
+"Height": 14,
+"Alignment": {
+"ident": "taCenter"
+},
+"AutoSize": false,
+"Caption": "X",
+"Layout": {
+"ident": "tlCenter"
+}
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label66",
+"props": {
+"Left": 70,
+"Top": 24,
+"Width": 31,
+"Height": 14,
+"Alignment": {
+"ident": "taCenter"
+},
+"AutoSize": false,
+"Caption": "Y",
+"Layout": {
+"ident": "tlCenter"
+}
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label67",
+"props": {
+"Left": 202,
+"Top": 24,
+"Width": 63,
+"Height": 14,
+"Alignment": {
+"ident": "taCenter"
+},
+"AutoSize": false,
+"Caption": "文字列",
+"Layout": {
+"ident": "tlCenter"
+}
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label70",
+"props": {
+"Left": 22,
+"Top": 174,
+"Width": 173,
+"Height": 11,
+"Caption": "※ラベルは設定として保存されません",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -11,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false
+},
+"kids": []
+},
+{
+"class": "TSpeedButton",
+"name": "BTlabellistdel",
+"props": {
+"Left": 312,
+"Top": 168,
+"Width": 48,
+"Height": 19,
+"Hint": "リストからの削除",
+"Caption": "削除(&D)",
+"Enabled": false,
+"ParentShowHint": false,
+"ShowHint": true,
+"Visible": false
+},
+"kids": []
+},
+{
+"class": "TSpeedButton",
+"name": "BTlabellistadd",
+"props": {
+"Left": 264,
+"Top": 168,
+"Width": 48,
+"Height": 19,
+"Hint": "リストへの追加",
+"Caption": "追加(&A)",
+"Enabled": false,
+"ParentShowHint": false,
+"ShowHint": true,
+"Visible": false
+},
+"kids": []
+},
+{
+"class": "TListBox",
+"name": "LBlabel",
+"props": {
+"Left": 8,
+"Top": 40,
+"Width": 355,
+"Height": 129,
+"Hint": "ラベル表示する座標と文字列",
+"ItemHeight": 16,
+"ParentShowHint": false,
+"ShowHint": true,
+"Style": {
+"ident": "lbOwnerDrawVariable"
+},
+"TabOrder": 0,
+"OnDrawItem": {
+"ident": "LBlabelDrawItem"
+}
+},
+"kids": []
+}
+]
+}
+]
+},
+{
+"class": "TTabSheet",
+"name": "TSIO",
+"props": {
+"Caption": "入出力"
+},
+"kids": [
+{
+"class": "TLabel",
+"name": "Label1",
+"props": {
+"Tag": 1,
+"Left": 15,
+"Top": 13,
+"Width": 81,
+"Height": 12,
+"Caption": "データ入力形式"
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label2",
+"props": {
+"Tag": 1,
+"Left": 60,
+"Top": 28,
+"Width": 10,
+"Height": 16,
+"Caption": "X",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -16,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label3",
+"props": {
+"Left": 17,
+"Top": 131,
+"Width": 46,
+"Height": 12,
+"Caption": "先頭から"
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label17",
+"props": {
+"Left": 125,
+"Top": 131,
+"Width": 127,
+"Height": 12,
+"Caption": "行のデータを読み飛ばす"
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label30",
+"props": {
+"Left": 237,
+"Top": 71,
+"Width": 12,
+"Height": 12,
+"Caption": "θ",
+"Transparent": true
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label31",
+"props": {
+"Left": 297,
+"Top": 70,
+"Width": 5,
+"Height": 12,
+"Caption": "ｒ",
+"Transparent": true
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label35",
+"props": {
+"Tag": 1,
+"Left": 120,
+"Top": 28,
+"Width": 9,
+"Height": 16,
+"Caption": "Y",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -16,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label38",
+"props": {
+"Tag": 1,
+"Left": 176,
+"Top": 28,
+"Width": 9,
+"Height": 16,
+"Caption": "Z",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -16,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label39",
+"props": {
+"Tag": 1,
+"Left": 232,
+"Top": 28,
+"Width": 10,
+"Height": 16,
+"Caption": "U",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -16,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label44",
+"props": {
+"Tag": 1,
+"Left": 288,
+"Top": 28,
+"Width": 10,
+"Height": 16,
+"Caption": "V",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -16,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label45",
+"props": {
+"Tag": 1,
+"Left": 58,
+"Top": 67,
+"Width": 16,
+"Height": 16,
+"Caption": "θ",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -16,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label46",
+"props": {
+"Tag": 1,
+"Left": 120,
+"Top": 65,
+"Width": 6,
+"Height": 16,
+"Caption": "r",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -16,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label47",
+"props": {
+"Tag": 1,
+"Left": 176,
+"Top": 65,
+"Width": 9,
+"Height": 16,
+"Caption": "Z",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -16,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label48",
+"props": {
+"Tag": 1,
+"Left": 232,
+"Top": 65,
+"Width": 10,
+"Height": 16,
+"Caption": "U",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -16,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label49",
+"props": {
+"Tag": 1,
+"Left": 288,
+"Top": 65,
+"Width": 10,
+"Height": 16,
+"Caption": "V",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -16,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false
+},
+"kids": []
+},
+{
+"class": "TSpinEdit",
+"name": "SEdataX",
+"props": {
+"Left": 47,
+"Top": 44,
+"Width": 50,
+"Height": 21,
+"Hint": "ファイル中のデータ位置",
+"EditorEnabled": false,
+"MaxValue": 1000,
+"MinValue": 1,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 0,
+"Value": 1
+},
+"kids": []
+},
+{
+"class": "TSpinEdit",
+"name": "SEdataY",
+"props": {
+"Left": 103,
+"Top": 44,
+"Width": 50,
+"Height": 21,
+"Hint": "ファイル中のデータ位置",
+"EditorEnabled": false,
+"MaxValue": 1000,
+"MinValue": 1,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 1,
+"Value": 2
+},
+"kids": []
+},
+{
+"class": "TSpinEdit",
+"name": "SEdataU",
+"props": {
+"Left": 215,
+"Top": 44,
+"Width": 50,
+"Height": 21,
+"Hint": "ファイル中のデータ位置",
+"EditorEnabled": false,
+"MaxValue": 1000,
+"MinValue": 1,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 3,
+"Value": 4
+},
+"kids": []
+},
+{
+"class": "TSpinEdit",
+"name": "SEdataV",
+"props": {
+"Left": 271,
+"Top": 44,
+"Width": 50,
+"Height": 21,
+"Hint": "ファイル中のデータ位置",
+"EditorEnabled": false,
+"MaxValue": 1000,
+"MinValue": 1,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 4,
+"Value": 5
+},
+"kids": []
+},
+{
+"class": "TSpinEdit",
+"name": "SEdataZ",
+"props": {
+"Left": 159,
+"Top": 44,
+"Width": 50,
+"Height": 21,
+"Hint": "ファイル中のデータ位置",
+"EditorEnabled": false,
+"MaxValue": 1000,
+"MinValue": 1,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 2,
+"Value": 3
+},
+"kids": []
+},
+{
+"class": "TCheckBox",
+"name": "CBtenchi",
+"props": {
+"Left": 16,
+"Top": 96,
+"Width": 145,
+"Height": 17,
+"Hint": "転置して読みこむ",
+"Caption": "パネル状のとき転置する",
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 5
+},
+"kids": []
+},
+{
+"class": "TSpinEdit",
+"name": "SEskip",
+"props": {
+"Left": 69,
+"Top": 127,
+"Width": 50,
+"Height": 21,
+"Hint": "ファイルの先頭部分を読み飛ばす",
+"MaxValue": 1000,
+"MinValue": 0,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 6,
+"Value": 0
+},
+"kids": []
+}
+]
+},
+{
+"class": "TTabSheet",
+"name": "TSscreen",
+"props": {
+"Caption": "表示"
+},
+"kids": [
+{
+"class": "TLabel",
+"name": "Label13",
+"props": {
+"Tag": 1,
+"Left": 15,
+"Top": 18,
+"Width": 90,
+"Height": 13,
+"Caption": "上下左右の余白",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -13,
+"Font.Name": "ＭＳ Ｐ明朝",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label15",
+"props": {
+"Tag": 1,
+"Left": 168,
+"Top": 23,
+"Width": 30,
+"Height": 12,
+"Caption": "pixels"
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label14",
+"props": {
+"Tag": 1,
+"Left": 235,
+"Top": 18,
+"Width": 39,
+"Height": 13,
+"Caption": "背景色",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -13,
+"Font.Name": "ＭＳ Ｐ明朝",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false
+},
+"kids": []
+},
+{
+"class": "TShape",
+"name": "SPBGcolor",
+"props": {
+"Left": 287,
+"Top": 18,
+"Width": 25,
+"Height": 15,
+"Pen.Style": {
+"ident": "psInsideFrame"
+}
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label18",
+"props": {
+"Tag": 1,
+"Left": 223,
+"Top": 204,
+"Width": 55,
+"Height": 12,
+"Caption": "Yの最大値"
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label19",
+"props": {
+"Tag": 1,
+"Left": 223,
+"Top": 180,
+"Width": 55,
+"Height": 12,
+"Caption": "Yの最小値"
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label20",
+"props": {
+"Tag": 1,
+"Left": 223,
+"Top": 156,
+"Width": 55,
+"Height": 12,
+"Caption": "Xの最大値"
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label21",
+"props": {
+"Tag": 1,
+"Left": 223,
+"Top": 132,
+"Width": 55,
+"Height": 12,
+"Caption": "Xの最小値"
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label28",
+"props": {
+"Tag": 1,
+"Left": 235,
+"Top": 44,
+"Width": 39,
+"Height": 13,
+"Caption": "前景色",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -13,
+"Font.Name": "ＭＳ Ｐ明朝",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false
+},
+"kids": []
+},
+{
+"class": "TShape",
+"name": "SPFGcolor",
+"props": {
+"Left": 287,
+"Top": 44,
+"Width": 25,
+"Height": 15,
+"Brush.Color": {
+"ident": "clBlack"
+},
+"Pen.Style": {
+"ident": "psInsideFrame"
+}
+},
+"kids": []
+},
+{
+"class": "TSpeedButton",
+"name": "CCBback",
+"props": {
+"Left": 320,
+"Top": 16,
+"Width": 48,
+"Height": 19,
+"Hint": "背景色の変更",
+"Caption": "変更(&B)",
+"ParentShowHint": false,
+"ShowHint": true,
+"OnClick": {
+"ident": "CCBbackClick"
+}
+},
+"kids": []
+},
+{
+"class": "TSpeedButton",
+"name": "CCBfront",
+"props": {
+"Left": 320,
+"Top": 42,
+"Width": 48,
+"Height": 19,
+"Hint": "前景色の変更",
+"Caption": "変更(&F)",
+"ParentShowHint": false,
+"ShowHint": true,
+"OnClick": {
+"ident": "CCBfrontClick"
+}
+},
+"kids": []
+},
+{
+"class": "TEdit",
+"name": "EDenYmin",
+"props": {
+"Left": 290,
+"Top": 177,
+"Width": 79,
+"Height": 20,
+"Hint": "X と Y の最大値（指定不可）",
+"Color": {
+"ident": "clBtnFace"
+},
+"ParentShowHint": false,
+"ReadOnly": true,
+"ShowHint": true,
+"TabOrder": 3,
+"Text": "0"
+},
+"kids": []
+},
+{
+"class": "TEdit",
+"name": "EDenYmax",
+"props": {
+"Left": 290,
+"Top": 201,
+"Width": 79,
+"Height": 20,
+"Hint": "X と Y の最大値（指定不可）",
+"Color": {
+"ident": "clBtnFace"
+},
+"ParentShowHint": false,
+"ReadOnly": true,
+"ShowHint": true,
+"TabOrder": 4,
+"Text": "0"
+},
+"kids": []
+},
+{
+"class": "TEdit",
+"name": "EDenXmin",
+"props": {
+"Left": 290,
+"Top": 129,
+"Width": 79,
+"Height": 20,
+"Hint": "X と Y の最大値（指定不可）",
+"Color": {
+"ident": "clBtnFace"
+},
+"ParentShowHint": false,
+"ReadOnly": true,
+"ShowHint": true,
+"TabOrder": 1,
+"Text": "0"
+},
+"kids": []
+},
+{
+"class": "TEdit",
+"name": "EDenXmax",
+"props": {
+"Left": 290,
+"Top": 153,
+"Width": 79,
+"Height": 20,
+"Hint": "X と Y の最大値（指定不可）",
+"Color": {
+"ident": "clBtnFace"
+},
+"ParentShowHint": false,
+"ReadOnly": true,
+"ShowHint": true,
+"TabOrder": 2,
+"Text": "0"
+},
+"kids": []
+},
+{
+"class": "TSpinEdit",
+"name": "SEmar",
+"props": {
+"Left": 111,
+"Top": 15,
+"Width": 50,
+"Height": 21,
+"Hint": "画像に入れる余白",
+"MaxValue": 1000,
+"MinValue": 0,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 0,
+"Value": 30
+},
+"kids": []
+}
+]
+},
+{
+"class": "TTabSheet",
+"name": "TSfont",
+"props": {
+"Caption": "フォント",
+"ImageIndex": 12
+},
+"kids": [
+{
+"class": "TBevel",
+"name": "Bevel6",
+"props": {
+"Left": 64,
+"Top": 16,
+"Width": 249,
+"Height": 41,
+"Hint": "選択したフォントのサンプル",
+"ParentShowHint": false,
+"ShowHint": true
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Labfont",
+"props": {
+"Left": 66,
+"Top": 18,
+"Width": 245,
+"Height": 36,
+"Alignment": {
+"ident": "taCenter"
+},
+"AutoSize": false,
+"Caption": "Sample +0.123 ＡＶ似非",
+"Color": {
+"ident": "clBtnFace"
+},
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -19,
+"Font.Name": "ＭＳ ゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentColor": false,
+"ParentFont": false,
+"Layout": {
+"ident": "tlCenter"
+}
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label8",
+"props": {
+"Left": 14,
+"Top": 22,
+"Width": 38,
+"Height": 12,
+"Caption": "フォント",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -12,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false
+},
+"kids": []
+},
+{
+"class": "TSpeedButton",
+"name": "SpeedButton1",
+"props": {
+"Left": 320,
+"Top": 18,
+"Width": 48,
+"Height": 19,
+"Hint": "フォントの変更",
+"Caption": "変更(&C)",
+"ParentShowHint": false,
+"ShowHint": true,
+"OnClick": {
+"ident": "SpeedButton1Click"
+}
+},
+"kids": []
+},
+{
+"class": "TBevel",
+"name": "Bevel7",
+"props": {
+"Left": 8,
+"Top": 78,
+"Width": 103,
+"Height": 18,
+"Style": {
+"ident": "bsRaised"
+}
+},
+"kids": []
+},
+{
+"class": "TBevel",
+"name": "Bevel8",
+"props": {
+"Left": 261,
+"Top": 78,
+"Width": 114,
+"Height": 18,
+"Style": {
+"ident": "bsRaised"
+}
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label65",
+"props": {
+"Left": 10,
+"Top": 80,
+"Width": 95,
+"Height": 14,
+"Alignment": {
+"ident": "taCenter"
+},
+"AutoSize": false,
+"Caption": "場所",
+"Layout": {
+"ident": "tlCenter"
+}
+},
+"kids": []
+},
+{
+"class": "TBevel",
+"name": "Bevel9",
+"props": {
+"Left": 111,
+"Top": 78,
+"Width": 150,
+"Height": 18,
+"Style": {
+"ident": "bsRaised"
+}
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label74",
+"props": {
+"Left": 114,
+"Top": 80,
+"Width": 143,
+"Height": 14,
+"Alignment": {
+"ident": "taCenter"
+},
+"AutoSize": false,
+"Caption": "フォント",
+"Layout": {
+"ident": "tlCenter"
+}
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label75",
+"props": {
+"Left": 266,
+"Top": 80,
+"Width": 103,
+"Height": 14,
+"Alignment": {
+"ident": "taCenter"
+},
+"AutoSize": false,
+"Caption": "サイズ",
+"Layout": {
+"ident": "tlCenter"
+}
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label6",
+"props": {
+"Left": 158,
+"Top": 62,
+"Width": 190,
+"Height": 11,
+"Caption": "※色の変更は「表示」-「前景色/背景色」",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -11,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false
+},
+"kids": []
+},
+{
+"class": "TListBox",
+"name": "LBfont",
+"props": {
+"Left": 8,
+"Top": 96,
+"Width": 366,
+"Height": 124,
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -19,
+"Font.Name": "ＭＳ Ｐ明朝",
+"Font.Style": {
+"set": []
+},
+"ItemHeight": 20,
+"Items.Strings": [
+"ラベル\tＭＳ Ｐゴシック\t14\t0",
+"凡例\tＭＳ ゴシック\t12\t0",
+"軸タイトル\tＭＳ Ｐ明朝\t12\t0",
+"軸目盛\tterminal\t6\t0"
+],
+"ParentFont": false,
+"Style": {
+"ident": "lbOwnerDrawFixed"
+},
+"TabOrder": 0,
+"OnClick": {
+"ident": "LBfontClick"
+},
+"OnDblClick": {
+"ident": "LBfontDblClick"
+},
+"OnDrawItem": {
+"ident": "LBfontDrawItem"
+}
+},
+"kids": []
+}
+]
+},
+{
+"class": "TTabSheet",
+"name": "TSspecial",
+"props": {
+"Caption": "特殊"
+},
+"kids": [
+{
+"class": "TLabel",
+"name": "Label51",
+"props": {
+"Left": 15,
+"Top": 20,
+"Width": 116,
+"Height": 12,
+"Caption": "ビットマップのサイズが"
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label52",
+"props": {
+"Left": 188,
+"Top": 20,
+"Width": 152,
+"Height": 12,
+"Caption": "M byte を超える時警告を出す"
+},
+"kids": []
+},
+{
+"class": "TLabel",
+"name": "Label73",
+"props": {
+"Left": 34,
+"Top": 66,
+"Width": 200,
+"Height": 11,
+"Caption": "※チェックを外した場合の動作はサポート外",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -11,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false
+},
+"kids": []
+},
+{
+"class": "TCheckBox",
+"name": "CBautosave",
+"props": {
+"Left": 15,
+"Top": 95,
+"Width": 266,
+"Height": 17,
+"Hint": "終了時に自動保存する",
+"Caption": "アプリケーションを終了する時に設定を保存する",
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 1
+},
+"kids": []
+},
+{
+"class": "TSpinEdit",
+"name": "SEmaxbmp",
+"props": {
+"Left": 135,
+"Top": 15,
+"Width": 50,
+"Height": 21,
+"Hint": "大き過ぎるイメージを作らないよう警告を出す",
+"MaxValue": 1000,
+"MinValue": 1,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 0,
+"Value": 4
+},
+"kids": []
+},
+{
+"class": "TGroupBox",
+"name": "GroupBox8",
+"props": {
+"Left": 16,
+"Top": 124,
+"Width": 169,
+"Height": 73,
+"Caption": "イメージの取り扱い",
+"TabOrder": 2
+},
+"kids": [
+{
+"class": "TRadioButton",
+"name": "RBusebmp",
+"props": {
+"Left": 8,
+"Top": 18,
+"Width": 145,
+"Height": 17,
+"Hint": "ビットマップ （8bpp）",
+"Caption": "ビットマップ （8bpp）",
+"Checked": true,
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 0,
+"TabStop": true
+},
+"kids": []
+},
+{
+"class": "TRadioButton",
+"name": "RBusewmf",
+"props": {
+"Left": 8,
+"Top": 46,
+"Width": 145,
+"Height": 17,
+"Hint": "ウィンドウズメタファイル",
+"Caption": "ウィンドウズメタファイル",
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 1
+},
+"kids": []
+}
+]
+},
+{
+"class": "TCheckBox",
+"name": "CBDataCheck",
+"props": {
+"Left": 15,
+"Top": 44,
+"Width": 162,
+"Height": 17,
+"Hint": "データのチェックを行う",
+"Caption": "厳密なデータチェックを行う",
+"Checked": true,
+"ParentShowHint": false,
+"ShowHint": true,
+"State": {
+"ident": "cbChecked"
+},
+"TabOrder": 3
+},
+"kids": []
+}
+]
+},
+{
+"class": "TTabSheet",
+"name": "TabSheet1",
+"props": {
+"Caption": "暫定",
+"ImageIndex": 10
+},
+"kids": [
+{
+"class": "TCheckBox",
+"name": "CBLoadConf",
+"props": {
+"Left": 15,
+"Top": 7,
+"Width": 178,
+"Height": 17,
+"Hint": "設定をファイルから読みこむ",
+"Caption": "設定をファイルから読みこむ",
+"Checked": true,
+"ParentShowHint": false,
+"ShowHint": true,
+"State": {
+"ident": "cbChecked"
+},
+"TabOrder": 0
+},
+"kids": []
+},
+{
+"class": "TCheckBox",
+"name": "CBSpline",
+"props": {
+"Left": 15,
+"Top": 31,
+"Width": 146,
+"Height": 17,
+"Hint": "スプラインで補間する",
+"Caption": "スプラインで補間する",
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 1
+},
+"kids": []
+},
+{
+"class": "TCheckBox",
+"name": "CBcolorvector",
+"props": {
+"Left": 15,
+"Top": 55,
+"Width": 114,
+"Height": 17,
+"Hint": "ベクトル線を大きさで色分け",
+"Caption": "ベクトルの色分け",
+"ParentShowHint": false,
+"ShowHint": true,
+"TabOrder": 2
+},
+"kids": []
+}
+]
+}
+]
+},
+{
+"class": "TColorDialog",
+"name": "Dlgcolor",
+"props": {
+"Ctl3D": true,
+"Left": 8,
+"Top": 288
+},
+"kids": []
+},
+{
+"class": "TAutoIni",
+"name": "AutoIni2",
+"props": {
+"CheckWinState": false,
+"CheckTag": false,
+"EnableTag": 0,
+"MakeIniWinDir": false,
+"Left": 40,
+"Top": 288
+},
+"kids": []
+},
+{
+"class": "TFontDialog",
+"name": "FontDialog1",
+"props": {
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clWindowText"
+},
+"Font.Height": -12,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"MinFontSize": 0,
+"MaxFontSize": 0,
+"Left": 72,
+"Top": 288
+},
+"kids": []
+}
+]
+}

@@ -1,0 +1,256 @@
+//! INI persistence: section `[avese.exe]`, original key order, Shift-JIS, CRLF.
+use crate::state::Store;
+use std::path::Path;
+
+pub const SECTION: &str = "avese.exe";
+
+pub const KEYS: &[&str] = &[
+    "Form1Top", "Form1Left", "Form1height", "Form1width", "ToolBar1Top", "ToolBar1Left", "ToolBar2Top", "ToolBar2Left", "CBmode", "SEsize", "EDv", "EDh",
+    "ToolBar3Top", "ToolBar3Left", "ToolBar4Top", "ToolBar4Left", "ToolBar5Top", "ToolBar5Left", "CBland", "SElandheight", "SEeta", "SEphi", "CBsurface",
+    "CBgraph", "CBscatter", "CBpanel", "SEdotsize", "CBscattemode", "SPvectorcolor", "SPvectorheadcolor", "EDvector", "EDhead", "EDstepx", "EDoffsetx",
+    "CBskipx", "CBskipy", "EDstepy", "EDoffsety", "CBfix", "CBpaint", "SEvectorheadangle", "CBenVMax", "EDenVMax", "CBvectorhead", "CBvector", "CBtoko",
+    "SPtokocolor", "EDdt", "RBctmode1", "RBctmode2", "CBentokomin", "CBentokomax", "EDtokomin", "EDtokomax", "SEtoko", "CBaxis", "CBaxistitle", "EDXtitle",
+    "EDYtitle", "EDZtitle", "SEaxisheadsize", "SEaxislinewidth", "CBaxsiscross", "RBcartesian", "RBcylindrical", "CBgrid", "SEgridlinewidth",
+    "SEgridlinelength", "CBgridmesh", "CBgridbox", "CBgridscale", "CBaxisscale", "CBmemoryX", "CBmemoryY", "CBmemoryZ", "CBpoint", "CBLabel", "LBlabel",
+    "SEdataX", "SEdataY", "SEdataU", "SEdataV", "SEdataZ", "CBtenchi", "SEskip", "SPBGcolor", "SPFGcolor", "EDenYmin", "EDenYmax", "EDenXmin", "EDenXmax",
+    "SEmar", "LBfontlabelfontname", "LBfontlabelfontsize", "LBfontlabelfontstyle", "LBfontlegendfontname", "LBfontlegendfontsize", "LBfontlegendfontstyle",
+    "LBfontAxisfontname", "LBfontAxisfontsize", "LBfontAxisfontstyle", "LBfontMemfontname", "LBfontMemfontsize", "LBfontMemfontstyle", "LBfont",
+    "CBautosave", "SEmaxbmp", "RBusebmp", "RBusewmf", "CBDataCheck", "CBLoadConf", "CBSpline", "CBcolorvector", "CBlegend", "CBreverse", "CBtype", "CBfold",
+    "EDenZmin", "EDenZmax", "CBenZmin", "CBenZmax", "SEcolor", "SElegendw", "SElegendh",
+];
+
+const COMBOS: [&str; 6] = ["CBmode", "CBscattemode", "CBmemoryX", "CBmemoryY", "CBmemoryZ", "CBtype"];
+const FONT_ROWS: [(&str, usize); 4] = [("label", 0), ("legend", 1), ("Axis", 2), ("Mem", 3)];
+
+/// Window geometry kept outside the store.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Layout {
+    pub form_top: i32,
+    pub form_left: i32,
+    pub form_height: i32,
+    pub form_width: i32,
+    /// (Top, Left) of ToolBar1..5
+    pub bars: [(i32, i32); 5],
+}
+
+impl Default for Layout {
+    fn default() -> Self {
+        Layout { form_top: 104, form_left: 104, form_height: 1023, form_width: 1920, bars: [(2, 11), (2, 114), (32, 141), (32, 11), (2, 427)] }
+    }
+}
+
+fn font_field(store: &Store, row: usize, col: usize) -> String {
+    store.list("LBfont").get(row).and_then(|r| r.split('\t').nth(col)).unwrap_or("").to_string()
+}
+
+fn set_font_field(store: &mut Store, row: usize, col: usize, v: &str) {
+    let list = store.lists.entry("LBfont".into()).or_default();
+    while list.len() <= row {
+        list.push(String::new());
+    }
+    let mut f: Vec<String> = list[row].split('\t').map(String::from).collect();
+    while f.len() <= col {
+        f.push(String::new());
+    }
+    f[col] = v.to_string();
+    list[row] = f.join("\t");
+}
+
+fn get_value(key: &str, store: &Store, lay: &Layout) -> String {
+    match key {
+        "Form1Top" => return lay.form_top.to_string(),
+        "Form1Left" => return lay.form_left.to_string(),
+        "Form1height" => return lay.form_height.to_string(),
+        "Form1width" => return lay.form_width.to_string(),
+        "LBlabel" | "LBfont" => return store.item_index(key).to_string(),
+        _ => {}
+    }
+    if let Some(rest) = key.strip_prefix("ToolBar") {
+        let n = (rest.as_bytes()[0] - b'1') as usize;
+        let (t, l) = lay.bars[n];
+        return if rest.ends_with("Top") { t } else { l }.to_string();
+    }
+    if let Some(rest) = key.strip_prefix("LBfont") {
+        for (nm, row) in FONT_ROWS {
+            if let Some(f) = rest.strip_prefix(nm) {
+                let col = match f {
+                    "fontname" => 1,
+                    "fontsize" => 2,
+                    _ => 3,
+                };
+                return font_field(store, row, col);
+            }
+        }
+    }
+    if COMBOS.contains(&key) {
+        return store.item_index(key).to_string();
+    }
+    if key.starts_with("CB") || key.starts_with("RB") {
+        return (store.checked(key) as i32).to_string();
+    }
+    if key.starts_with("SE") {
+        return store.position(key).to_string();
+    }
+    if key.starts_with("SP") {
+        return store.color(key).to_string();
+    }
+    store.text(key).to_string()
+}
+
+fn set_value(key: &str, v: &str, store: &mut Store, lay: &mut Layout) {
+    let num = v.trim().parse::<i64>().ok();
+    match key {
+        "Form1Top" => return num.map(|n| lay.form_top = n as i32).unwrap_or(()),
+        "Form1Left" => return num.map(|n| lay.form_left = n as i32).unwrap_or(()),
+        "Form1height" => return num.map(|n| lay.form_height = n as i32).unwrap_or(()),
+        "Form1width" => return num.map(|n| lay.form_width = n as i32).unwrap_or(()),
+        "LBlabel" | "LBfont" => return num.map(|n| store.set_item_index(key, n as i32)).unwrap_or(()),
+        _ => {}
+    }
+    if let Some(rest) = key.strip_prefix("ToolBar") {
+        if let Some(n) = num {
+            let i = (rest.as_bytes()[0] - b'1') as usize;
+            if rest.ends_with("Top") {
+                lay.bars[i].0 = n as i32;
+            } else {
+                lay.bars[i].1 = n as i32;
+            }
+        }
+        return;
+    }
+    if let Some(rest) = key.strip_prefix("LBfont") {
+        for (nm, row) in FONT_ROWS {
+            if let Some(f) = rest.strip_prefix(nm) {
+                let col = match f {
+                    "fontname" => 1,
+                    "fontsize" => 2,
+                    _ => 3,
+                };
+                set_font_field(store, row, col, v);
+                return;
+            }
+        }
+    }
+    if COMBOS.contains(&key) {
+        if let Some(n) = num {
+            store.set_item_index(key, n as i32);
+        }
+    } else if key.starts_with("CB") || key.starts_with("RB") {
+        if let Some(n) = num {
+            store.set_checked(key, n != 0);
+        }
+    } else if key.starts_with("SE") {
+        if let Some(n) = num {
+            store.set_position(key, n as i32);
+        }
+    } else if key.starts_with("SP") {
+        if let Some(n) = num {
+            store.set_color(key, n as u32 & 0xff_ffff);
+        }
+    } else {
+        store.set_text(key, v);
+    }
+}
+
+pub fn to_text(store: &Store, lay: &Layout) -> String {
+    let mut s = format!("[{SECTION}]\r\n");
+    for k in KEYS {
+        s.push_str(k);
+        s.push('=');
+        s.push_str(&get_value(k, store, lay));
+        s.push_str("\r\n");
+    }
+    s
+}
+
+pub fn apply_text(text: &str, store: &mut Store, lay: &mut Layout) {
+    let mut in_sec = false;
+    for line in text.lines() {
+        let line = line.trim_end_matches('\r');
+        if let Some(sec) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) {
+            in_sec = sec.eq_ignore_ascii_case(SECTION);
+            continue;
+        }
+        if !in_sec {
+            continue;
+        }
+        if let Some((k, v)) = line.split_once('=') {
+            if let Some(key) = KEYS.iter().find(|x| x.eq_ignore_ascii_case(k.trim())) {
+                set_value(key, v, store, lay);
+            }
+        }
+    }
+}
+
+pub fn encode(text: &str) -> Vec<u8> {
+    encoding_rs::SHIFT_JIS.encode(text).0.into_owned()
+}
+
+pub fn decode(bytes: &[u8]) -> String {
+    encoding_rs::SHIFT_JIS.decode(bytes).0.into_owned()
+}
+
+pub fn save_file(path: &Path, store: &Store, lay: &Layout) -> std::io::Result<()> {
+    std::fs::write(path, encode(&to_text(store, lay)))
+}
+
+pub fn load_file(path: &Path, store: &mut Store, lay: &mut Layout) -> std::io::Result<()> {
+    let bytes = std::fs::read(path)?;
+    apply_text(&decode(&bytes), store, lay);
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::forms::Forms;
+
+    // key order of the original's default.ini
+    const ORIG_ORDER: &str = "Form1Top Form1Left Form1height Form1width ToolBar1Top ToolBar1Left ToolBar2Top ToolBar2Left CBmode SEsize EDv EDh ToolBar3Top ToolBar3Left ToolBar4Top ToolBar4Left ToolBar5Top ToolBar5Left CBland SElandheight SEeta SEphi CBsurface CBgraph CBscatter CBpanel SEdotsize CBscattemode SPvectorcolor SPvectorheadcolor EDvector EDhead EDstepx EDoffsetx CBskipx CBskipy EDstepy EDoffsety CBfix CBpaint SEvectorheadangle CBenVMax EDenVMax CBvectorhead CBvector CBtoko SPtokocolor EDdt RBctmode1 RBctmode2 CBentokomin CBentokomax EDtokomin EDtokomax SEtoko CBaxis CBaxistitle EDXtitle EDYtitle EDZtitle SEaxisheadsize SEaxislinewidth CBaxsiscross RBcartesian RBcylindrical CBgrid SEgridlinewidth SEgridlinelength CBgridmesh CBgridbox CBgridscale CBaxisscale CBmemoryX CBmemoryY CBmemoryZ CBpoint CBLabel LBlabel SEdataX SEdataY SEdataU SEdataV SEdataZ CBtenchi SEskip SPBGcolor SPFGcolor EDenYmin EDenYmax EDenXmin EDenXmax SEmar LBfontlabelfontname LBfontlabelfontsize LBfontlabelfontstyle LBfontlegendfontname LBfontlegendfontsize LBfontlegendfontstyle LBfontAxisfontname LBfontAxisfontsize LBfontAxisfontstyle LBfontMemfontname LBfontMemfontsize LBfontMemfontstyle LBfont CBautosave SEmaxbmp RBusebmp RBusewmf CBDataCheck CBLoadConf CBSpline CBcolorvector CBlegend CBreverse CBtype CBfold EDenZmin EDenZmax CBenZmin CBenZmax SEcolor SElegendw SElegendh";
+
+    fn store() -> Store {
+        let f = Forms::load();
+        Store::from_forms(&[&f.form1, &f.config, &f.avi, &f.input])
+    }
+
+    #[test]
+    fn key_order_matches_original() {
+        let want: Vec<&str> = ORIG_ORDER.split(' ').collect();
+        assert_eq!(KEYS, want.as_slice());
+        let text = to_text(&store(), &Layout::default());
+        let got: Vec<&str> = text.lines().skip(1).map(|l| l.split('=').next().unwrap()).collect();
+        assert_eq!(got, want);
+        assert!(text.starts_with("[avese.exe]\r\n"));
+    }
+
+    #[test]
+    fn default_values() {
+        let text = to_text(&store(), &Layout::default());
+        for l in ["LBlabel=-1", "LBfont=3", "SPvectorheadcolor=16777215", "SPBGcolor=16777215", "LBfontlabelfontname=ＭＳ Ｐゴシック", "LBfontMemfontsize=6", "SEcolor=200", "EDenVMax=1.0"] {
+            assert!(text.contains(l), "{l}");
+        }
+    }
+
+    #[test]
+    fn round_trip_shift_jis() {
+        let mut s = store();
+        let mut lay = Layout::default();
+        s.set_text("EDXtitle", "横軸あ");
+        s.set_checked("CBpanel", true);
+        s.set_position("SEsize", 777);
+        s.set_color("SPBGcolor", 0x123456);
+        s.set_item_index("CBtype", 4);
+        lay.bars[2] = (62, 99);
+        lay.form_width = 640;
+        let bytes = encode(&to_text(&s, &lay));
+        assert!(!bytes.windows(3).any(|w| w == "横".as_bytes()), "must not be UTF-8");
+        let mut s2 = store();
+        let mut lay2 = Layout::default();
+        apply_text(&decode(&bytes), &mut s2, &mut lay2);
+        assert_eq!(lay, lay2);
+        assert_eq!(to_text(&s, &lay), to_text(&s2, &lay2));
+        assert_eq!(s2.text("EDXtitle"), "横軸あ");
+        assert!(s2.checked("CBpanel"));
+        assert_eq!(s2.item_index("CBtype"), 4);
+    }
+}

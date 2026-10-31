@@ -1,0 +1,96 @@
+{
+"class": "TMeshProgress",
+"name": "MeshProgress",
+"props": {
+"Left": 634,
+"Top": 116,
+"BorderIcons": {
+"set": []
+},
+"BorderStyle": {
+"ident": "bsDialog"
+},
+"Caption": "三角メッシュ自動生成",
+"ClientHeight": 81,
+"ClientWidth": 280,
+"Color": {
+"ident": "clBtnFace"
+},
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -12,
+"Font.Name": "ＭＳ Ｐゴシック",
+"Font.Style": {
+"set": []
+},
+"OldCreateOrder": true,
+"Position": {
+"ident": "poMainFormCenter"
+},
+"Scaled": false,
+"OnClose": {
+"ident": "FormClose"
+},
+"PixelsPerInch": 96,
+"TextHeight": 12
+},
+"kids": [
+{
+"class": "TLabel",
+"name": "label1",
+"props": {
+"Left": 12,
+"Top": 7,
+"Width": 91,
+"Height": 16,
+"Caption": "Version  0.01",
+"Font.Charset": {
+"ident": "SHIFTJIS_CHARSET"
+},
+"Font.Color": {
+"ident": "clBlack"
+},
+"Font.Height": -16,
+"Font.Name": "ＭＳ Ｐ明朝",
+"Font.Style": {
+"set": []
+},
+"ParentFont": false,
+"IsControl": true
+},
+"kids": []
+},
+{
+"class": "TProgressBar",
+"name": "ProgressBar1",
+"props": {
+"Left": 15,
+"Top": 32,
+"Width": 250,
+"Height": 18,
+"Min": 0,
+"Max": 400,
+"TabOrder": 0
+},
+"kids": []
+},
+{
+"class": "TProgressBar",
+"name": "ProgressBar2",
+"props": {
+"Left": 15,
+"Top": 56,
+"Width": 250,
+"Height": 18,
+"Min": 0,
+"Max": 100,
+"TabOrder": 1
+},
+"kids": []
+}
+]
+}
