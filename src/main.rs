@@ -3,6 +3,7 @@
 
 mod app;
 mod dialogs;
+mod engine;
 mod fonts;
 mod forms;
 mod icons;
