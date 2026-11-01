@@ -75,11 +75,11 @@ impl<'a> Renderer<'a> {
         let scope = ui.id();
         let ctx = ui.ctx().clone();
         // custom tab order (TabOrder), consuming egui's own Tab handling
-        let (tab, shift) = ctx.input_mut(|i| {
+        let (tab, shift) = if ui.is_enabled() { ctx.input_mut(|i| {
             let s = i.consume_key(Modifiers::SHIFT, Key::Tab);
             let t = i.consume_key(Modifiers::NONE, Key::Tab);
             (t, s)
-        });
+        }) } else { (false, false) };
         if tab || shift {
             let list: Vec<Id> = ctx.data(|d| d.get_temp(tab_key(scope))).unwrap_or_default();
             if !list.is_empty() {
@@ -161,7 +161,7 @@ impl<'a> Renderer<'a> {
     }
 
     fn is_enabled(&self, n: &Node) -> bool {
-        match self.store.get(&n.name) {
+        self.ui.is_enabled() && match self.store.get(&n.name) {
             Some(c) => c.enabled,
             None => n.flag("Enabled", true),
         }
@@ -568,7 +568,7 @@ impl<'a> Renderer<'a> {
                     }
                 }
             }
-            if resp.lost_focus() {
+            if en && resp.lost_focus() {
                 let x = self.store.text(&n.name).parse::<i32>().unwrap_or(v).clamp(min, max);
                 let before = self.store.position(&n.name);
                 self.store.set_position(&n.name, x);
@@ -604,7 +604,7 @@ impl<'a> Renderer<'a> {
         let mut open: bool = ctx.data(|d| d.get_temp(open_id)).unwrap_or(false);
         let was_open = open;
         // the main form's first tab stop (CBmode) starts focused, as in the original
-        if n.name == "CBmode" && ctx.data(|d| d.get_temp::<bool>(Id::new("cbmode_init"))).is_none() {
+        if en && n.name == "CBmode" && ctx.data(|d| d.get_temp::<bool>(Id::new("cbmode_init"))).is_none() {
             ctx.data_mut(|d| d.insert_temp(Id::new("cbmode_init"), true));
             ctx.memory_mut(|m| m.request_focus(id));
         }
@@ -636,7 +636,7 @@ impl<'a> Renderer<'a> {
         // The foreground list can take focus from the combo. Outside clicks
         // and Tab close it explicitly; focus loss alone must not dismiss it.
         let pointer_in_list = open && ctx.input(|i| i.pointer.interact_pos().is_some_and(|pos| lr.contains(pos)));
-        if open && ctx.input(|i| i.key_pressed(Key::Tab)) {
+        if open && (!en || ctx.input(|i| i.key_pressed(Key::Tab))) {
             open = false;
         }
         // look
@@ -1121,5 +1121,30 @@ fn find_flag(n: &Node, flag: &str) -> Option<String> {
         return Some(n.name.clone());
     }
     n.kids.iter().find_map(|k| find_flag(k, flag))
+}
+
+#[cfg(test)]
+mod modal_tests {
+    use super::*;
+
+    #[test]
+    fn disabled_parent_controls_do_not_take_tab_or_accept_input() {
+        let ctx = egui::Context::default();
+        let mut input = egui::RawInput::default();
+        input.events.push(egui::Event::Key { key: Key::Tab, physical_key: Some(Key::Tab), pressed: true, repeat: false, modifiers: Modifiers::NONE });
+        let mut store = Store::default();
+        let node = Node::parse(r#"{"class":"TSpinEdit","name":"SEsize","props":{"MinValue":1,"MaxValue":20000},"kids":[]}"#);
+        store.set_position("SEsize", 300);
+        let assets = Assets::default();
+        let output = ctx.run_ui(input, |ui| {
+            ui.add_enabled_ui(false, |ui| {
+                let r = Renderer::new(ui, &mut store, &assets);
+                assert!(!r.is_enabled(&node));
+            });
+        });
+        assert!(ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Tab)), "disabled parent must not consume the child's Tab");
+        assert_eq!(store.position("SEsize"), 300);
+        output.drop_without_applying_deltas();
+    }
 }
 
