@@ -92,3 +92,37 @@ pub fn draw_fallback_logo(p: &Painter, r: Rect) {
     rect_outline(p, r, BLACK);
     p.text(r.center(), egui::Align2::CENTER_CENTER, "AV", crate::fonts::font("MS Gothic", 24.0), Color32::WHITE);
 }
+
+/// Self-contained window icon when the optional original image is unavailable.
+pub fn fallback_app_icon() -> egui::IconData {
+    let mut rgba = vec![0; 32 * 32 * 4];
+    for pixel in rgba.chunks_exact_mut(4) { pixel.copy_from_slice(&[40, 90, 160, 255]); }
+    let letters = [
+        ["01110", "10001", "10001", "11111", "10001", "10001", "10001"],
+        ["10001", "10001", "10001", "10001", "01010", "01010", "00100"],
+    ];
+    for (letter, rows) in letters.iter().enumerate() {
+        for (y, row) in rows.iter().enumerate() {
+            for (x, pixel) in row.bytes().enumerate() {
+                if pixel != b'1' { continue; }
+                for dy in 0..2 { for dx in 0..2 {
+                    let px = 5 + letter * 12 + x * 2 + dx;
+                    let py = 9 + y * 2 + dy;
+                    rgba[(py * 32 + px) * 4..(py * 32 + px + 1) * 4].copy_from_slice(&[255, 255, 255, 255]);
+                } }
+            }
+        }
+    }
+    egui::IconData { width: 32, height: 32, rgba }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn fallback_window_icon_has_visible_mark() {
+        let icon = super::fallback_app_icon();
+        assert_eq!((icon.width, icon.height, icon.rgba.len()), (32, 32, 32 * 32 * 4));
+        assert!(icon.rgba.chunks_exact(4).all(|p| p[3] == 255));
+        assert!(icon.rgba.chunks_exact(4).any(|p| p[..3] == [255, 255, 255]));
+    }
+}

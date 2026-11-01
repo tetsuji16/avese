@@ -38,9 +38,7 @@ fn main() -> eframe::Result {
         .with_min_inner_size([200.0, 150.0])
         .with_position([layout.form_left as f32, layout.form_top as f32])
         .with_drag_and_drop(true);
-    if let Some(icon) = load_icon() {
-        vp = vp.with_icon(icon);
-    }
+    vp = vp.with_icon(load_icon());
     let opts = eframe::NativeOptions { viewport: vp, ..Default::default() };
     eframe::run_native(
         "avese",
@@ -57,14 +55,14 @@ fn main() -> eframe::Result {
     )
 }
 
-fn load_icon() -> Option<egui::IconData> {
+fn load_icon() -> egui::IconData {
     for d in ["assets/local", "../../assets/local"] {
         let p = std::path::Path::new(d).join("app.png");
         let p = if p.exists() { p } else { app::exe_dir().join(d).join("app.png") };
         if let Ok(img) = image::open(&p) {
             let img = img.to_rgba8();
-            return Some(egui::IconData { width: img.width(), height: img.height(), rgba: img.into_raw() });
+            return egui::IconData { width: img.width(), height: img.height(), rgba: img.into_raw() };
         }
     }
-    None
+    icons::fallback_app_icon()
 }
