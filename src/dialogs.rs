@@ -44,37 +44,6 @@ pub fn confirm(title: &str, text: &str) -> bool {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum IrregularChoice { Generate, Abort, Ignore }
 
-fn irregular_choice(result: rfd::MessageDialogResult) -> IrregularChoice {
-    match result {
-        rfd::MessageDialogResult::Yes => IrregularChoice::Generate,
-        rfd::MessageDialogResult::No => IrregularChoice::Ignore,
-        _ => IrregularChoice::Abort,
-    }
-}
-
-/// Ask whether to generate a triangular mesh for irregular grid data.
-pub fn irregular_grid(title: &str, text: &str) -> IrregularChoice {
-    let r = rfd::MessageDialog::new()
-        .set_title(title)
-        .set_description(format!("{text}\n\nはい: メッシュ生成 / いいえ: 無視 / キャンセル・閉じる: 中止"))
-        .set_level(rfd::MessageLevel::Warning)
-        .set_buttons(rfd::MessageButtons::YesNoCancel)
-        .show();
-    irregular_choice(r)
-}
-
-#[cfg(test)]
-mod irregular_dialog_tests {
-    use super::*;
-
-    #[test]
-    fn maps_the_three_labels_to_the_expected_actions() {
-        assert_eq!(irregular_choice(rfd::MessageDialogResult::Yes), IrregularChoice::Generate);
-        assert_eq!(irregular_choice(rfd::MessageDialogResult::No), IrregularChoice::Ignore);
-        assert_eq!(irregular_choice(rfd::MessageDialogResult::Cancel), IrregularChoice::Abort);
-    }
-}
-
 pub fn pick_open_files() -> Vec<std::path::PathBuf> {
     let mut d = rfd::FileDialog::new().set_title("データロード");
     for (n, e) in OPEN_FILTERS {
