@@ -252,7 +252,19 @@ pub(crate) fn push_text(ops: &mut Vec<Op>, bounds: (u32, u32), x: f32, y: f32, t
 }
 
 pub fn build_scene(field: &Field, s: &Settings, labels: &[Label]) -> Result<BuiltScene, String> {
+    build_scene_with_progress(field, s, labels, |_| true)
+}
+
+/// Build a scene while reporting coarse phase progress. Returning false cancels the build.
+pub fn build_scene_with_progress(
+    field: &Field,
+    s: &Settings,
+    labels: &[Label],
+    mut progress: impl FnMut(f32) -> bool,
+) -> Result<BuiltScene, String> {
+    const CANCELLED: &str = "__AVese_RENDER_CANCELLED__";
     let lay = Layout::new(field, s)?;
+    if !progress(0.0) { return Err(CANCELLED.into()); }
     let ctx = Ctx::new(field, s);
     let mut ops = Vec::new();
     let mut probe = Probe::default();
@@ -265,10 +277,12 @@ pub fn build_scene(field: &Field, s: &Settings, labels: &[Label]) -> Result<Buil
             plane::scatter(&ctx, &frame, &mut ops);
         } else {
             plane::image(&ctx, &frame, &mut ops);
+            if !progress(0.35) { return Err(CANCELLED.into()); }
             if !is_panel && s.toko {
                 plane::contours(&ctx, &frame, &mut ops);
             }
         }
+        if !progress(0.65) { return Err(CANCELLED.into()); }
         let bounds = (lay.w, lay.h);
         axes::grid(&ctx, &frame, bounds, &mut ops);
         if !is_panel && s.vector {
@@ -278,6 +292,7 @@ pub fn build_scene(field: &Field, s: &Settings, labels: &[Label]) -> Result<Buil
         axes::points(&ctx, &frame, &mut ops);
         probe = Probe { frame: Some(frame) };
     }
+    if !progress(0.85) { return Err(CANCELLED.into()); }
     legend::draw(&ctx, &lay, &mut ops);
     if s.label {
         for l in labels {
@@ -286,6 +301,7 @@ pub fn build_scene(field: &Field, s: &Settings, labels: &[Label]) -> Result<Buil
             }
         }
     }
+    if !progress(1.0) { return Err(CANCELLED.into()); }
     Ok(BuiltScene { scene: Scene { width: lay.w, height: lay.h, bg: s.bg, ops }, probe })
 }
 

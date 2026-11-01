@@ -110,10 +110,14 @@ pub struct RenderDone {
 
 /// Draw with the labels of the data file plus the ones added in the dialog.
 pub fn render_job(ctx: &egui::Context, mut loaded: Loaded, s: Settings, gui_labels: Vec<String>) -> Handle<RenderDone> {
-    spawn(ctx, move |_| {
+    spawn(ctx, move |sh| {
         let file: Vec<Label> = std::mem::take(&mut loaded.data.labels);
         loaded.data.labels = labels::merged(&file, &gui_labels);
-        let result = catch_unwind(AssertUnwindSafe(|| pipeline::render(&loaded, &s))).unwrap_or_else(|_| Err("描画中にエラーが発生しました".into()));
+        let result = catch_unwind(AssertUnwindSafe(|| pipeline::render_with_progress(&loaded, &s, |p| {
+            sh.set_task(p);
+            !sh.cancelled()
+        }))).unwrap_or_else(|_| Err("描画中にエラーが発生しました".into()))
+            .map_err(|e| if e == pipeline::RENDER_CANCELLED { CANCELLED.into() } else { e });
         loaded.data.labels = file;
         Ok(RenderDone { loaded, result })
     })
@@ -130,7 +134,10 @@ fn render_file(file: &str, base: &Store, sh: &Sh) -> Result<Rendered, String> {
     let mut store = base.clone();
     let dir = Path::new(file).parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
     let loaded = pipeline::load(&bytes, &mut store, Some(dir), |p| sh.set_task(p * 0.9)).map_err(|e| format!("{file}: {e}"))?;
-    let r = pipeline::render(&loaded, &Settings::from_store(&store)).map_err(|e| format!("{file}: {e}"))?;
+    let r = pipeline::render_with_progress(&loaded, &Settings::from_store(&store), |p| {
+        sh.set_task(0.9 + p * 0.1);
+        !sh.cancelled()
+    }).map_err(|e| if e == pipeline::RENDER_CANCELLED { CANCELLED.into() } else { format!("{file}: {e}") })?;
     sh.set_task(1.0);
     Ok(r)
 }
@@ -147,6 +154,7 @@ pub fn batch_job(ctx: &egui::Context, files: Vec<String>, base: Store, kind: Bat
                 sh.set_all(i as f32 / files.len() as f32);
                 match render_file(f, &base, sh).and_then(|r| export::save_image(t, &r, ImageFormat::Bmp)) {
                     Ok(()) => done += 1,
+                    Err(e) if e == CANCELLED => return Err(e),
                     Err(e) => errs.push(e),
                 }
             }

@@ -137,13 +137,14 @@ fn poly_path(pts: &[(f32, f32)], close: bool, off: f32) -> Option<Path> {
     pb.finish()
 }
 
-fn put_image(pm: &mut Pixmap, x: i32, y: i32, w: u32, h: u32, rgba: &[u8]) {
+fn put_image(pm: &mut Pixmap, x: i32, y: i32, w: u32, h: u32, rgba: &[u8], mut progress: impl FnMut(f32) -> bool) -> bool {
     let (pw, ph) = (pm.width() as i64, pm.height() as i64);
     if rgba.len() < w as usize * h as usize * 4 {
-        return;
+        return true;
     }
     let data = pm.data_mut();
     for j in 0..h as i64 {
+        if j % 16 == 0 && !progress(j as f32 / h.max(1) as f32) { return false; }
         let ty = y as i64 + j;
         if ty < 0 || ty >= ph {
             continue;
@@ -162,6 +163,7 @@ fn put_image(pm: &mut Pixmap, x: i32, y: i32, w: u32, h: u32, rgba: &[u8]) {
             data[d + 3] = 255;
         }
     }
+    true
 }
 
 fn blend(pm: &mut Pixmap, x: i32, y: i32, c: Rgb, cov: f32) {
@@ -213,12 +215,20 @@ fn draw_text(pm: &mut Pixmap, x: f32, y: f32, text: &str, font: &FontRef, color:
 }
 
 pub fn rasterize(scene: &Scene) -> Pixmap {
+    rasterize_with_progress(scene, |_| true).expect("infallible rasterization")
+}
+
+pub fn rasterize_with_progress(scene: &Scene, mut progress: impl FnMut(f32) -> bool) -> Option<Pixmap> {
     let mut pm = Pixmap::new(scene.width.max(1), scene.height.max(1)).unwrap_or_else(|| Pixmap::new(1, 1).expect("1x1 pixmap"));
     pm.fill(Color::from_rgba8(scene.bg.0, scene.bg.1, scene.bg.2, 255));
     let id = Transform::identity();
-    for op in &scene.ops {
+    for (index, op) in scene.ops.iter().enumerate() {
+        let base = index as f32 / scene.ops.len().max(1) as f32;
+        if index % 64 == 0 && !progress(base) { return None; }
         match op {
-            Op::Image { x, y, w, h, rgba } => put_image(&mut pm, *x, *y, *w, *h, rgba),
+            Op::Image { x, y, w, h, rgba } => {
+                if !put_image(&mut pm, *x, *y, *w, *h, rgba, |p| progress(base + p / scene.ops.len().max(1) as f32)) { return None; }
+            }
             Op::Polyline { pts, color, width } => {
                 if pts.len() < 2 || !finite(pts) {
                     continue;
@@ -263,7 +273,7 @@ pub fn rasterize(scene: &Scene) -> Pixmap {
             }
         }
     }
-    pm
+    if progress(1.0) { Some(pm) } else { None }
 }
 
 #[cfg(test)]
@@ -283,6 +293,28 @@ mod tests {
     fn background_is_opaque() {
         let pm = rasterize(&scene(vec![]));
         assert_eq!(px(&pm, 3, 3), (10, 20, 30, 255));
+    }
+
+    #[test]
+    fn rasterization_can_be_cancelled_without_returning_a_partial_image() {
+        let s = scene((0..256).map(|i| Op::Ellipse {
+            cx: i as f32, cy: 2.0, rx: 1.0, ry: 1.0,
+            fill: Some(Rgb::BLACK), stroke: None,
+        }).collect());
+        let mut seen = Vec::new();
+        let result = rasterize_with_progress(&s, |p| { seen.push(p); false });
+        assert!(result.is_none());
+        assert_eq!(seen, [0.0]);
+    }
+
+    #[test]
+    fn large_image_copy_checks_cancellation_between_rows() {
+        let rgba = vec![255; 20 * 100 * 4];
+        let s = Scene { width: 20, height: 100, bg: Rgb::BLACK, ops: vec![Op::Image { x: 0, y: 0, w: 20, h: 100, rgba }] };
+        let mut checks = 0;
+        let result = rasterize_with_progress(&s, |_| { checks += 1; checks < 3 });
+        assert!(result.is_none());
+        assert_eq!(checks, 3);
     }
 
     #[test]

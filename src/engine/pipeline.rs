@@ -25,6 +25,8 @@ pub struct Rendered {
     pub probe: Probe,
 }
 
+pub const RENDER_CANCELLED: &str = "__AVese_RENDER_CANCELLED__";
+
 impl Rendered {
     /// RGBA bytes for egui (`ColorImage::from_rgba_premultiplied`); the pixmap is opaque, so
     /// premultiplied and straight alpha agree.
@@ -80,8 +82,15 @@ pub fn required_bytes(loaded: &Loaded, s: &Settings) -> u64 {
 }
 
 pub fn render(loaded: &Loaded, s: &Settings) -> Result<Rendered, String> {
-    let b = draw::build_scene(&loaded.field, s, &loaded.data.labels)?;
-    let pixmap = raster::rasterize(&b.scene);
+    render_with_progress(loaded, s, |_| true)
+}
+
+/// Render while reporting normalized progress. Returning false aborts and returns the
+/// distinguished cancellation error used by the job layer.
+pub fn render_with_progress(loaded: &Loaded, s: &Settings, mut progress: impl FnMut(f32) -> bool) -> Result<Rendered, String> {
+    let b = draw::build_scene_with_progress(&loaded.field, s, &loaded.data.labels, |p| progress(p * 0.5))
+        .map_err(|e| if e == RENDER_CANCELLED { RENDER_CANCELLED.to_owned() } else { e })?;
+    let pixmap = raster::rasterize_with_progress(&b.scene, |p| progress(0.5 + p * 0.5)).ok_or(RENDER_CANCELLED)?;
     Ok(Rendered { scene: b.scene, pixmap, probe: b.probe })
 }
 
@@ -125,6 +134,22 @@ mod tests {
         assert_eq!(required_bytes(&l, &s), 24 * 24);
         assert!(r.probe.at(12.0, 12.0).is_some());
         assert!(r.pixmap.data().chunks(4).all(|p| p[3] == 255));
+    }
+
+    #[test]
+    fn rendering_reports_progress_and_cancels_without_a_partial_result() {
+        let mut st = store();
+        let l = load(text(3).as_bytes(), &mut st, None, |_| {}).unwrap();
+        let s = small(&st);
+        let mut last = 0.0;
+        let result = render_with_progress(&l, &s, |p| {
+            assert!(p >= last, "progress regressed from {last} to {p}");
+            last = p;
+            p < 0.5
+        });
+        let e = result.err().expect("cancellation must not return an image");
+        assert_eq!(e, RENDER_CANCELLED);
+        assert!(last >= 0.5);
     }
 
     #[test]
