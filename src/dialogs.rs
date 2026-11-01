@@ -47,7 +47,7 @@ pub enum IrregularChoice { Generate, Abort, Ignore }
 fn irregular_choice(result: rfd::MessageDialogResult) -> IrregularChoice {
     match result {
         rfd::MessageDialogResult::Yes => IrregularChoice::Generate,
-        rfd::MessageDialogResult::Cancel => IrregularChoice::Ignore,
+        rfd::MessageDialogResult::No => IrregularChoice::Ignore,
         _ => IrregularChoice::Abort,
     }
 }
@@ -56,7 +56,7 @@ fn irregular_choice(result: rfd::MessageDialogResult) -> IrregularChoice {
 pub fn irregular_grid(title: &str, text: &str) -> IrregularChoice {
     let r = rfd::MessageDialog::new()
         .set_title(title)
-        .set_description(format!("{text}\n\nはい: メッシュ生成 / いいえ: 中止 / キャンセル: 無視"))
+        .set_description(format!("{text}\n\nはい: メッシュ生成 / いいえ: 無視 / キャンセル・閉じる: 中止"))
         .set_level(rfd::MessageLevel::Warning)
         .set_buttons(rfd::MessageButtons::YesNoCancel)
         .show();
@@ -70,8 +70,8 @@ mod irregular_dialog_tests {
     #[test]
     fn maps_the_three_labels_to_the_expected_actions() {
         assert_eq!(irregular_choice(rfd::MessageDialogResult::Yes), IrregularChoice::Generate);
-        assert_eq!(irregular_choice(rfd::MessageDialogResult::No), IrregularChoice::Abort);
-        assert_eq!(irregular_choice(rfd::MessageDialogResult::Cancel), IrregularChoice::Ignore);
+        assert_eq!(irregular_choice(rfd::MessageDialogResult::No), IrregularChoice::Ignore);
+        assert_eq!(irregular_choice(rfd::MessageDialogResult::Cancel), IrregularChoice::Abort);
     }
 }
 
