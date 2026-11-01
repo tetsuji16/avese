@@ -141,6 +141,23 @@ fn item_of(name: &str) -> Option<Item> {
     })
 }
 
+// Toolbar state is shown behind the icon, so the artwork stays legible.
+fn toolbar_background(enabled: bool, checked: bool, pressed: bool, hovered: bool) -> Option<(egui::Color32, egui::Color32)> {
+    use egui::Color32;
+    if !enabled {
+        return checked.then_some((Color32::from_gray(225), Color32::from_gray(180)));
+    }
+    if pressed {
+        Some((Color32::from_rgb(169, 204, 244), Color32::from_rgb(42, 106, 180)))
+    } else if checked {
+        Some((Color32::from_rgb(207, 228, 251), Color32::from_rgb(55, 119, 190)))
+    } else if hovered {
+        Some((Color32::from_rgb(230, 237, 245), Color32::from_rgb(172, 190, 211)))
+    } else {
+        None
+    }
+}
+
 pub struct App {
     forms: Forms,
     store: Store,
@@ -1038,11 +1055,13 @@ impl App {
                 let checked = item_of(&k.name).map(|it| vs.get(it)).unwrap_or(false);
                 let down = en && resp.is_pointer_button_down_on();
                 let pp = r.ui.painter().clone();
-                if !checked && !down && resp.hovered() && en {
-                    raised1(&pp, rr);
+                if let Some((background, border)) = toolbar_background(en, checked, down, resp.hovered()) {
+                    let state_rect = rr.shrink(1.0);
+                    pp.rect_filled(state_rect, 4, background);
+                    pp.rect_stroke(state_rect, 4, egui::Stroke::new(1.0, border), egui::StrokeKind::Inside);
                 }
                 let ir = Rect::from_min_size(Pos2::new(rr.min.x + ((rr.width() - 20.0) / 2.0).floor(), rr.min.y + ((rr.height() - 20.0) / 2.0).floor() + 2.0), Vec2::splat(20.0));
-                crate::icons::draw_tb(&pp, &self.assets, k.int("ImageIndex").max(0) as usize, ir, en, checked || down);
+                crate::icons::draw_tb(&pp, &self.assets, k.int("ImageIndex").max(0) as usize, ir, en, false);
                 r.tip(id, k.hint(), resp.hovered());
                 if en && resp.clicked() {
                     acts.push(k.name.clone());
@@ -1166,6 +1185,20 @@ mod shortcut_tests {
         assert!(!restored.checked("CBDataCheck"));
         assert_eq!(restored.position("SEmaxbmp"), 17);
         assert_eq!(restored.list("LBlabel"), &["1, 2 日本語 😀"]);
+    }
+
+    #[test]
+    fn toolbar_states_are_visually_distinct() {
+        let normal = toolbar_background(true, false, false, false);
+        let hovered = toolbar_background(true, false, false, true);
+        let selected = toolbar_background(true, true, false, false);
+        let pressed = toolbar_background(true, true, true, true);
+        assert_eq!(normal, None);
+        assert!(hovered.is_some() && selected.is_some() && pressed.is_some());
+        assert_ne!(hovered, selected);
+        assert_ne!(selected, pressed);
+        assert_eq!(toolbar_background(false, false, false, true), None);
+        assert_ne!(toolbar_background(false, true, false, true), selected);
     }
 
     #[test]
