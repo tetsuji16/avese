@@ -9,11 +9,10 @@ pub(crate) fn draw(ctx: &Ctx, lay: &Layout, ops: &mut Vec<Op>) {
     let (w, h) = (s.legend_w as usize, s.legend_h as usize);
     let x = ((lay.w as f64 - w as f64) / 2.0).floor();
     let y = lay.legend_y;
-    let pal = ctx.grad.palette();
     let mut rgba = Vec::with_capacity(w * h * 4);
     for _ in 0..h {
         for i in 0..w {
-            let c = pal[(i * pal.len() / w).min(pal.len() - 1)];
+            let c = ctx.grad.pixel_color(i, w);
             rgba.extend_from_slice(&[c.0, c.1, c.2, 255]);
         }
     }
@@ -49,6 +48,36 @@ mod tests {
         cols.dedup();
         assert_eq!(cols.len(), 4);
         assert!(b.scene.height > 100 + 20);
+    }
+
+    #[test]
+    fn legend_pixels_match_preview_for_all_gradient_options() {
+        let f = grid(3, 3, |x, y| Some(x + y));
+        for kind in 0..9 {
+            for n in [2, 3, 7, 200] {
+                for reverse in [false, true] {
+                    for fold in [false, true] {
+                        let mut s = settings();
+                        s.legend = true;
+                        s.legend_w = 41;
+                        s.legend_h = 3;
+                        s.gradient_type = kind;
+                        s.n_colors = n;
+                        s.reverse = reverse;
+                        s.fold = fold;
+                        let ctx = Ctx::new(&f, &s);
+                        let layout = Layout::new(&f, &s).unwrap();
+                        let mut ops = Vec::new();
+                        super::draw(&ctx, &layout, &mut ops);
+                        let Op::Image { rgba, .. } = &ops[0] else { panic!("missing legend") };
+                        for (x, pixel) in rgba.chunks_exact(4).take(41).enumerate() {
+                            let c = ctx.grad.pixel_color(x, 41);
+                            assert_eq!(pixel, &[c.0, c.1, c.2, 255], "type={kind} colors={n} reverse={reverse} fold={fold} x={x}");
+                        }
+                    }
+                }
+            }
+        }
     }
 
     #[test]

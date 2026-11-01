@@ -1014,7 +1014,7 @@ impl<'a> Renderer<'a> {
             sunken1(&p, r.expand(1.0));
             let w = r.width() as i32;
             for x in 0..w {
-                let c = grad.color(x as f64 / (w - 1).max(1) as f64);
+                let c = grad.pixel_color(x as usize, w as usize);
                 let c = Color32::from_rgb(c.0, c.1, c.2);
                 fill(&p, Rect::from_min_size(Pos2::new(r.min.x + x as f32, r.min.y), Vec2::new(1.0, r.height())), c);
             }
