@@ -177,10 +177,6 @@ impl<'a> Renderer<'a> {
         }
     }
 
-    fn txt(&self, c: bool, f: &Fnt) -> Color32 {
-        if c { col(f.color) } else { GRAYTEXT }
-    }
-
     fn accel_hit(&self, caption: &str) -> bool {
         if !self.alt {
             return false;
