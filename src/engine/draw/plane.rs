@@ -276,7 +276,11 @@ fn isolines_prepared(
     mut progress: impl FnMut(f32) -> bool,
 ) -> Option<Vec<Vec<Pt>>> {
     let (nx, ny) = (xs.len(), ys.len());
-    let Ok(lines) = ContourBuilder::new(nx, ny, true).lines(&values, levels) else { return Some(vec![]) };
+    let lines = match ContourBuilder::new(nx, ny, true).lines_cancellable(values, levels, || progress(0.0)) {
+        Ok(lines) => lines,
+        Err(e) if matches!(e.kind(), contour::ErrorKind::Cancelled) => return None,
+        Err(_) => return Some(vec![]),
+    };
     let inside = |a: Coord<f64>, b: Coord<f64>| {
         // the crate places node i at i + 0.5
         let (u, v) = ((a.x + b.x) / 2.0 - 0.5, (a.y + b.y) / 2.0 - 0.5);
@@ -516,6 +520,28 @@ mod tests {
         let values = super::contour_values(&z, &[0.5], |p| { calls += 1; p < 0.1 });
         assert!(values.is_none());
         assert!(calls >= 2);
+    }
+
+    #[test]
+    fn contour_tracing_can_cancel_inside_external_algorithm() {
+        let values = vec![0.0; 512 * 512];
+        let mut calls = 0;
+        let result = contour::ContourBuilder::new(512, 512, true).lines_cancellable(&values, &[0.5], || {
+            calls += 1;
+            calls < 5
+        });
+        assert!(matches!(result, Err(e) if matches!(e.kind(), contour::ErrorKind::Cancelled)));
+        assert_eq!(calls, 5);
+    }
+
+    #[test]
+    fn cancellable_contours_match_upstream_geometry() {
+        let values = (0..64 * 48).map(|i| ((i % 64) as f64 * 0.2).sin() + ((i / 64) as f64 * 0.3).cos()).collect::<Vec<_>>();
+        let thresholds = [-1.0, -0.25, 0.0, 0.75, 1.5];
+        let expected = contour_reference::ContourBuilder::new(64, 48, true).lines(&values, &thresholds).unwrap();
+        let actual = contour::ContourBuilder::new(64, 48, true).lines_cancellable(&values, &thresholds, || true).unwrap();
+        assert_eq!(actual.len(), expected.len());
+        for (a, b) in actual.iter().zip(&expected) { assert_eq!(a.geometry(), b.geometry()); }
     }
 
     #[test]
