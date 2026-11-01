@@ -23,7 +23,7 @@ const FALLBACKS: &[(&str, u32)] = &[
     ("/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc", 0),
 ];
 
-/// Find a Japanese-capable system font on distributions that install fonts in
+/// Find Japanese-capable system fonts on distributions that install fonts in
 /// a versioned or user-specific directory. The fixed paths above stay first
 /// so the preferred family remains stable when it is available.
 fn discovered_fallbacks() -> Vec<(String, u32)> {
@@ -44,20 +44,28 @@ fn discovered_fallbacks() -> Vec<(String, u32)> {
 
     let mut found = Vec::new();
     let mut pending = dirs.into_iter().filter(|p| !p.is_empty()).map(std::path::PathBuf::from).collect::<Vec<_>>();
+    let mut visited = 0usize;
     while let Some(dir) = pending.pop() {
+        visited += 1;
+        if visited > 20_000 { break; }
         let Ok(entries) = std::fs::read_dir(dir) else { continue };
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.is_dir() {
+            let Ok(kind) = entry.file_type() else { continue };
+            // Do not follow symlinks: font directories can contain cycles.
+            if kind.is_dir() {
                 pending.push(path);
                 continue;
             }
+            if !kind.is_file() { continue; }
             let ext = path.extension().and_then(|x| x.to_str()).unwrap_or("");
             if !["ttf", "ttc", "otf"].iter().any(|x| ext.eq_ignore_ascii_case(x)) {
                 continue;
             }
             let name = path.file_name().and_then(|x| x.to_str()).unwrap_or("").to_lowercase();
-            if ["noto", "ipa", "cjk", "gothic", "hiragino", "yu"].iter().any(|x| name.contains(x)) {
+            if ["notosanscjk", "notoserifcjk", "notosansjp", "notoserifjp", "ipaex", "ipag", "ipamp", "ipamincho", "hiragino", "yugoth", "yumin", "msgothic", "msmincho"]
+                .iter().any(|x| name.contains(x))
+            {
                 found.push((path.to_string_lossy().into_owned(), 0));
             }
         }

@@ -6,16 +6,70 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock};
 use tiny_skia::{Color, FillRule, Paint, Path, PathBuilder, Pixmap, Rect, Stroke, Transform};
 
-type FontCache = Mutex<HashMap<(String, u32), Option<Arc<FontVec>>>>;
+type FontCache = Mutex<HashMap<(PathBuf, u32), Option<Arc<FontVec>>>>;
 
 fn cache() -> &'static FontCache {
     static C: OnceLock<FontCache> = OnceLock::new();
     C.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-fn font_dir() -> PathBuf {
+fn windows_font_dir() -> PathBuf {
     let root = std::env::var_os("WINDIR").or_else(|| std::env::var_os("SystemRoot")).map(PathBuf::from).unwrap_or_else(|| PathBuf::from("C:\\Windows"));
     root.join("Fonts")
+}
+
+fn discover_system_fonts() -> Vec<PathBuf> {
+    #[cfg(windows)]
+    let roots = vec![windows_font_dir()];
+    #[cfg(target_os = "macos")]
+    let roots = vec![
+        PathBuf::from("/System/Library/Fonts"), PathBuf::from("/Library/Fonts"),
+        std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default().join("Library/Fonts"),
+    ];
+    #[cfg(target_os = "linux")]
+    let roots = vec![
+        PathBuf::from("/usr/share/fonts"), PathBuf::from("/usr/local/share/fonts"),
+        std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default().join(".local/share/fonts"),
+        std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default().join(".fonts"),
+    ];
+    #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+    let roots: Vec<PathBuf> = Vec::new();
+
+    let mut dirs = Vec::new();
+    let mut pending = roots;
+    let mut visited = 0usize;
+    while let Some(dir) = pending.pop() {
+        visited += 1;
+        if visited > 20_000 { break; }
+        let Ok(entries) = std::fs::read_dir(dir) else { continue };
+        for entry in entries.flatten() {
+            let Ok(kind) = entry.file_type() else { continue };
+            if kind.is_dir() {
+                pending.push(entry.path());
+            } else if kind.is_file() {
+                let path = entry.path();
+                let ext = path.extension().and_then(|x| x.to_str()).unwrap_or("");
+                let name = path.file_name().and_then(|x| x.to_str()).unwrap_or("").to_lowercase();
+                if is_japanese_font_file(&name, ext) {
+                    dirs.push(path);
+                }
+            }
+        }
+    }
+    dirs.sort();
+    dirs.dedup();
+    dirs
+}
+
+fn is_japanese_font_file(name: &str, ext: &str) -> bool {
+    ["ttf", "ttc", "otf"].iter().any(|x| ext.eq_ignore_ascii_case(x))
+        && ["notosanscjk", "notoserifcjk", "notosansjp", "notoserifjp", "ipaex", "ipag", "ipamp", "ipamincho", "hiragino", "yugoth", "yumin", "msgothic", "msmincho"]
+            .iter().any(|x| name.contains(x))
+}
+
+fn system_font_paths() -> &'static [PathBuf] {
+    static PATHS: OnceLock<Vec<PathBuf>> = OnceLock::new();
+    PATHS.get_or_init(discover_system_fonts)
 }
 
 /// Lower case, fullwidth ASCII folded, spaces removed.
@@ -51,18 +105,26 @@ fn candidates(family: &str) -> Vec<(&'static str, u32)> {
     v
 }
 
-fn load_face(file: &str, index: u32) -> Option<Arc<FontVec>> {
+fn candidate_paths(family: &str) -> Vec<(PathBuf, u32)> {
+    let mut out = candidates(family).into_iter().map(|(f, i)| (windows_font_dir().join(f), i)).collect::<Vec<_>>();
+    for path in system_font_paths() {
+        out.push((path.clone(), 0));
+    }
+    out
+}
+
+fn load_face(path: &PathBuf, index: u32) -> Option<Arc<FontVec>> {
     let mut c = cache().lock().ok()?;
-    c.entry((file.to_string(), index))
+    c.entry((path.clone(), index))
         .or_insert_with(|| {
-            let bytes = std::fs::read(font_dir().join(file)).ok()?;
+            let bytes = std::fs::read(path).ok()?;
             FontVec::try_from_vec_and_index(bytes, index).ok().map(Arc::new)
         })
         .clone()
 }
 
 fn find_face(family: &str) -> Option<Arc<FontVec>> {
-    candidates(family).into_iter().find_map(|(f, i)| load_face(f, i))
+    candidate_paths(family).iter().find_map(|(p, i)| load_face(p, *i))
 }
 
 fn px_per_pt(size_pt: f32) -> f32 {
@@ -318,6 +380,28 @@ mod tests {
         assert_eq!(normalize("MS PGothic"), "mspgothic");
         assert_eq!(candidates("ＭＳ Ｐ明朝")[0], ("msmincho.ttc", 1));
         assert_eq!(candidates("nonexistent")[0].0, "msgothic.ttc");
+    }
+
+    #[test]
+    fn japanese_font_discovery_uses_specific_family_names() {
+        assert!(is_japanese_font_file("notosanscjk-regular.ttc", "ttc"));
+        assert!(is_japanese_font_file("ipaexgothic.ttf", "ttf"));
+        assert!(is_japanese_font_file("yugothr.ttc", "ttc"));
+        assert!(!is_japanese_font_file("noto-sans.ttf", "ttf"));
+        assert!(!is_japanese_font_file("liberation-gothic.ttf", "ttf"));
+        assert!(!is_japanese_font_file("YuGothR.ttc", "txt"));
+    }
+
+    #[test]
+    fn installed_japanese_font_renders_glyphs() {
+        let Some((path, index)) = candidate_paths("ＭＳ Ｐゴシック").into_iter().find(|(p, i)| load_face(p, *i).is_some()) else {
+            // Minimal containers may have no Japanese font installed.
+            return;
+        };
+        assert!(load_face(&path, index).is_some());
+        let f = FontRef { family: "ＭＳ Ｐゴシック".into(), size_pt: 10.0, style: 0 };
+        let pm = rasterize(&scene(vec![Op::Text { x: 10.0, y: 10.0, text: "日".into(), font: f, color: Rgb::BLACK, anchor: Anchor::Center }]));
+        assert!(pm.data().chunks_exact(4).any(|px| px[..3] != [10, 20, 30]));
     }
 
     #[test]

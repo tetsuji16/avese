@@ -14,7 +14,7 @@ egui = "0.37"
 encoding_rs = { version = "0.8", default-features = false, features = ["alloc"] }
 geo-types = "0.7"
 image = { version = "0.25", default-features = false, features = ["png"] }
-rfd = { version = "0.17", default-features = false }
+rfd = { version = "0.17", default-features = false, features = ["xdg-portal"] }
 serde_json = { version = "1", default-features = false, features = ["std"] }
 tiny-skia = "0.12.0"
 

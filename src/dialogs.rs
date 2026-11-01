@@ -74,6 +74,11 @@ pub enum BatchReq {
     Avi(std::path::PathBuf),
 }
 
+enum Picker {
+    Color { key: String, value: egui::Color32 },
+    Font { row: usize, name: String, size: i32, style: i32 },
+}
+
 #[derive(Default)]
 pub struct Dialogs {
     pub config: Option<Store>, // snapshot restored on cancel
@@ -89,6 +94,7 @@ pub struct Dialogs {
     pub busy: bool,
     /// request from the batch dialog, taken by the app
     pub batch_req: Option<BatchReq>,
+    picker: Option<Picker>,
     pub main_hwnd: Option<isize>,
     styled: Vec<&'static str>,
     blocked: Vec<isize>,
@@ -192,15 +198,17 @@ impl Dialogs {
             let mut want_input = false;
             let mut form = sh.forms.config.clone();
             patch_font_sample(&mut form, sh.store);
+            let mut picker = self.picker.take();
             let this: &Dialogs = self;
             let close = viewport(ctx, "config", T_CONFIG, size, None, false, sh.center, |ui| {
-                let (a, inp) = config_body(ui, &form, &sh.forms.config, sh.store, sh.assets, this);
+                let (a, inp) = config_body(ui, &form, &sh.forms.config, sh.store, sh.assets, this, &mut picker);
                 if a.is_some() {
                     act = a;
                 }
                 want_input |= inp;
                 false
             });
+            self.picker = picker;
             if want_input {
                 self.input = true;
             }
@@ -215,6 +223,7 @@ impl Dialogs {
                 }
                 _ => {}
             }
+            if self.config.is_none() { self.picker = None; }
         }
         if self.input {
             let form = &sh.forms.input;
@@ -368,7 +377,7 @@ fn patch_font_sample(form: &mut Node, store: &Store) {
 }
 
 /// Returns (Some(ok) when closed by a button, wants the label input dialog).
-fn config_body(ui: &mut egui::Ui, form: &Node, orig: &Node, store: &mut Store, assets: &Assets, d: &Dialogs) -> (Option<bool>, bool) {
+fn config_body(ui: &mut egui::Ui, form: &Node, orig: &Node, store: &mut Store, assets: &Assets, d: &Dialogs, picker: &mut Option<Picker>) -> (Option<bool>, bool) {
     let origin = ui.max_rect().min;
     apply_interlocks(store);
     let mut r = Renderer::new(ui, store, assets);
@@ -410,11 +419,22 @@ fn config_body(ui: &mut egui::Ui, form: &Node, orig: &Node, store: &mut Store, a
                         "CCBback" => "SPBGcolor",
                         _ => "SPFGcolor",
                     };
-                    if let Some(c) = plat::choose_color(owner, store.color(sp)) {
-                        store.set_color(sp, c);
+                    #[cfg(windows)]
+                    {
+                        if let Some(c) = plat::choose_color(owner, store.color(sp)) { store.set_color(sp, c); }
+                    }
+                    #[cfg(not(windows))]
+                    {
+                        let c = crate::engine::scene::Rgb::from_tcolor(store.color(sp));
+                        *picker = Some(Picker::Color { key: sp.into(), value: egui::Color32::from_rgb(c.0, c.1, c.2) });
                     }
                 }
-                "SpeedButton1" => font_dialog(store, owner),
+                "SpeedButton1" => {
+                    #[cfg(windows)]
+                    { font_dialog(store, owner); }
+                    #[cfg(not(windows))]
+                    { *picker = font_picker(store); }
+                }
                 other => {
                     // checkboxes/radios of the view items share the menu rules
                     if let Some((item, name)) = DIALOG_NAMES.iter().find(|(_, nm)| *nm == other) {
@@ -433,7 +453,12 @@ fn config_body(ui: &mut egui::Ui, form: &Node, orig: &Node, store: &mut Store, a
                 }
             },
             Ev::Change(n) => match n.as_str() {
-                "LBfont:dbl" => font_dialog(store, owner),
+                "LBfont:dbl" => {
+                    #[cfg(windows)]
+                    { font_dialog(store, owner); }
+                    #[cfg(not(windows))]
+                    { *picker = font_picker(store); }
+                }
                 "TBeta" => {
                     let v = store.position("TBeta");
                     store.set_position("SEeta", v);
@@ -456,8 +481,68 @@ fn config_body(ui: &mut egui::Ui, form: &Node, orig: &Node, store: &mut Store, a
             },
         }
     }
+    show_picker(ui, store, picker);
     apply_interlocks(store);
     (result, input)
+}
+
+fn font_picker(store: &Store) -> Option<Picker> {
+    let row = store.item_index("LBfont");
+    if row < 0 { return None; }
+    let row = row as usize;
+    let fields = store.list("LBfont").get(row)?.split('\t').map(str::to_owned).collect::<Vec<_>>();
+    Some(Picker::Font {
+        row,
+        name: fields.get(1).cloned().unwrap_or_default(),
+        size: fields.get(2).and_then(|s| s.parse().ok()).unwrap_or(9),
+        style: fields.get(3).and_then(|s| s.parse().ok()).unwrap_or(0),
+    })
+}
+
+fn show_picker(ui: &mut egui::Ui, store: &mut Store, picker: &mut Option<Picker>) {
+    let Some(active) = picker.as_mut() else { return };
+    let mut accepted = false;
+    let mut cancelled = false;
+    match active {
+        Picker::Color { key, value } => {
+            let response = egui::Window::new("色の選択").collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, Vec2::ZERO).show(ui.ctx(), |ui| {
+                egui::color_picker::color_edit_button_srgba(ui, value, egui::color_picker::Alpha::Opaque);
+                ui.horizontal(|ui| { accepted = ui.button("OK").clicked(); cancelled = ui.button("キャンセル").clicked(); });
+            });
+            cancelled |= response.is_none();
+            if accepted {
+                let [r, g, b, _] = value.to_array();
+                store.set_color(key, r as u32 | ((g as u32) << 8) | ((b as u32) << 16));
+            }
+        }
+        Picker::Font { row, name, size, style } => {
+            let response = egui::Window::new("フォントの選択").collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, Vec2::ZERO).show(ui.ctx(), |ui| {
+                ui.label("フォント名");
+                ui.text_edit_singleline(name);
+                egui::ComboBox::from_label("候補").selected_text("フォント候補").show_ui(ui, |ui| {
+                    for family in ["ＭＳ Ｐゴシック", "ＭＳ ゴシック", "Noto Sans CJK JP", "IPAexゴシック", "游ゴシック", "Hiragino Sans", "Arial"] {
+                        if ui.selectable_label(*name == family, family).clicked() { *name = family.into(); }
+                    }
+                });
+                ui.add(egui::Slider::new(size, 1..=96).text("サイズ"));
+                for (label, bit) in [("太字", 1), ("斜体", 2), ("下線", 4), ("取消線", 8)] {
+                    let mut on = *style & bit != 0;
+                    if ui.checkbox(&mut on, label).changed() {
+                        if on { *style |= bit; } else { *style &= !bit; }
+                    }
+                }
+                ui.horizontal(|ui| { accepted = ui.button("OK").clicked(); cancelled = ui.button("キャンセル").clicked(); });
+            });
+            cancelled |= response.is_none();
+            if accepted {
+                if let Some(line) = store.lists.get_mut("LBfont").and_then(|rows| rows.get_mut(*row)) {
+                    let caption = line.split('\t').next().unwrap_or("");
+                    *line = format!("{caption}\t{name}\t{size}\t{style}");
+                }
+            }
+        }
+    }
+    if accepted || cancelled { *picker = None; }
 }
 
 fn font_dialog(store: &mut Store, owner: Option<isize>) {
