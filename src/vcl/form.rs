@@ -602,6 +602,7 @@ impl<'a> Renderer<'a> {
         self.tabs.push((self.cur_path.clone(), id));
         let open_id = id.with("open");
         let mut open: bool = ctx.data(|d| d.get_temp(open_id)).unwrap_or(false);
+        let was_open = open;
         // the main form's first tab stop (CBmode) starts focused, as in the original
         if n.name == "CBmode" && ctx.data(|d| d.get_temp::<bool>(Id::new("cbmode_init"))).is_none() {
             ctx.data_mut(|d| d.insert_temp(Id::new("cbmode_init"), true));
@@ -632,10 +633,10 @@ impl<'a> Renderer<'a> {
                 open = true;
             }
         }
-        // Clicking a foreground list item can move focus away from the combo
-        // before the release arrives. Keep the list alive for that click.
+        // The foreground list can take focus from the combo. Outside clicks
+        // and Tab close it explicitly; focus loss alone must not dismiss it.
         let pointer_in_list = open && ctx.input(|i| i.pointer.interact_pos().is_some_and(|pos| lr.contains(pos)));
-        if !focused && !pointer_in_list {
+        if open && ctx.input(|i| i.key_pressed(Key::Tab)) {
             open = false;
         }
         // look
@@ -663,9 +664,22 @@ impl<'a> Renderer<'a> {
         // drop-down list
         if open {
             self.popup_open = true;
+            let selection_id = open_id.with("selection");
+            let mut selection = if was_open { ctx.data(|d| d.get_temp::<usize>(selection_id)).unwrap_or(idx.max(0) as usize) } else { idx.max(0) as usize };
+            if count > 0 {
+                selection = selection.min(count - 1);
+                if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::ArrowDown)) { selection = (selection + 1).min(count - 1); }
+                if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::ArrowUp)) { selection = selection.saturating_sub(1); }
+                if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Enter)) {
+                    idx = selection as i32;
+                    changed = true;
+                    open = false;
+                }
+            }
             if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape)) {
                 open = false;
             }
+            ctx.data_mut(|d| d.insert_temp(selection_id, selection));
             let mut picked: Option<usize> = None;
             let hot_id = open_id.with("hot");
             egui::Area::new(open_id.with("area")).order(egui::Order::Foreground).fixed_pos(lr.min).constrain(false).show(&ctx, |ui| {
@@ -675,7 +689,7 @@ impl<'a> Renderer<'a> {
                 for (i, it) in items.iter().enumerate().take(count) {
                     let ir = Rect::from_min_size(Pos2::new(lr.min.x + 1.0, lr.min.y + 2.0 + i as f32 * ih), Vec2::new(lr.width() - 2.0, ih));
                     let rs = ui.interact(ir, hot_id.with(i), Sense::click());
-                    let sel = rs.hovered() || (i as i32 == idx && !rs.ctx.input(|x| x.pointer.has_pointer()));
+                    let sel = rs.hovered() || (i == selection && !pointer_in_list);
                     if sel {
                         fill(&pp, ir, SELECT);
                     }
