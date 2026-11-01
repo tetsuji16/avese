@@ -151,6 +151,21 @@ mod tests {
     }
 
     #[test]
+    fn toolbar_dimensions_reach_rendered_image() {
+        let mut st = store();
+        let l = load(b"0 0 0\n2 0 1\n0 1 2\n2 1 3\n", &mut st, None, |_| {}).unwrap();
+        st.set_checked("CBlegend", false);
+        st.set_position("SEmar", 0);
+        st.set_position("SEsize", 40);
+        st.set_text("EDh", "2");
+        st.set_text("EDv", "3");
+        st.set_item_index("CBmode", 0);
+        assert_eq!(render(&l, &Settings::from_store(&st)).unwrap().size(), [80, 60]);
+        st.set_item_index("CBmode", 1);
+        assert_eq!(render(&l, &Settings::from_store(&st)).unwrap().size(), [160, 120]);
+    }
+
+    #[test]
     fn forced_mesh_reparse_survives_settings_changes() {
         let mut st = store();
         let bytes = text(3);

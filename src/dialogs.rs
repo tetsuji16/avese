@@ -7,7 +7,7 @@ use crate::state::Store;
 use crate::vcl::form::{Assets, Ev, Fnt, Renderer};
 use crate::vcl::FACE;
 use crate::view::{Item, ViewState, DIALOG_NAMES};
-use egui::{Context, Pos2, Vec2, ViewportBuilder, ViewportId};
+use egui::{Context, Key, Modifiers, Pos2, Vec2, ViewportBuilder, ViewportId};
 
 pub const T_CONFIG: &str = "設定";
 pub const T_AVI: &str = "連続処理";
@@ -133,6 +133,9 @@ fn viewport(ctx: &Context, key: &str, title: &str, size: Vec2, min: Option<Vec2>
                 close = true;
             }
         });
+        if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape)) {
+            close = true;
+        }
     });
     close
 }
@@ -223,7 +226,8 @@ impl Dialogs {
                     self.config = None;
                     self.config_ok = true;
                 }
-                (Some(false), _) | (None, true) => {
+                // While the label input dialog is on top, the config window stays open.
+                (Some(false), _) | (None, true) if !nested_input_open => {
                     *sh.store = snap;
                     self.config = None;
                 }
@@ -509,12 +513,12 @@ fn font_picker(store: &Store) -> Option<Picker> {
 fn show_picker(ui: &mut egui::Ui, store: &mut Store, picker: &mut Option<Picker>) {
     let Some(active) = picker.as_mut() else { return };
     let mut accepted = false;
-    let mut cancelled = false;
+    let mut cancelled = ui.ctx().input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape));
     match active {
         Picker::Color { key, value } => {
             let response = egui::Window::new("色の選択").collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, Vec2::ZERO).show(ui.ctx(), |ui| {
                 egui::color_picker::color_edit_button_srgba(ui, value, egui::color_picker::Alpha::Opaque);
-                ui.horizontal(|ui| { accepted = ui.button("OK").clicked(); cancelled = ui.button("キャンセル").clicked(); });
+                ui.horizontal(|ui| { accepted = ui.button("OK").clicked(); cancelled |= ui.button("キャンセル").clicked(); });
             });
             cancelled |= response.is_none();
             if accepted {
@@ -538,7 +542,7 @@ fn show_picker(ui: &mut egui::Ui, store: &mut Store, picker: &mut Option<Picker>
                         if on { *style |= bit; } else { *style &= !bit; }
                     }
                 }
-                ui.horizontal(|ui| { accepted = ui.button("OK").clicked(); cancelled = ui.button("キャンセル").clicked(); });
+                ui.horizontal(|ui| { accepted = ui.button("OK").clicked(); cancelled |= ui.button("キャンセル").clicked(); });
             });
             cancelled |= response.is_none();
             if accepted {
@@ -638,4 +642,61 @@ fn avi_body(ui: &mut egui::Ui, form: &Node, store: &mut Store, assets: &Assets, 
         }
     }
     req
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use egui::{Color32, Event, RawInput};
+
+    fn key_input(key: Key) -> RawInput {
+        RawInput {
+            events: vec![Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE }],
+            ..Default::default()
+        }
+    }
+
+    fn close_for(input: RawInput, mut body: impl FnMut(&mut egui::Ui) -> bool) -> bool {
+        let mut close = false;
+        let mut output = Context::default().run_ui(input, |ui| {
+            close = viewport(ui.ctx(), "test", "test", Vec2::splat(100.0), None, false, Pos2::ZERO, &mut body);
+        });
+        output.textures_delta.clear();
+        close
+    }
+
+    fn color_picker() -> Option<Picker> {
+        Some(Picker::Color { key: "SPBGcolor".into(), value: Color32::BLACK })
+    }
+
+    #[test]
+    fn escape_closes_dialog_viewport() {
+        assert!(close_for(key_input(Key::Escape), |_| false));
+        assert!(!close_for(key_input(Key::Enter), |_| false));
+    }
+
+    #[test]
+    fn escape_cancels_open_picker_without_closing_dialog() {
+        let mut store = Store::default();
+        let mut picker = color_picker();
+        let close = close_for(key_input(Key::Escape), |ui| {
+            show_picker(ui, &mut store, &mut picker);
+            false
+        });
+        assert!(picker.is_none());
+        assert!(!close);
+        assert_eq!(store.color("SPBGcolor"), Store::default().color("SPBGcolor"));
+    }
+
+    #[test]
+    fn other_keys_leave_picker_open() {
+        let mut store = Store::default();
+        let mut picker = color_picker();
+        let close = close_for(key_input(Key::Enter), |ui| {
+            show_picker(ui, &mut store, &mut picker);
+            false
+        });
+        assert!(picker.is_some());
+        assert!(!close);
+    }
 }

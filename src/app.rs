@@ -38,6 +38,7 @@ const IRREGULAR_BUTTONS: [&str; 3] = ["はい(Y)", "中止(A)", "無視(I)"];
 fn irregular_shortcut(key: Key) -> Option<dialogs::IrregularChoice> {
     match key {
         Key::Y => Some(dialogs::IrregularChoice::Generate),
+        Key::N => Some(dialogs::IrregularChoice::Abort),
         Key::A => Some(dialogs::IrregularChoice::Abort),
         Key::I => Some(dialogs::IrregularChoice::Ignore),
         _ => None,
@@ -430,7 +431,7 @@ impl App {
         }
         if choice.is_none() {
             choice = ctx.input_mut(|i| {
-                [Key::Y, Key::A, Key::I].into_iter().find_map(|key| {
+                [Key::Y, Key::N, Key::A, Key::I].into_iter().find_map(|key| {
                     (i.consume_key(Modifiers::ALT, key) || i.consume_key(Modifiers::NONE, key))
                         .then(|| irregular_shortcut(key)).flatten()
                 })
@@ -1135,6 +1136,7 @@ mod shortcut_tests {
     fn irregular_choices_match_original_labels_and_accelerators() {
         assert_eq!(IRREGULAR_BUTTONS, ["はい(Y)", "中止(A)", "無視(I)"]);
         assert_eq!(irregular_shortcut(Key::Y), Some(dialogs::IrregularChoice::Generate));
+        assert_eq!(irregular_shortcut(Key::N), Some(dialogs::IrregularChoice::Abort));
         assert_eq!(irregular_shortcut(Key::A), Some(dialogs::IrregularChoice::Abort));
         assert_eq!(irregular_shortcut(Key::I), Some(dialogs::IrregularChoice::Ignore));
         assert_eq!(irregular_shortcut(Key::Escape), None);
