@@ -2,6 +2,7 @@
 use crate::engine::data::{DataFile, PanelData};
 use crate::engine::mesh;
 use crate::engine::settings::Settings;
+use std::collections::HashSet;
 
 const MAX_GRID_CELLS: usize = 50_000_000;
 
@@ -16,14 +17,13 @@ pub fn has_irregular_grid(df: &DataFile, settings: &Settings) -> bool {
     let (nx, ny) = (xs.len(), ys.len());
     if nx < 2 || ny < 2 { return true; }
     let Some(cells) = nx.checked_mul(ny).filter(|&c| c <= MAX_GRID_CELLS) else { return true; };
-    let mut filled = vec![false; cells];
-    let mut covered = 0;
+    let mut filled = HashSet::with_capacity(pts.len());
     for p in &pts {
         let (Some(x), Some(y)) = (p.x, p.y) else { continue; };
         let k = nearest(&ys, y) * nx + nearest(&xs, x);
-        if !filled[k] { filled[k] = true; covered += 1; }
+        filled.insert(k);
     }
-    covered != cells || pts.len() != cells
+    filled.len() != cells || pts.len() != cells
 }
 
 #[derive(Clone, Debug)]
@@ -505,6 +505,17 @@ mod tests {
 
     fn settings(spline: bool) -> Settings {
         Settings { spline, data_check: true, ..Settings::default() }
+    }
+
+    #[test]
+    fn irregular_precheck_uses_memory_proportional_to_points_for_sparse_large_grids() {
+        let points = (0..7_000).map(|i| crate::engine::data::Point {
+            x: Some(i as f64), y: Some(i as f64), z: Some(1.0), u: None, v: None,
+        }).collect();
+        let df = DataFile { points, ..DataFile::default() };
+        let settings = Settings { data_check: true, ..Settings::default() };
+        // 7,000 x 7,000 potential cells, but only 7,000 input points.
+        assert!(has_irregular_grid(&df, &settings));
     }
 
     fn grid_df(n: usize, f: impl Fn(f64, f64) -> f64) -> DataFile {
