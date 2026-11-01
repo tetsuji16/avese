@@ -57,6 +57,11 @@ impl Gradient {
         self.palette[((t * (n - 1) as f64).round() as usize).min(n - 1)]
     }
 
+    /// Sample the same normalized scale for a horizontal preview or legend.
+    pub fn pixel_color(&self, x: usize, width: usize) -> Rgb {
+        self.color(x as f64 / width.saturating_sub(1).max(1) as f64)
+    }
+
     pub fn palette(&self) -> &[Rgb] {
         &self.palette
     }
