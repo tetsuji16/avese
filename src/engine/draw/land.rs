@@ -268,7 +268,9 @@ fn mesh_surface(v: &View, m: &MeshField, items: &mut Items, progress: &mut impl 
 
 fn panel_surface(v: &View, items: &mut Items, progress: &mut impl FnMut(f32) -> bool) -> bool {
     let Field::Panel(p) = v.ctx.field else { return true };
-    let stride = ((p.rows * p.cols) as f64 / MAX_POLYS as f64).sqrt().ceil().max(1.0) as usize;
+    let cells = p.rows * p.cols;
+    let target = if cells > MAX_POLYS { MAX_POLYS / 5 } else { MAX_POLYS };
+    let stride = (cells as f64 / target as f64).sqrt().ceil().max(1.0) as usize;
     let total = p.rows.div_ceil(stride) * p.cols.div_ceil(stride);
     let mut done = 0usize;
     for r in (0..p.rows).step_by(stride) {
@@ -280,6 +282,24 @@ fn panel_surface(v: &View, items: &mut Items, progress: &mut impl FnMut(f32) -> 
             let q: Vec<((f32, f32), f64)> = [(x, y), (x + e, y), (x + e, y + e), (x, y + e)].iter().map(|&(a, b)| v.pt(a, b, z)).collect();
             let depth = q.iter().map(|q| q.1).sum::<f64>() / 4.0;
             items.push((depth, poly(q.iter().map(|q| q.0).collect(), v.ctx.color(z), !v.ctx.s.surface)));
+            // Draw a riser where the adjacent tile is lower or absent. The
+            // higher tile owns shared walls, so each height transition is emitted once.
+            let faces = [
+                (r > 0, c, r.saturating_sub(stride), [(x,y),(x+e,y)]),
+                (c + stride < p.cols, c + stride, r, [(x+e,y),(x+e,y+e)]),
+                (r + stride < p.rows, c, r + stride, [(x+e,y+e),(x,y+e)]),
+                (c > 0, c.saturating_sub(stride), r, [(x,y+e),(x,y)]),
+            ];
+            for (has_neighbor, nc, nr, edge) in faces {
+                let neighbor = if has_neighbor { p.z.get(nr * p.cols + nc).copied().flatten() } else { None };
+                if neighbor.is_some_and(|nz| nz >= z) { continue; }
+                let low = neighbor.unwrap_or(v.map.zlo).min(z);
+                let (a,b) = (edge[0], edge[1]);
+                let pts = [(a.0,a.1,z),(b.0,b.1,z),(b.0,b.1,low),(a.0,a.1,low)];
+                let pr: Vec<_> = pts.iter().map(|&(xx,yy,zz)| v.pt(xx,yy,zz)).collect();
+                let depth = pr.iter().map(|q| q.1).sum::<f64>() / 4.0;
+                items.push((depth, poly(pr.iter().map(|q| q.0).collect(), v.ctx.color((z+low)*0.5), !v.ctx.s.surface)));
+            }
         }
     }
     true
@@ -533,7 +553,11 @@ mod tests {
         let s = land();
         let p = Field::Panel(PanelData { rows: 2, cols: 3, z: vec![Some(1.0), Some(2.0), None, Some(4.0), Some(5.0), Some(6.0)] });
         let b = build_scene(&p, &s, &[]).unwrap();
-        assert_eq!(count_ops(&b.scene.ops, |o| matches!(o, Op::Polygon { .. })), 5);
+        assert!(count_ops(&b.scene.ops, |o| matches!(o, Op::Polygon { .. })) > 5);
+        let mut wire = s.clone();
+        wire.surface = false;
+        let b = build_scene(&p, &wire, &[]).unwrap();
+        assert!(count_ops(&b.scene.ops, |o| matches!(o, Op::Polygon { .. })) > 5);
         let mut df = DataFile::default();
         for (x, y) in [(0.0, 0.0), (10.0, 0.0), (0.0, 10.0), (10.0, 10.0)] {
             df.points.push(Point { x: Some(x), y: Some(y), z: Some(x + y), u: None, v: None });
