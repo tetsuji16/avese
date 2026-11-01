@@ -57,10 +57,28 @@ pub(crate) fn temp_sibling(path: &Path) -> PathBuf {
     path.with_file_name(name)
 }
 
+/// Replace the destination only after a complete temporary file has been written.
+/// Windows `std::fs::rename` refuses to replace an existing destination, while
+/// MoveFileExW with REPLACE_EXISTING performs the same-volume replacement.
+#[cfg(windows)]
+pub(crate) fn replace_file(tmp: &Path, path: &Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::{MoveFileExW, MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH};
+    let src: Vec<u16> = tmp.as_os_str().encode_wide().chain(Some(0)).collect();
+    let dst: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+    let ok = unsafe { MoveFileExW(src.as_ptr(), dst.as_ptr(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) };
+    if ok == 0 { Err(std::io::Error::last_os_error()) } else { Ok(()) }
+}
+
+#[cfg(not(windows))]
+pub(crate) fn replace_file(tmp: &Path, path: &Path) -> std::io::Result<()> {
+    std::fs::rename(tmp, path)
+}
+
 /// Writes to a temporary sibling and renames it over `path`, so a failure keeps the old file.
 pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let tmp = temp_sibling(path);
-    let r = std::fs::write(&tmp, bytes).and_then(|_| std::fs::rename(&tmp, path));
+    let r = std::fs::write(&tmp, bytes).and_then(|_| replace_file(&tmp, path));
     r.map_err(|e| {
         let _ = std::fs::remove_file(&tmp);
         format!("{}: {e}", path.display())

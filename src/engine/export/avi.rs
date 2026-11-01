@@ -224,7 +224,7 @@ pub fn write_avi_cancellable(
         progress(1.0)?;
         Ok(())
     })();
-    let r = r.and_then(|_| std::fs::rename(&tmp, path).map_err(|e| e.to_string()));
+    let r = r.and_then(|_| super::replace_file(&tmp, path).map_err(|e| e.to_string()));
     if let Err(e) = r {
         let _ = std::fs::remove_file(&tmp);
         return Err(format!("{}: {e}", path.display()));
@@ -258,6 +258,8 @@ mod tests {
     #[test]
     fn chunk_walk_and_pixels() {
         let path = tmp("walk.avi");
+        let _ = std::fs::remove_file(&path);
+        std::fs::write(&path, b"old AVI contents").unwrap();
         let mut prog = Vec::new();
         // width 5 forces row padding; the second frame has another size and is resized
         let colour = |k: usize| [(k * 80) as u8, 10, 200];
@@ -311,6 +313,32 @@ mod tests {
         let pal = movi_palette(&b);
         let px = b[starts[2] + 8] as usize;
         assert_eq!(pal[px], colour(2));
+    }
+
+    #[test]
+    fn replacing_existing_avi_is_atomic_and_failed_write_preserves_old_file() {
+        let path = tmp("replace.avi");
+        let temp = temp_sibling(&path);
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_file(&temp);
+        std::fs::write(&path, b"existing contents").unwrap();
+
+        write_avi(&path, 1, 2, 2, 10.0, |_| Ok(solid(2, 2, |_, _| [12, 34, 56])), |_| {}).unwrap();
+        let replaced = std::fs::read(&path).unwrap();
+        assert_eq!(&replaced[..4], b"RIFF");
+        assert_ne!(&replaced[..], b"existing contents");
+
+        std::fs::write(&path, b"keep me if generation fails").unwrap();
+        let mut calls = 0;
+        let result = write_avi(&path, 2, 2, 2, 10.0, |_| {
+            calls += 1;
+            if calls == 3 { Err("injected frame error".into()) }
+            else { Ok(solid(2, 2, |_, _| [90, 80, 70])) }
+        }, |_| {});
+        assert!(result.is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), b"keep me if generation fails");
+        assert!(!temp.exists());
+        std::fs::remove_file(path).unwrap();
     }
 
     fn movi_palette(b: &[u8]) -> Vec<[u8; 3]> {
