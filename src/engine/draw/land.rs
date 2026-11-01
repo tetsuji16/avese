@@ -547,29 +547,12 @@ fn reduce_mesh(m: &MeshField, progress: &mut impl FnMut(f32) -> bool) -> Option<
     let mut boundary = edge_counts.into_iter().flat_map(|((a,b),n)| if n == 1 { vec![a,b] } else { Vec::new() }).collect::<Vec<_>>();
     boundary.sort_unstable();
     boundary.dedup();
-    let interior_budget = NODE_BUDGET.saturating_sub(boundary.len().min(NODE_BUDGET));
-    let boundary_budget = NODE_BUDGET.saturating_sub(interior_budget);
-    if boundary.len() > boundary_budget {
-        let center = (
-            m.nodes.iter().map(|p| p.0).sum::<f64>() / m.nodes.len() as f64,
-            m.nodes.iter().map(|p| p.1).sum::<f64>() / m.nodes.len() as f64,
-        );
-        boundary.sort_by(|&a,&b| {
-            (m.nodes[a].1-center.1).atan2(m.nodes[a].0-center.0)
-                .total_cmp(&(m.nodes[b].1-center.1).atan2(m.nodes[b].0-center.0))
-        });
-        let step = boundary.len().div_ceil(boundary_budget.max(1));
-        let mut keep = boundary.into_iter().step_by(step).collect::<Vec<_>>();
-        for extreme in [
-            (0..m.nodes.len()).min_by(|&a,&b| m.nodes[a].0.total_cmp(&m.nodes[b].0)),
-            (0..m.nodes.len()).max_by(|&a,&b| m.nodes[a].0.total_cmp(&m.nodes[b].0)),
-            (0..m.nodes.len()).min_by(|&a,&b| m.nodes[a].1.total_cmp(&m.nodes[b].1)),
-            (0..m.nodes.len()).max_by(|&a,&b| m.nodes[a].1.total_cmp(&m.nodes[b].1)),
-        ].into_iter().flatten() { keep.push(extreme); }
-        keep.sort_unstable();
-        keep.dedup();
-        boundary = keep;
+    // Dropping hull vertices cuts away real portions of the surface. When the
+    // boundary alone cannot fit safely, retain the original mesh instead.
+    if boundary.len() > MAX_POLYS / 2 {
+        return Some((m.nodes.clone(), m.z.clone(), m.tris.clone()));
     }
+    let interior_budget = NODE_BUDGET.saturating_sub(boundary.len());
 
     let (x0,x1,y0,y1) = m.nodes.iter().fold((f64::INFINITY,f64::NEG_INFINITY,f64::INFINITY,f64::NEG_INFINITY), |a,p| (a.0.min(p.0),a.1.max(p.0),a.2.min(p.1),a.3.max(p.1)));
     let side = (interior_budget as f64).sqrt().floor() as usize;
@@ -1026,6 +1009,51 @@ mod tests {
         eprintln!("oversized mesh benchmark: {} polygons, draw {:?}, EMF {} bytes in {:?}; below-limit {} polygons, draw {:?}, EMF {} bytes in {:?}",
             poly_count,large_draw_elapsed,large_emf.len(),large_emf_elapsed,
             count_ops(&under_scene.scene.ops,|o|matches!(o,Op::Polygon{..})),under_draw_elapsed,under_emf.len(),under_emf_elapsed);
+    }
+
+    #[test]
+    fn reduction_preserves_large_curved_mesh_boundary() {
+        use crate::engine::data::{DataFile, Point};
+        use std::collections::HashSet;
+        let mut df = DataFile::default();
+        let count = MAX_POLYS / 3 + 1;
+        for i in 0..count {
+            let a = std::f64::consts::TAU * i as f64 / count as f64;
+            df.points.push(Point { x:Some(a.cos()), y:Some(a.sin()), z:Some(1.0), u:None, v:None });
+        }
+        for y in 0..150 { for x in 0..150 {
+            df.points.push(Point { x:Some(-0.6 + x as f64 * 1.2 / 149.0), y:Some(-0.6 + y as f64 * 1.2 / 149.0), z:Some(1.0), u:None, v:None });
+        }}
+        df.mesh_auto = true;
+        let (Field::Mesh(mesh), _) = crate::engine::field::build(&df, &land()).unwrap() else { panic!("expected mesh") };
+        assert!(mesh.tris.len() > MAX_POLYS);
+        let (nodes, _, tris) = reduce_mesh(&mesh, &mut |_| true).unwrap();
+        let retained: HashSet<_> = nodes.iter().map(|p| (p.0.to_bits(), p.1.to_bits())).collect();
+        for &(x,y) in &mesh.nodes[..count] {
+            assert!(retained.contains(&(x.to_bits(), y.to_bits())), "a hull vertex was removed");
+        }
+        assert_eq!(tris.len(), count - 2, "the convex boundary must be fully triangulated without holes");
+    }
+
+    #[test]
+    fn extremely_large_boundary_keeps_original_mesh() {
+        use crate::engine::data::{DataFile, Point};
+        let mut df = DataFile::default();
+        let count = MAX_POLYS / 2 + 1;
+        for i in 0..count {
+            let a = std::f64::consts::TAU * i as f64 / count as f64;
+            df.points.push(Point { x:Some(a.cos()), y:Some(a.sin()), z:Some(1.0), u:None, v:None });
+        }
+        for y in 0..150 { for x in 0..150 {
+            df.points.push(Point { x:Some(-0.6 + x as f64 * 1.2 / 149.0), y:Some(-0.6 + y as f64 * 1.2 / 149.0), z:Some(1.0), u:None, v:None });
+        }}
+        df.mesh_auto = true;
+        let (Field::Mesh(mesh), _) = crate::engine::field::build(&df, &land()).unwrap() else { panic!("expected mesh") };
+        assert!(mesh.tris.len() > MAX_POLYS);
+        let (nodes, values, tris) = reduce_mesh(&mesh, &mut |_| true).unwrap();
+        assert_eq!(nodes, mesh.nodes);
+        assert_eq!(values, mesh.z);
+        assert_eq!(tris, mesh.tris);
     }
 
     #[test]
