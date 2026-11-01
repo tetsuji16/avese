@@ -61,6 +61,8 @@ pub struct Renderer<'a> {
     scope: Id,
     hover: Option<(Id, String)>,
     tabs: Vec<(Vec<i32>, Id)>,
+    /// Controls that can take the focus, in draw order (disabled ones are left out).
+    focusable: Vec<(Vec<i32>, Id)>,
     buttons: Vec<(Id, String)>,
     alt: bool,
     cur_path: Vec<i32>,
@@ -95,7 +97,7 @@ impl<'a> Renderer<'a> {
             }
         }
         let alt = ctx.input(|i| i.modifiers.alt);
-        Renderer { ui, store, events: vec![], popup_open: false, assets, scope, hover: None, tabs: vec![], buttons: vec![], alt, cur_path: vec![], group: vec![] }
+        Renderer { ui, store, events: vec![], popup_open: false, assets, scope, hover: None, tabs: vec![], focusable: vec![], buttons: vec![], alt, cur_path: vec![], group: vec![] }
     }
 
     /// Store the tab order, show tooltips; returns the events.
@@ -200,6 +202,10 @@ impl<'a> Renderer<'a> {
         let p = self.p();
         let en = self.is_enabled(n);
         let id = self.scope.with(&n.name);
+        // A disabled control cannot take the focus, so page focus skips it, as Delphi does.
+        if en && matches!(n.class.as_str(), "TEdit" | "TSpinEdit" | "TCheckBox" | "TRadioButton" | "TComboBox" | "TTrackBar" | "TListBox" | "TButton" | "TSpeedButton") {
+            self.focusable.push((self.cur_path.clone(), id));
+        }
         match n.class.as_str() {
             "TLabel" => {
                 if !n.flag("Transparent", true) {
@@ -1106,7 +1112,7 @@ impl<'a> Renderer<'a> {
         }
         let _ = ctx;
         // active sheet
-        let mark = self.tabs.len();
+        let mark = self.focusable.len();
         if let Some(s) = sheets.get(cur) {
             let org = Pos2::new(r.min.x + 4.0, body_top + 4.0);
             path.push(0);
@@ -1123,7 +1129,7 @@ impl<'a> Renderer<'a> {
         let previous: Option<usize> = ctx.data(|d| d.get_temp(seen));
         if previous != Some(cur) {
             ctx.data_mut(|d| d.insert_temp(seen, cur));
-            if let Some(first) = self.tabs[mark..].iter().min_by(|a, b| a.0.cmp(&b.0)).map(|t| t.1) {
+            if let Some(first) = self.focusable[mark..].iter().min_by(|a, b| a.0.cmp(&b.0)).map(|t| t.1) {
                 ctx.memory_mut(|m| m.request_focus(first));
                 ctx.data_mut(|d| d.insert_temp(first.with("select_all"), true));
             }
@@ -1232,6 +1238,62 @@ mod modal_tests {
         frame(&mut store);
         let scope = frame(&mut store);
         assert_eq!(ctx.memory(|m| m.focused()), Some(scope.with("SEfirst")));
+    }
+
+    #[test]
+    fn page_focus_skips_a_disabled_first_control() {
+        let ctx = egui::Context::default();
+        let mut store = Store::default();
+        let assets = Assets::default();
+        let node = Node::parse(
+            r#"{"class":"TPageControl","name":"TPCoff","props":{"Width":391,"Height":276,"TabHeight":18},"kids":[
+                {"class":"TTabSheet","name":"TSoff","props":{"Caption":"A"},"kids":[
+                    {"class":"TSpinEdit","name":"SEdisabled","props":{"MinValue":0,"MaxValue":10,"TabOrder":0,"Enabled":false},"kids":[]},
+                    {"class":"TSpinEdit","name":"SEenabled","props":{"MinValue":0,"MaxValue":10,"TabOrder":1},"kids":[]}]}]}"#,
+        );
+        let mut scope = Id::NULL;
+        for _ in 0..2 {
+            let mut raw = egui::RawInput::default();
+            raw.screen_rect = Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(400.0, 300.0)));
+            let out = ctx.run_ui(raw, |ui| {
+                scope = ui.scope_id();
+                let org = ui.max_rect().min;
+                let mut r = Renderer::new(ui, &mut store, &assets);
+                let mut path = vec![];
+                r.draw_node(&node, org, &Fnt::form_default(), &mut path);
+                r.finish();
+            });
+            out.drop_without_applying_deltas();
+        }
+        assert_eq!(ctx.memory(|m| m.focused()), Some(scope.with("SEenabled")));
+    }
+
+    /// The real settings form: every one of the 13 tabs must focus something when shown.
+    #[test]
+    fn every_settings_tab_focuses_a_control() {
+        let forms = crate::forms::Forms::load();
+        let ctx = egui::Context::default();
+        let mut store = Store::from_forms(&[&forms.config]);
+        let assets = Assets::default();
+        let pages = forms.config.find("TPCconfig").map(|n| n.kids.iter().filter(|k| k.class == "TTabSheet").count()).unwrap_or(0);
+        assert_eq!(pages, 13);
+        for page in 0..pages {
+            store.set_item_index("TPCconfig", page as i32);
+            let mut focused = None;
+            for _ in 0..2 {
+                let mut raw = egui::RawInput::default();
+                raw.screen_rect = Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(400.0, 300.0)));
+                let out = ctx.run_ui(raw, |ui| {
+                    let org = ui.max_rect().min;
+                    let mut r = Renderer::new(ui, &mut store, &assets);
+                    r.draw_children(&forms.config, org, &Fnt::form_default().with(&forms.config));
+                    r.finish();
+                });
+                out.drop_without_applying_deltas();
+                focused = ctx.memory(|m| m.focused());
+            }
+            assert!(focused.is_some(), "settings page {page} focused nothing");
+        }
     }
 
     #[test]
