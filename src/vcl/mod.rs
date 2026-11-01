@@ -133,6 +133,13 @@ pub enum HAlign {
 }
 
 /// Draw caption text inside `r`; `underline` shows the accelerator underline.
+///
+/// A VCL `Font.Height` is the height of the whole font cell, but egui lays a
+/// font out in a taller row (roughly 1.5x the requested size) with the glyph
+/// ink sitting low inside that row. Using the row height directly made labels
+/// overflow their rectangle (and get covered by the next control) and made
+/// edit boxes look bottom-heavy. Place the galley as if its row were only the
+/// VCL cell height, so the ink lands where GDI would put it.
 pub fn caption(p: &Painter, r: Rect, text: &str, font: FontId, color: Color32, h: HAlign, vcenter: bool, underline: bool) -> Rect {
     let (s, idx, _) = parse_caption(text);
     let galley = p.layout_no_wrap(s.clone(), font.clone(), color);
@@ -142,7 +149,14 @@ pub fn caption(p: &Painter, r: Rect, text: &str, font: FontId, color: Color32, h
         HAlign::Center => r.min.x + ((r.width() - size.x) / 2.0).floor(),
         HAlign::Right => r.max.x - size.x,
     };
-    let y = if vcenter { r.min.y + ((r.height() - size.y) / 2.0).floor() } else { r.min.y };
+    let row = size.y.max(1.0);
+    let cell = font.size.clamp(1.0, row);
+    // Use one reference glyph for the whole font, not the current caption:
+    // otherwise adjacent labels acquire different baselines for each string.
+    let reference = p.layout_no_wrap("H".to_owned(), font.clone(), color);
+    let ink = reference.mesh_bounds;
+    let cell_top = if vcenter { r.center().y - cell / 2.0 } else { r.min.y };
+    let y = cell_top - ink.min.y * (1.0 - cell / row);
     let pos = Pos2::new(x, y);
     p.galley(pos, galley, color);
     if let (true, Some(i)) = (underline, idx) {
@@ -150,13 +164,14 @@ pub fn caption(p: &Painter, r: Rect, text: &str, font: FontId, color: Color32, h
         let one: String = s.chars().skip(i).take(1).collect();
         let x0 = x + p.layout_no_wrap(pre, font.clone(), color).size().x;
         let w = p.layout_no_wrap(one, font, color).size().x;
-        hline(p, x0, x0 + w, y + size.y - 1.0, color);
+        hline(p, x0, x0 + w, y + ink.max.y + 1.0, color);
     }
-    Rect::from_min_size(pos, size)
+    Rect::from_min_size(Pos2::new(x, cell_top), Vec2::new(size.x, cell))
 }
 
 pub fn text_size(p: &Painter, s: &str, font: &FontId) -> Vec2 {
-    p.layout_no_wrap(parse_caption(s).0, font.clone(), BLACK).size()
+    let g = p.layout_no_wrap(parse_caption(s).0, font.clone(), BLACK);
+    Vec2::new(g.size().x, font.size.min(g.size().y))
 }
 
 pub fn arrow(p: &Painter, center: Pos2, dir: char, c: Color32) {
@@ -186,4 +201,35 @@ pub fn arrow(p: &Painter, center: Pos2, dir: char, c: Color32) {
 
 pub fn stroke(c: Color32) -> Stroke {
     Stroke::new(1.0, c)
+}
+
+#[cfg(test)]
+mod text_tests {
+    use super::*;
+
+    #[test]
+    fn adjacent_captions_share_a_baseline_and_fit_their_cells() {
+        let ctx = egui::Context::default();
+        crate::fonts::install(&ctx);
+        ctx.begin_pass(egui::RawInput::default());
+        {
+            let p = ctx.layer_painter(egui::LayerId::background());
+            let font = crate::fonts::font("ＭＳ Ｐゴシック", 16.0);
+            for (x, text) in [(0.0, "U"), (20.0, "θ"), (40.0, "日本語")] {
+                caption(&p, Rect::from_min_size(Pos2::new(x, 20.0), Vec2::new(40.0, 16.0)), text, font.clone(), BLACK, HAlign::Left, false, false);
+            }
+        }
+        let mut output = ctx.end_pass();
+        output.textures_delta.clear();
+        let shapes: Vec<_> = output.shapes.iter().filter_map(|s| match &s.shape {
+            egui::Shape::Text(t) => Some(t),
+            _ => None,
+        }).collect();
+        assert_eq!(shapes.len(), 3);
+        assert!(shapes.iter().all(|t| (t.pos.y - shapes[0].pos.y).abs() < 0.01));
+        for t in shapes {
+            let bounds = t.galley.mesh_bounds.translate(t.pos.to_vec2());
+            assert!(bounds.min.y >= 18.0 && bounds.max.y <= 38.0, "{}: {bounds:?}", t.galley.job.text);
+        }
+    }
 }
