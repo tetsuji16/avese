@@ -23,6 +23,12 @@ const FALLBACKS: &[(&str, u32)] = &[
     ("/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc", 0),
 ];
 
+fn is_japanese_fallback_filename(name: &str) -> bool {
+    let name = name.to_lowercase();
+    ["notosanscjk", "notoserifcjk", "notosansjp", "notoserifjp", "ipaex", "ipag", "ipamp", "ipamincho", "hiragino", "ヒラギノ", "yugoth", "yumin", "msgothic", "msmincho"]
+        .iter().any(|x| name.contains(x))
+}
+
 /// Find Japanese-capable system fonts on distributions that install fonts in
 /// a versioned or user-specific directory. The fixed paths above stay first
 /// so the preferred family remains stable when it is available.
@@ -62,10 +68,8 @@ fn discovered_fallbacks() -> Vec<(String, u32)> {
             if !["ttf", "ttc", "otf"].iter().any(|x| ext.eq_ignore_ascii_case(x)) {
                 continue;
             }
-            let name = path.file_name().and_then(|x| x.to_str()).unwrap_or("").to_lowercase();
-            if ["notosanscjk", "notoserifcjk", "notosansjp", "notoserifjp", "ipaex", "ipag", "ipamp", "ipamincho", "hiragino", "yugoth", "yumin", "msgothic", "msmincho"]
-                .iter().any(|x| name.contains(x))
-            {
+            let name = path.file_name().and_then(|x| x.to_str()).unwrap_or("");
+            if is_japanese_fallback_filename(name) {
                 found.push((path.to_string_lossy().into_owned(), 0));
             }
         }
@@ -156,4 +160,14 @@ pub fn ui() -> FontId {
 /// Menu font, using the same preferred face as other controls.
 pub fn menu() -> FontId {
     FontId::new(12.0, FontFamily::Name("menuui".into()))
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn japanese_system_font_names_include_localized_hiragino() {
+        assert!(super::is_japanese_fallback_filename("ヒラギノ角ゴシック W6.ttc"));
+        assert!(super::is_japanese_fallback_filename("NotoSansCJK-Regular.ttc"));
+        assert!(!super::is_japanese_fallback_filename("DejaVuSans.ttf"));
+    }
 }
