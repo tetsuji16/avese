@@ -195,7 +195,9 @@ impl Layout {
         let m = s.margin as f64;
         let (pw, ph, proj) = if s.land {
             let (wd, hd) = flat_dims(field, s);
-            let p = land::Proj::new(s.eta, s.phi, wd, hd, s.land_height.max(1) as f64);
+            // the original ignores eta in cylindrical coordinates
+            let eta = if use_cylinder(field, s).is_some() { 0 } else { s.eta };
+            let p = land::Proj::new(eta, s.phi, wd, hd, s.land_height.max(1) as f64);
             (p.w.ceil().max(1.0), p.h.ceil().max(1.0), Some(p))
         } else {
             let (a, b) = flat_dims(field, s);

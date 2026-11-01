@@ -1,6 +1,9 @@
 //! Form definitions (DFM-derived JSON, see assets/forms/*.json).
 use serde_json::{Map, Value};
 
+/// Horizontal scale of every dialog over its DFM width, for the wider system UI font.
+pub const DIALOG_WIDEN: f32 = 1.3;
+
 #[derive(Clone)]
 pub struct Node {
     pub class: String,
@@ -60,7 +63,7 @@ impl Node {
             // Keep bitmaps and graphical previews at their original aspect ratio.
             if key == "Width" && matches!(self.class.as_str(), "TImage" | "TPaintBox") { continue; }
             if let Some(value) = self.int_opt(key) {
-                self.props.insert(key.into(), serde_json::json!((value as f64 * 1.3).round() as i32));
+                self.props.insert(key.into(), serde_json::json!((value as f64 * DIALOG_WIDEN as f64).round() as i32));
             }
         }
         for child in &mut self.kids { child.widen(); }

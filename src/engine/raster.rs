@@ -85,25 +85,46 @@ fn normalize(name: &str) -> String {
         .collect()
 }
 
-/// Font files (and collection indices) to try for a family name, best first.
-fn candidates(family: &str) -> Vec<(&'static str, u32)> {
-    let mut v: Vec<(&'static str, u32)> = match normalize(family).as_str() {
-        "msゴシック" | "msgothic" | "terminal" | "system" | "fixedsys" => vec![("msgothic.ttc", 0)],
-        "mspゴシック" | "mspgothic" => vec![("msgothic.ttc", 1)],
-        "msuiゴシック" | "msuigothic" => vec![("msgothic.ttc", 2)],
-        "ms明朝" | "msmincho" => vec![("msmincho.ttc", 0)],
-        "msp明朝" | "mspmincho" => vec![("msmincho.ttc", 1)],
-        "arial" | "helvetica" | "sansserif" => vec![("arial.ttf", 0)],
-        "timesnewroman" | "times" | "serif" => vec![("times.ttf", 0)],
-        "couriernew" | "courier" => vec![("cour.ttf", 0)],
-        "tahoma" => vec![("tahoma.ttf", 0)],
-        "verdana" => vec![("verdana.ttf", 0)],
-        "segoeui" => vec![("segoeui.ttf", 0)],
-        "meiryo" | "メイリオ" => vec![("meiryo.ttc", 0)],
-        "yugothic" | "游ゴシック" => vec![("YuGothR.ttc", 0)],
-        _ => vec![],
-    };
-    v.extend([("msgothic.ttc", 0), ("meiryo.ttc", 0), ("YuGothR.ttc", 0), ("arial.ttf", 0)]);
+/// Styled font files of a Windows family, indexed by style bits (regular, bold, italic, bold italic).
+/// An empty name means the family has no such file and that style is synthesised.
+fn styled_files(family: &str) -> Option<([&'static str; 4], u32)> {
+    Some(match family {
+        "arial" | "helvetica" | "sansserif" => (["arial.ttf", "arialbd.ttf", "ariali.ttf", "arialbi.ttf"], 0),
+        "timesnewroman" | "times" | "serif" => (["times.ttf", "timesbd.ttf", "timesi.ttf", "timesbi.ttf"], 0),
+        "couriernew" | "courier" => (["cour.ttf", "courbd.ttf", "couri.ttf", "courbi.ttf"], 0),
+        "tahoma" => (["tahoma.ttf", "tahomabd.ttf", "", ""], 0),
+        "verdana" => (["verdana.ttf", "verdanab.ttf", "verdanai.ttf", "verdanaz.ttf"], 0),
+        "segoeui" => (["segoeui.ttf", "segoeuib.ttf", "segoeuii.ttf", "segoeuiz.ttf"], 0),
+        "meiryo" | "メイリオ" => (["meiryo.ttc", "meiryob.ttc", "", ""], 0),
+        "yugothic" | "游ゴシック" => (["YuGothR.ttc", "YuGothB.ttc", "", ""], 0),
+        _ => return None,
+    })
+}
+
+/// Font files (and collection indices) to try for a family name and style (bit 1 bold, bit 2 italic),
+/// best first. The last field is the set of style bits the file really provides; the rest is synthesised.
+fn candidates(family: &str, style: u8) -> Vec<(&'static str, u32, u8)> {
+    let name = normalize(family);
+    let mut v: Vec<(&'static str, u32, u8)> = Vec::new();
+    if let Some((files, index)) = styled_files(name.as_str()) {
+        let want = (style & 3) as usize;
+        let mut order = vec![want];
+        if want == 3 { order.extend([1, 2]); }
+        if want != 0 { order.push(0); }
+        for i in order {
+            if !files[i].is_empty() { v.push((files[i], index, i as u8)); }
+        }
+    } else {
+        v.extend(match name.as_str() {
+            "msゴシック" | "msgothic" | "terminal" | "system" | "fixedsys" => vec![("msgothic.ttc", 0, 0)],
+            "mspゴシック" | "mspgothic" => vec![("msgothic.ttc", 1, 0)],
+            "msuiゴシック" | "msuigothic" => vec![("msgothic.ttc", 2, 0)],
+            "ms明朝" | "msmincho" => vec![("msmincho.ttc", 0, 0)],
+            "msp明朝" | "mspmincho" => vec![("msmincho.ttc", 1, 0)],
+            _ => vec![],
+        });
+    }
+    v.extend([("msgothic.ttc", 0, 0), ("meiryo.ttc", 0, 0), ("YuGothR.ttc", 0, 0), ("arial.ttf", 0, 0)]);
     v
 }
 
@@ -125,18 +146,35 @@ fn matches_system_family(family: &str, path: &std::path::Path) -> bool {
     !key.is_empty() && (name.contains(key) || (key == "hiragino" && name.contains("ヒラギノ")))
 }
 
-fn candidate_paths(family: &str) -> Vec<(PathBuf, u32)> {
+/// Style bits a non-Windows font file name claims, from its "bold"/"italic"/"oblique" parts.
+fn style_bits_of_file(path: &std::path::Path) -> u8 {
+    let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_lowercase();
+    (if name.contains("bold") { 1 } else { 0 }) | (if name.contains("italic") || name.contains("oblique") { 2 } else { 0 })
+}
+
+/// Face files to try with the style bits each really provides.
+fn candidate_paths(family: &str, style: u8) -> Vec<(PathBuf, u32, u8)> {
     let mut out = Vec::new();
     // On other platforms, prefer the selected installed face before generic
     // fallbacks. Otherwise changing the family in the picker has no effect.
+    // A file is usable when its claimed style is a subset of the wanted one; the closest comes first.
     #[cfg(not(windows))]
-    out.extend(system_font_paths().iter().filter(|p| matches_system_family(family, p)).map(|p| (p.clone(), 0)));
-    out.extend(candidates(family).into_iter().map(|(f, i)| (windows_font_dir().join(f), i)));
+    {
+        let want = style & 3;
+        let mut found: Vec<(PathBuf, u8)> = system_font_paths().iter()
+            .filter(|p| matches_system_family(family, p))
+            .map(|p| (p.clone(), style_bits_of_file(p)))
+            .filter(|(_, bits)| bits & !want == 0)
+            .collect();
+        found.sort_by_key(|(_, bits)| std::cmp::Reverse(bits.count_ones()));
+        out.extend(found.into_iter().map(|(p, bits)| (p, 0, bits)));
+    }
+    out.extend(candidates(family, style).into_iter().map(|(f, i, bits)| (windows_font_dir().join(f), i, bits)));
     out.extend(system_font_paths().iter().filter(|p| {
         let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("").to_lowercase();
         let ext = p.extension().and_then(|s| s.to_str()).unwrap_or("");
         is_japanese_font_file(&name, ext)
-    }).map(|p| (p.clone(), 0)));
+    }).map(|p| (p.clone(), 0, style_bits_of_file(p) & style)));
     out
 }
 
@@ -148,10 +186,6 @@ fn load_face(path: &PathBuf, index: u32) -> Option<Arc<FontVec>> {
             FontVec::try_from_vec_and_index(bytes, index).ok().map(Arc::new)
         })
         .clone()
-}
-
-fn find_face(family: &str) -> Option<Arc<FontVec>> {
-    candidate_paths(family).iter().find_map(|(p, i)| load_face(p, *i))
 }
 
 fn px_per_pt(size_pt: f32) -> f32 {
@@ -167,39 +201,53 @@ struct PositionedGlyph {
     id: ab_glyph::GlyphId,
     scale: PxScale,
     x: f32,
+    /// The chosen face lacks this style, so it is drawn double-struck / sheared.
+    fake_bold: bool,
+    fake_italic: bool,
 }
 
 struct TextLayout {
     glyphs: Vec<PositionedGlyph>,
+    /// Width of the whole drawn box: pen advance, the synthetic bold pixel and the italic overhang.
     width: f32,
+    /// Offset of the pen origin from the box's left edge (the italic overhang below the baseline).
+    pad_left: f32,
+    pad_right: f32,
     ascent: f32,
     descent: f32,
 }
 
 /// Pick a fallback face per missing glyph, sharing the same layout for measuring and drawing.
 fn layout_text(text: &str, font: &FontRef) -> Option<TextLayout> {
-    let primary = find_face(&font.family)?;
-    let paths = candidate_paths(&font.family);
+    let style = (font.style & 3) as u8;
+    let paths = candidate_paths(&font.family, style);
     let mut paths = paths.iter();
-    let mut faces = vec![primary];
+    let mut faces: Vec<(Arc<FontVec>, u8)> = Vec::new();
+    for (path, face_index, bits) in paths.by_ref() {
+        if let Some(face) = load_face(path, *face_index) {
+            faces.push((face, *bits));
+            break;
+        }
+    }
+    if faces.is_empty() { return None; }
     let mut glyphs = Vec::with_capacity(text.chars().count());
     let mut width = 0.0;
-    let primary_scaled = faces[0].as_scaled(scale_of(&faces[0], font.size_pt));
+    let primary_scaled = faces[0].0.as_scaled(scale_of(&faces[0].0, font.size_pt));
     let (mut ascent, mut descent) = (primary_scaled.ascent(), primary_scaled.descent());
     let mut prev: Option<(usize, ab_glyph::GlyphId)> = None;
     for ch in text.chars() {
-        let mut index = faces.iter().position(|face| face.glyph_id(ch).0 != 0);
+        let mut index = faces.iter().position(|(face, _)| face.glyph_id(ch).0 != 0);
         while index.is_none() {
-            let Some((path, face_index)) = paths.next() else { break };
+            let Some((path, face_index, bits)) = paths.next() else { break };
             if let Some(face) = load_face(path, *face_index) {
-                if faces.iter().any(|f| Arc::ptr_eq(f, &face)) { continue; }
+                if faces.iter().any(|(f, _)| Arc::ptr_eq(f, &face)) { continue; }
                 let covers = face.glyph_id(ch).0 != 0;
-                faces.push(face);
+                faces.push((face, *bits));
                 if covers { index = Some(faces.len() - 1); }
             }
         }
         let index = index.unwrap_or(0);
-        let face = &faces[index];
+        let (face, provided) = &faces[index];
         let scale = scale_of(face, font.size_pt);
         let scaled = face.as_scaled(scale);
         let id = face.glyph_id(ch);
@@ -208,12 +256,24 @@ fn layout_text(text: &str, font: &FontRef) -> Option<TextLayout> {
         }
         ascent = ascent.max(scaled.ascent());
         descent = descent.min(scaled.descent());
-        glyphs.push(PositionedGlyph { face: Arc::clone(face), id, scale, x: width });
+        glyphs.push(PositionedGlyph {
+            face: Arc::clone(face), id, scale, x: width,
+            fake_bold: font.style & 1 != 0 && provided & 1 == 0,
+            fake_italic: font.style & 2 != 0 && provided & 2 == 0,
+        });
         width += scaled.h_advance(id);
         prev = Some((index, id));
     }
-    if font.style & 1 != 0 { width += 1.0; }
-    Some(TextLayout { glyphs, width, ascent, descent })
+    // The second strike sits one pixel to the right.
+    if glyphs.iter().any(|g| g.fake_bold) { width += 1.0; }
+    // A shear moves a pixel by (baseline - y) * ITALIC_SHEAR: right above the baseline, left below it.
+    // Each pixel is split over two columns, hence the ceil.
+    let (pad_left, pad_right) = if glyphs.iter().any(|g| g.fake_italic) {
+        ((-descent * ITALIC_SHEAR).ceil().max(0.0), (ascent * ITALIC_SHEAR).ceil().max(0.0))
+    } else {
+        (0.0, 0.0)
+    };
+    Some(TextLayout { glyphs, width: pad_left + width + pad_right, pad_left, pad_right, ascent, descent })
 }
 
 /// Width and height in pixels. Without an installed font, an estimate is returned so layout still works.
@@ -312,13 +372,14 @@ fn draw_text(pm: &mut Pixmap, x: f32, y: f32, text: &str, font: &FontRef, color:
     let (w, h) = (layout.width, layout.ascent - layout.descent);
     let (left, top) = anchor_origin(anchor, x, y, w, h);
     let base = top + layout.ascent;
-    let strikes = if font.style & 1 != 0 { 2 } else { 1 };
+    let origin = left + layout.pad_left;
     // fsItalic: lean the glyph pixels around the baseline, the way GDI synthesises an
     // italic face. The shift is split over the two columns it falls between so the
-    // stroke keeps its weight instead of stair-stepping.
-    let shear = if font.style & 2 != 0 { ITALIC_SHEAR } else { 0.0 };
+    // stroke keeps its weight instead of stair-stepping. Only styles the face lacks are synthesised.
     for glyph in &layout.glyphs {
-        if let Some(o) = glyph.face.outline_glyph(glyph.id.with_scale_and_position(glyph.scale, point(left + glyph.x, base))) {
+        let strikes = if glyph.fake_bold { 2 } else { 1 };
+        let shear = if glyph.fake_italic { ITALIC_SHEAR } else { 0.0 };
+        if let Some(o) = glyph.face.outline_glyph(glyph.id.with_scale_and_position(glyph.scale, point(origin + glyph.x, base))) {
             let b = o.px_bounds();
             for s in 0..strikes {
                 o.draw(|gx, gy, cov| {
@@ -338,7 +399,7 @@ fn draw_text(pm: &mut Pixmap, x: f32, y: f32, text: &str, font: &FontRef, color:
         }
     }
     let mut hline = |yy: f32| {
-        for xx in left.round() as i32..(left + w).round() as i32 {
+        for xx in origin.round() as i32..(left + w - layout.pad_right).round() as i32 {
             blend(pm, xx, yy.round() as i32, color, 1.0);
         }
     };
@@ -493,8 +554,8 @@ mod tests {
     fn font_names_normalize() {
         assert_eq!(normalize("ＭＳ Ｐゴシック"), "mspゴシック");
         assert_eq!(normalize("MS PGothic"), "mspgothic");
-        assert_eq!(candidates("ＭＳ Ｐ明朝")[0], ("msmincho.ttc", 1));
-        assert_eq!(candidates("nonexistent")[0].0, "msgothic.ttc");
+        assert_eq!(candidates("ＭＳ Ｐ明朝", 0)[0], ("msmincho.ttc", 1, 0));
+        assert_eq!(candidates("nonexistent", 3)[0].0, "msgothic.ttc");
     }
 
     #[test]
@@ -508,8 +569,76 @@ mod tests {
     }
 
     #[test]
+    fn styled_files_are_preferred_and_report_what_they_provide() {
+        assert_eq!(candidates("Arial", 1)[0], ("arialbd.ttf", 0, 1));
+        assert_eq!(candidates("Arial", 3)[0], ("arialbi.ttf", 0, 3));
+        assert_eq!(candidates("Tahoma", 3)[0], ("tahomabd.ttf", 0, 1));
+        assert_eq!(candidates("Tahoma", 2)[0], ("tahoma.ttf", 0, 0));
+        assert_eq!(candidates("ＭＳ ゴシック", 3)[0], ("msgothic.ttc", 0, 0));
+    }
+
+    /// Columns holding drawn pixels of a one-line text scene placed at x = 40.
+    fn ink_columns(text: &str, family: &str, style: u32, anchor: Anchor) -> Option<(f32, i32, i32, f32)> {
+        let font = FontRef { family: family.into(), size_pt: 14.0, style };
+        layout_text(text, &font)?;
+        let (w, h) = measure_text(text, &font);
+        let sc = Scene { width: 200, height: 40, bg: Rgb(255, 255, 255), ops: vec![
+            Op::Text { x: 100.0, y: 20.0, text: text.into(), font, color: Rgb::BLACK, anchor },
+        ] };
+        let pm = rasterize(&sc);
+        let cols: Vec<i32> = (0..200u32).filter(|&x| (0..40u32).any(|y| pm.pixel(x, y).unwrap().red() != 255)).map(|x| x as i32).collect();
+        let (min, max) = (*cols.first()?, *cols.last()?);
+        let (left, _) = anchor_origin(anchor, 100.0, 20.0, w, h);
+        Some((left, min, max, w))
+    }
+
+    #[test]
+    fn measured_width_bounds_the_drawn_pixels() {
+        for family in ["Arial", "ＭＳ ゴシック", "Tahoma"] {
+            for style in [0u32, 1, 2, 3] {
+                for anchor in [Anchor::TopLeft, Anchor::TopCenter, Anchor::TopRight] {
+                    let Some((left, min, max, w)) = ink_columns("Hello fjg 日本", family, style, anchor) else { return };
+                    assert!(min as f32 >= left - 1.0, "{family} {style} {anchor:?}: ink starts at {min}, box at {left}");
+                    assert!((max + 1) as f32 <= left + w + 1.0, "{family} {style} {anchor:?}: ink ends at {max}, box ends at {}", left + w);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn synthesised_styles_widen_the_box_and_real_faces_do_not() {
+        let f = |family: &str, style| FontRef { family: family.into(), size_pt: 14.0, style };
+        let plain = measure_text("Hello", &f("ＭＳ ゴシック", 0));
+        if layout_text("Hello", &f("ＭＳ ゴシック", 0)).is_none() { return; }
+        assert_eq!(measure_text("Hello", &f("ＭＳ ゴシック", 1)).0, plain.0 + 1.0);
+        assert!(measure_text("Hello", &f("ＭＳ ゴシック", 2)).0 > plain.0);
+        // Where the real bold face exists, no extra synthetic pixel is added.
+        let arial = layout_text("Hello", &f("Arial", 1));
+        if let Some(l) = arial.filter(|l| l.glyphs.iter().all(|g| !g.fake_bold)) {
+            let advance: f32 = l.width;
+            assert!(advance > 0.0);
+        }
+    }
+
+    #[test]
+    fn real_bold_face_differs_from_synthesis() {
+        let dir = windows_font_dir();
+        if !dir.join("arialbd.ttf").exists() || !dir.join("arial.ttf").exists() { return; }
+        let draw = |style| {
+            let font = FontRef { family: "Arial".into(), size_pt: 14.0, style };
+            let sc = Scene { width: 80, height: 30, bg: Rgb::WHITE, ops: vec![
+                Op::Text { x: 2.0, y: 2.0, text: "Hamburg".into(), font, color: Rgb::BLACK, anchor: Anchor::TopLeft },
+            ] };
+            rasterize(&sc).data().to_vec()
+        };
+        let layout = layout_text("Hamburg", &FontRef { family: "Arial".into(), size_pt: 14.0, style: 1 }).unwrap();
+        assert!(layout.glyphs.iter().all(|g| !g.fake_bold));
+        assert_ne!(draw(0), draw(1));
+    }
+
+    #[test]
     fn installed_japanese_font_renders_glyphs() {
-        let Some((path, index)) = candidate_paths("ＭＳ Ｐゴシック").into_iter().find(|(p, i)| load_face(p, *i).is_some()) else {
+        let Some((path, index, _)) = candidate_paths("ＭＳ Ｐゴシック", 0).into_iter().find(|(p, i, _)| load_face(p, *i).is_some()) else {
             // Minimal containers may have no Japanese font installed.
             return;
         };

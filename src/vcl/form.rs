@@ -923,12 +923,11 @@ impl<'a> Renderer<'a> {
         self.set_hover(n, id, &resp);
     }
 
-    /// Wire-frame box preview (PBangle). The geometry is anchored on the original at eta=30, phi=30
-    /// (59, 34, 49, 39) and follows an orthographic rotation for every other angle.
+    /// Wire-frame box preview (PBangle), an oblique projection like the bird's-eye view.
     fn angle_box(&mut self, r: Rect) {
         let p = self.p().with_clip_rect(r);
-        let (w, ydx, ydy, h) = angle_box_metrics(self.store.position("SEeta"), self.store.position("SEphi"));
-        let org = (r.min.x as i32 + 3, r.min.y as i32 + 97); // top-left pixel of the 2x2 axis corner
+        let (w, ydx, ydy, h, shift) = angle_box_metrics(self.store.position("SEeta"), self.store.position("SEphi"));
+        let org = (r.min.x as i32 + 3 + shift, r.min.y as i32 + 97); // top-left pixel of the 2x2 axis corner
         let dot = |x: i32, y: i32| fill(&p, Rect::from_min_size(Pos2::new(x as f32, y as f32), Vec2::splat(1.0)), BLACK);
         let line = |a: (i32, i32), b: (i32, i32), thick: bool| {
             let (mut x, mut y) = a;
@@ -990,13 +989,19 @@ impl<'a> Renderer<'a> {
         let (zy, zx) = (fy - 18, ox + 1);
         blit(zx, zy, &[(0, -1, 1), (1, -2, 1), (2, -2, 2), (3, -3, 3), (4, -3, 0), (4, 2, 3)]);
         blit(xend - 9, oy + 1, &[(-3, 5, 6), (-2, 5, 8), (1, 6, 9), (2, 5, 8), (3, 5, 6)]);
-        blit(bx, by, &[(-8, 4, 6), (-7, 2, 6), (-6, 2, 6), (-5, 3, 6), (-4, 3, 6), (-3, 2, 3), (-3, 5, 6), (-2, 0, 3), (-1, 0, 2), (0, 0, 1)]);
+        // the depth axis leans the other way for a negative eta: mirror its head and label
+        let head = [(-8, 4, 6), (-7, 2, 6), (-6, 2, 6), (-5, 3, 6), (-4, 3, 6), (-3, 2, 3), (-3, 5, 6), (-2, 0, 3), (-1, 0, 2), (0, 0, 1)];
+        if ydx < 0 {
+            blit(bx, by, &head.map(|(dy, a, b)| (dy, -b, -a)));
+        } else {
+            blit(bx, by, &head);
+        }
         // letter labels: white box with a pixel glyph
         let white = |x: i32, y: i32, ww: i32, hh: i32| fill(&p, Rect::from_min_size(Pos2::new(x as f32, y as f32), Vec2::new(ww as f32, hh as f32)), Color32::WHITE);
         let (lzx, lzy) = (zx - 3, zy - 13);
         white(lzx, lzy, 6, 11);
         blit(lzx, lzy, &[(1, 0, 4), (2, 4, 4), (3, 3, 3), (4, 2, 2), (5, 1, 1), (6, 0, 0), (7, 0, 4)]);
-        let (lyx, lyy) = (bx + 3, by - 21);
+        let (lyx, lyy) = (if ydx < 0 { bx - 9 } else { bx + 3 }, by - 21);
         white(lyx, lyy, 7, 11);
         blit(lyx, lyy, &[(1, 0, 0), (1, 6, 6), (2, 1, 1), (2, 5, 5), (3, 2, 2), (3, 4, 4), (4, 3, 3), (5, 3, 3), (6, 3, 3), (7, 3, 3)]);
         let (lxx, lxy) = (xend + 2, oy - 3);
@@ -1036,19 +1041,9 @@ impl<'a> Renderer<'a> {
         let th = n.int_opt("TabHeight").unwrap_or(18) as f32;
         let sheets: Vec<&Node> = n.kids.iter().filter(|k| k.class == "TTabSheet").collect();
         let font = f.id();
-        // rows: greedy fill. Natural width is fitted to the original screenshots (comctl32 tab metrics):
-        // 2 kanji -> 52px, 3 kanji -> 58px, so wrapping and row membership match.
-        let nat: Vec<f32> = sheets.iter().map(|s| 40.0 + 0.5 * text_size(&p, s.str("Caption"), &font).x).collect();
-        let mut rows: Vec<Vec<usize>> = vec![vec![]];
-        let mut used = 0.0;
-        for (i, w) in nat.iter().enumerate() {
-            if used + w > r.width() && !rows.last().unwrap().is_empty() {
-                rows.push(vec![]);
-                used = 0.0;
-            }
-            rows.last_mut().unwrap().push(i);
-            used += w;
-        }
+        let nat: Vec<f32> = sheets.iter().map(|s| tab_width(s.str("Caption"), text_size(&p, s.str("Caption"), &font).x)).collect();
+        // dialogs are widened but the tabs are not, so wrap against the original width
+        let rows = tab_rows(&nat, r.width() / crate::forms::DIALOG_WIDEN);
         let mut cur = self.store.item_index(&n.name).clamp(0, sheets.len() as i32 - 1) as usize;
         // the row of the selected tab moves to the bottom
         let sel_row = rows.iter().position(|rw| rw.contains(&cur)).unwrap_or(0);
@@ -1125,10 +1120,12 @@ impl<'a> Renderer<'a> {
         }
         // The original puts the focus on the page's first tab stop when the dialog opens and
         // when another tab is shown, with the text of an edit fully selected.
+        // A gap in the pass count means the dialog was closed and is open again.
         let seen = self.scope.with((n.name.as_str(), "page_shown"));
-        let previous: Option<usize> = ctx.data(|d| d.get_temp(seen));
-        if previous != Some(cur) {
-            ctx.data_mut(|d| d.insert_temp(seen, cur));
+        let pass = ctx.cumulative_pass_nr();
+        let previous: Option<(usize, u64)> = ctx.data(|d| d.get_temp(seen));
+        ctx.data_mut(|d| d.insert_temp(seen, (cur, pass)));
+        if previous.is_none_or(|(page, last)| page != cur || last + 1 < pass) {
             if let Some(first) = self.focusable[mark..].iter().min_by(|a, b| a.0.cmp(&b.0)).map(|t| t.1) {
                 ctx.memory_mut(|m| m.request_focus(first));
                 ctx.data_mut(|d| d.insert_temp(first.with("select_all"), true));
@@ -1137,23 +1134,45 @@ impl<'a> Renderer<'a> {
     }
 }
 
-/// Box size for the PBangle preview: (front width, back offset x, back offset y, height).
+/// Tab width in the original dialog, measured from its screenshots (comctl32 pads and justifies
+/// them per row). Anything else falls back to the same padding over the measured text.
+fn tab_width(caption: &str, text: f32) -> f32 {
+    match caption {
+        "俯瞰図" => 63.0, "分布図" => 64.0, "ベクトル" => 69.0, "等高線" | "座標系" => 63.0, "グリッド" => 64.0,
+        "凡例" => 52.0, "ラベル" => 56.0, "入出力" => 59.0, "表示" => 53.0, "フォント" => 61.0, "特殊" => 53.0, "暫定" => 52.0,
+        _ => 40.0 + 0.5 * text,
+    }
+}
+
+/// Greedy fill of tabs into rows of at most `limit` pixels.
+fn tab_rows(widths: &[f32], limit: f32) -> Vec<Vec<usize>> {
+    let mut rows: Vec<Vec<usize>> = vec![vec![]];
+    let mut used = 0.0;
+    for (i, w) in widths.iter().enumerate() {
+        if used + w > limit && !rows.last().unwrap().is_empty() {
+            rows.push(vec![]);
+            used = 0.0;
+        }
+        rows.last_mut().unwrap().push(i);
+        used += w;
+    }
+    rows
+}
+
+/// Box of the PBangle preview: (front width, back offset x, back offset y, height, shift of the
+/// origin to the right).
 ///
-/// The original could only be measured at eta=30, phi=30, which gives (59, 34, 49, 39).
-/// Every other angle uses the same orthographic rotation as the bird's-eye view
-/// (`engine::draw::land::Proj`), normalized so that the measured angle is reproduced exactly:
-/// the horizontal edge keeps its length times cos(eta), the depth edge foreshortens by
-/// cos(eta) * cos(phi), and the vertical edge by cos(phi). Both shrink to nothing in a top view
-/// (phi=85) and are largest in a side view (phi=0).
-fn angle_box_metrics(eta: i32, phi: i32) -> (i32, i32, i32, i32) {
-    let e = (eta.clamp(-45, 45) as f32).to_radians();
-    let p = (phi.clamp(0, 85) as f32).to_radians();
-    let (a, b) = (30f32.to_radians(), 30f32.to_radians());
-    let w = 59.0 * e.cos() / a.cos();
-    let dx = 68.0 * e.sin();
-    let dy = 49.0 * e.cos() * p.cos() / (a.cos() * b.cos());
-    let h = 39.0 * p.cos() / b.cos();
-    (w.round() as i32, dx.round() as i32, dy.round().max(0.0) as i32, h.round().max(0.0) as i32)
+/// Measured from the original: the front face never changes; eta only shears the back face
+/// sideways, by about 58 tan(eta), and phi only moves it up, by about 57 cos(phi). A negative eta
+/// leans the box to the left, and the origin moves right to make room. The original draws within
+/// one pixel of these numbers.
+fn angle_box_metrics(eta: i32, phi: i32) -> (i32, i32, i32, i32, i32) {
+    let e = eta.clamp(-45, 45);
+    let tan = (e.unsigned_abs() as f64).to_radians().tan();
+    let over = (58.0 * tan - 1e-9).ceil().max(0.0) as i32;
+    let (dx, shift) = if e < 0 { (-(over - 2).max(0), (67.0 * tan + 1e-9) as i32) } else { (over, 0) };
+    let dy = (57.0 * (phi.clamp(0, 85) as f64).to_radians().cos()) as i32;
+    (59, dx, dy, 39, shift)
 }
 
 fn find_flag(n: &Node, flag: &str) -> Option<String> {
@@ -1168,31 +1187,34 @@ mod modal_tests {
     use super::*;
 
     #[test]
-    fn angle_box_reproduces_the_measured_default_and_follows_the_view() {
-        // measured from the original at the default 30/30
-        assert_eq!(angle_box_metrics(30, 30), (59, 34, 49, 39));
-        // eta=0: no depth offset, the widest front face
-        assert_eq!(angle_box_metrics(0, 30), (68, 0, 57, 39));
-        // the depth edge and the height both shrink as the view tilts towards the top
-        let depth: Vec<i32> = (0..=85).step_by(5).map(|p| angle_box_metrics(30, p).2).collect();
-        let height: Vec<i32> = (0..=85).step_by(5).map(|p| angle_box_metrics(30, p).3).collect();
-        assert!(depth.windows(2).all(|w| w[0] >= w[1]), "depth edge must not grow with phi: {depth:?}");
-        assert!(height.windows(2).all(|w| w[0] >= w[1]), "height must not grow with phi: {height:?}");
-        assert_eq!(*depth.last().unwrap(), 5, "top view keeps a thin depth edge");
-        assert_eq!(*height.last().unwrap(), 4, "top view flattens the box");
-        // the side view keeps the box tall and deep
-        assert_eq!(angle_box_metrics(0, 0).3, 45);
-        assert!(angle_box_metrics(0, 0).2 > 49);
-        // every legal angle gives a drawable box
-        for eta in -45..=45 {
-            for phi in 0..=85 {
-                let (w, dx, dy, h) = angle_box_metrics(eta, phi);
-                assert!(w > 0 && dy >= 0 && h >= 0, "eta={eta} phi={phi}");
-                assert!(dx.abs() <= 49, "eta={eta} phi={phi} dx={dx}");
-            }
+    fn angle_box_follows_the_measured_oblique_projection() {
+        // eta shears sideways whatever phi is; the front face stays the same size
+        for (eta, dx) in [(0, 0), (1, 2), (10, 11), (20, 22), (30, 34), (40, 49), (45, 58)] {
+            assert_eq!(angle_box_metrics(eta, 30), (59, dx, 49, 39, 0), "eta={eta}");
+            assert_eq!(angle_box_metrics(eta, 80).1, dx, "eta={eta}");
         }
-        // out of range values are clamped, not wrapped
+        // phi raises the back face, independently of eta; the original differs by 1 at 60 and 70
+        for (phi, dy) in [(0, 57), (10, 56), (20, 53), (30, 49), (40, 43), (50, 36), (75, 14), (85, 4)] {
+            assert_eq!(angle_box_metrics(30, phi).2, dy, "phi={phi}");
+            assert_eq!(angle_box_metrics(-30, phi).2, dy, "phi={phi}");
+        }
+        // a negative eta leans left and moves the origin to the right
+        for (eta, dx, shift) in [(-1, 0, 1), (-20, -20, 24), (-45, -56, 67)] {
+            let m = angle_box_metrics(eta, 30);
+            assert_eq!((m.1, m.4), (dx, shift), "eta={eta}");
+        }
+        // out of range values are clamped, as in the original
+        assert_eq!(angle_box_metrics(60, 10), angle_box_metrics(45, 10));
         assert_eq!(angle_box_metrics(-90, 120), angle_box_metrics(-45, 85));
+    }
+
+    #[test]
+    fn settings_tabs_wrap_into_the_original_two_rows() {
+        let forms = crate::forms::Forms::load();
+        let pc = forms.config.find("TPCconfig").unwrap();
+        let nat: Vec<f32> = pc.kids.iter().filter(|k| k.class == "TTabSheet").map(|s| tab_width(s.str("Caption"), 1000.0)).collect();
+        let rows = tab_rows(&nat, pc.int("Width") as f32 / crate::forms::DIALOG_WIDEN);
+        assert_eq!(rows.iter().map(Vec::len).collect::<Vec<_>>(), [6, 7]);
     }
 
     #[test]
@@ -1235,6 +1257,14 @@ mod modal_tests {
         assert_eq!(ctx.memory(|m| m.focused()), Some(scope.with("SEother")));
         // and back again
         store.set_item_index("TPCtest", 0);
+        frame(&mut store);
+        let scope = frame(&mut store);
+        assert_eq!(ctx.memory(|m| m.focused()), Some(scope.with("SEfirst")));
+        // focus moves away, the dialog closes for a while and opens again on the same page
+        ctx.memory_mut(|m| m.surrender_focus(scope.with("SEfirst")));
+        for _ in 0..3 {
+            ctx.run_ui(egui::RawInput::default(), |_| {}).drop_without_applying_deltas();
+        }
         frame(&mut store);
         let scope = frame(&mut store);
         assert_eq!(ctx.memory(|m| m.focused()), Some(scope.with("SEfirst")));

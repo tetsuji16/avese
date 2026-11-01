@@ -135,16 +135,7 @@ pub fn grid(ctx: &Ctx, frame: &Frame, bounds: (u32, u32), ops: &mut Vec<Op>) {
         let span = c.th_max - c.th_min;
         let ang = |th: f64| (th - c.th_min) / span * TAU;
         let tts: Vec<f64> = tt.into_iter().filter(|&t| span.abs() > 0.0 && (t - c.th_max).abs() > span.abs() * 1e-9).collect();
-        if mesh {
-            for &r in rt.iter().filter(|&&r| r > c.r_min) {
-                let rr = ((r - c.r_min) * k) as f32;
-                ops.push(Op::Ellipse { cx, cy, rx: rr, ry: rr, fill: None, stroke: Some(col) });
-            }
-            for &t in &tts {
-                let a = ang(t);
-                line(ops, (cx, cy), (cx + radius * a.cos() as f32, cy - radius * a.sin() as f32), col, lw);
-            }
-        }
+        // the original draws no mesh lines in cylindrical coordinates
         if s.grid_box {
             ops.push(Op::Ellipse { cx, cy, rx: radius, ry: radius, fill: None, stroke: Some(col) });
         }
@@ -206,6 +197,8 @@ pub fn grid(ctx: &Ctx, frame: &Frame, bounds: (u32, u32), ops: &mut Vec<Op>) {
     }
 }
 
+const CYL_AXIS_OVERSHOOT: f32 = 30.0;
+
 /// Filled arrow head with its tip at `to`.
 pub(crate) fn arrow_head(ops: &mut Vec<Op>, from: (f32, f32), to: (f32, f32), size: f32, color: Rgb) {
     let (dx, dy) = (to.0 - from.0, to.1 - from.1);
@@ -226,13 +219,18 @@ pub fn axes(ctx: &Ctx, frame: &Frame, bounds: (u32, u32), ops: &mut Vec<Op>) {
     }
     let (col, lw, head) = (s.fg, s.axis_line_width.max(1) as f32, s.axis_head_size as f32);
     // (start, end) of each axis in pixels, end = positive direction
-    let (x_axis, y_axis) = if frame.cyl.is_some() {
+    if frame.cyl.is_some() {
+        // a single r axis that leaves the circle towards the image edge, as in the original
         let (cx, cy) = frame.centre();
-        let r = frame.w / 2.0;
-        let (cx, cy, r) = (cx as f32, cy as f32, r as f32);
-        let (xs, ys) = if s.axis_cross { (cx - r, cy + r) } else { (cx, cy) };
-        (((xs, cy), (cx + r, cy)), ((cx, ys), (cx, cy - r)))
-    } else {
+        let (a, b) = ((cx as f32, cy as f32), ((cx + frame.w / 2.0) as f32 + CYL_AXIS_OVERSHOOT, cy as f32));
+        line(ops, a, if head > 0.0 { (b.0 - head.min(b.0 - a.0) * 0.8, b.1) } else { b }, col, lw);
+        arrow_head(ops, a, b, head, col);
+        if s.axis_title {
+            push_text(ops, bounds, b.0 + 4.0, b.1, &s.title_x, s.axis_title_font(), col, Anchor::MiddleLeft);
+        }
+        return;
+    }
+    let (x_axis, y_axis) = {
         if !(frame.x0 <= 0.0 && 0.0 <= frame.x1 && frame.y0 <= 0.0 && 0.0 <= frame.y1) {
             return;
         }
@@ -362,7 +360,7 @@ mod tests {
     }
 
     #[test]
-    fn cylindrical_grid_has_circles_and_spokes() {
+    fn cylindrical_grid_draws_only_the_outer_circle() {
         let f = grid(9, 5, |x, y| Some(x + y));
         let mut s = settings();
         s.cylindrical = true;
@@ -371,8 +369,7 @@ mod tests {
         s.memory_x = 4;
         s.memory_y = 4;
         let b = build_scene(&f, &s, &[]).unwrap();
-        assert!(count_ops(&b.scene.ops, |o| matches!(o, Op::Ellipse { .. })) >= 2);
-        assert!(count_ops(&b.scene.ops, |o| matches!(o, Op::Polyline { .. })) >= 4);
+        assert_eq!(count_ops(&b.scene.ops, |o| matches!(o, Op::Ellipse { .. })), 1);
     }
 
     #[test]
