@@ -98,27 +98,26 @@ pub fn install(ctx: &egui::Context) {
         (MINCHO, "C:\\Windows\\Fonts\\msmincho.ttc", 0),
     ];
     for (name, path, idx) in ms {
-        let mut chain: Vec<String> = Vec::new();
+        let mut preview = Vec::new();
         if let Some(b) = read(path) {
             let key = format!("{name}-face");
             defs.font_data.insert(key.clone(), Arc::new(FontData::from_blob(b, idx)));
-            chain.push(key);
+            preview.push(key);
         }
-        if let Some(f) = &fallback {
-            chain.push(f.clone());
-        }
-        chain.extend(base.iter().cloned());
+        if let Some(f) = &fallback { preview.push(f.clone()); }
+        preview.extend(base.iter().cloned());
+        defs.families.insert(FontFamily::Name(format!("{name}-preview").into()), preview.clone());
+        let mut chain = fallback.iter().cloned().collect::<Vec<_>>();
+        chain.extend(preview);
         defs.families.insert(FontFamily::Name(name.into()), chain);
     }
     // system menu font (Yu Gothic UI), used by the main menu and popups
     {
         let mut chain: Vec<String> = Vec::new();
+        if let Some(f) = &fallback { chain.push(f.clone()); }
         if let Some(b) = read("C:\\Windows\\Fonts\\YuGothR.ttc") {
             defs.font_data.insert("menu-face".into(), Arc::new(FontData::from_blob(b, 1)));
             chain.push("menu-face".into());
-        }
-        if let Some(f) = &fallback {
-            chain.push(f.clone());
         }
         chain.extend(base.iter().cloned());
         defs.families.insert(FontFamily::Name("menuui".into()), chain);
@@ -144,12 +143,17 @@ pub fn font(name: &str, px: f32) -> FontId {
     FontId::new(px, FontFamily::Name(family_for(name).into()))
 }
 
-/// Default UI font (MS PGothic 12).
+/// Preserve the selected legacy face in the font preview.
+pub fn preview_font(name: &str, px: f32) -> FontId {
+    FontId::new(px, FontFamily::Name(format!("{}-preview", family_for(name)).into()))
+}
+
+/// Default UI font, using a system Japanese sans face when available.
 pub fn ui() -> FontId {
     font("ＭＳ Ｐゴシック", 12.0)
 }
 
-/// System menu font (Yu Gothic UI 12px when installed).
+/// Menu font, using the same preferred face as other controls.
 pub fn menu() -> FontId {
     FontId::new(12.0, FontFamily::Name("menuui".into()))
 }

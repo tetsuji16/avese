@@ -225,7 +225,7 @@ impl<'a> Renderer<'a> {
                     let pt: f32 = parts.get(2).and_then(|v| v.trim().parse().ok()).unwrap_or(12.0);
                     let face = parts.get(1).copied().unwrap_or("ＭＳ ゴシック");
                     let face = if face == "terminal" { "ＭＳ ゴシック" } else { face };
-                    let fid = crate::fonts::font(face, (pt * 4.0 / 3.0).round().max(10.0));
+                    let fid = crate::fonts::preview_font(face, (pt * 4.0 / 3.0).round().max(10.0));
                     caption(&p, rr, n.str("Caption"), fid, BLACK, h, vc, false);
                 } else {
                     caption(&p, rr, n.str("Caption"), f.id(), col(f.color), h, vc, false);
@@ -742,7 +742,7 @@ impl<'a> Renderer<'a> {
             let c = if s { HILITE } else { BLACK };
             if n.name == "LBfont" {
                 // owner-drawn: every cell uses the list's own font (-19 MS PMincho), left aligned, black column rules
-                let (s1, s2) = (inner.min.x + 100.0, inner.min.x + 250.0);
+                let (s1, s2) = (inner.min.x + 130.0, inner.min.x + 325.0);
                 let parts: Vec<&str> = it.split("\t").collect();
                 for (k, x) in [inner.min.x + 2.0, s1 + 3.0, s2 + 4.0].into_iter().enumerate() {
                     let cr = Rect::from_min_max(Pos2::new(x, y), Pos2::new(inner.max.x, y + ih));
