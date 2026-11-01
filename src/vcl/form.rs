@@ -454,6 +454,7 @@ impl<'a> Renderer<'a> {
 
     fn edit(&mut self, n: &Node, r: Rect, id: Id, f: &Fnt, en: bool, _spin: bool) {
         let p = self.p();
+        let ctx = self.ui.ctx().clone();
         let ro = self.store.readonly(&n.name);
         let borderless = n.ident("BorderStyle") == "bsNone";
         let bg = if ro { n.color("Color").map(col).unwrap_or(FACE) } else { HILITE };
@@ -480,6 +481,17 @@ impl<'a> Renderer<'a> {
             .interactive(en && !ro);
         let resp = self.ui.put(inner, te);
         self.tabs.push((self.cur_path.clone(), id));
+        // a page switch focuses the first tab stop and selects the whole text, as the original does
+        let sel_key = id.with("select_all");
+        if resp.has_focus() && ctx.data(|d| d.get_temp::<bool>(sel_key)).unwrap_or(false) {
+            ctx.data_mut(|d| d.remove_temp::<bool>(sel_key));
+            if let Some(mut st) = egui::TextEdit::load_state(&ctx, id) {
+                let len = s.chars().count();
+                let range = egui::text::CCursorRange::two(egui::text::CCursor::new(0), egui::text::CCursor::new(len));
+                st.cursor.set_char_range(Some(range));
+                st.store(&ctx, id);
+            }
+        }
         if ro {
             // read-only: draw text ourselves (egui disables focus for non-interactive edits)
         }
@@ -1098,6 +1110,7 @@ impl<'a> Renderer<'a> {
         }
         let _ = ctx;
         // active sheet
+        let mark = self.tabs.len();
         if let Some(s) = sheets.get(cur) {
             let org = Pos2::new(r.min.x + 4.0, body_top + 4.0);
             path.push(0);
@@ -1107,6 +1120,17 @@ impl<'a> Renderer<'a> {
             }
             self.group = old;
             path.pop();
+        }
+        // The original puts the focus on the page's first tab stop when the dialog opens and
+        // when another tab is shown, with the text of an edit fully selected.
+        let seen = self.scope.with((n.name.as_str(), "page_shown"));
+        let previous: Option<usize> = ctx.data(|d| d.get_temp(seen));
+        if previous != Some(cur) {
+            ctx.data_mut(|d| d.insert_temp(seen, cur));
+            if let Some(first) = self.tabs[mark..].iter().min_by(|a, b| a.0.cmp(&b.0)).map(|t| t.1) {
+                ctx.memory_mut(|m| m.request_focus(first));
+                ctx.data_mut(|d| d.insert_temp(first.with("select_all"), true));
+            }
         }
     }
 }
@@ -1167,6 +1191,51 @@ mod modal_tests {
         }
         // out of range values are clamped, not wrapped
         assert_eq!(angle_box_metrics(-90, 120), angle_box_metrics(-45, 85));
+    }
+
+    #[test]
+    fn page_switch_focuses_the_first_tab_stop_of_the_shown_page() {
+        let ctx = egui::Context::default();
+        let mut store = Store::default();
+        let assets = Assets::default();
+        // SEsecond is drawn first but has the higher TabOrder, so it must not take the focus.
+        let node = Node::parse(
+            r#"{"class":"TPageControl","name":"TPCtest","props":{"Width":391,"Height":276,"TabHeight":18},"kids":[
+                {"class":"TTabSheet","name":"TSfirst","props":{"Caption":"A"},"kids":[
+                    {"class":"TSpinEdit","name":"SEsecond","props":{"MinValue":0,"MaxValue":10,"TabOrder":1},"kids":[]},
+                    {"class":"TSpinEdit","name":"SEfirst","props":{"MinValue":0,"MaxValue":10,"TabOrder":0},"kids":[]}]},
+                {"class":"TTabSheet","name":"TSother","props":{"Caption":"B"},"kids":[
+                    {"class":"TSpinEdit","name":"SEother","props":{"MinValue":0,"MaxValue":10,"TabOrder":0},"kids":[]}]}]}"#,
+        );
+        let frame = |store: &mut Store| -> Id {
+            let mut raw = egui::RawInput::default();
+            raw.screen_rect = Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(400.0, 300.0)));
+            let mut scope = Id::NULL;
+            let out = ctx.run_ui(raw, |ui| {
+                scope = ui.scope_id();
+                let org = ui.max_rect().min;
+                let mut r = Renderer::new(ui, store, &assets);
+                let mut path = vec![];
+                r.draw_node(&node, org, &Fnt::form_default(), &mut path);
+                r.finish();
+            });
+            out.drop_without_applying_deltas();
+            scope
+        };
+        // opening the dialog: the focus lands on the lowest TabOrder of the first page
+        frame(&mut store);
+        let scope = frame(&mut store);
+        assert_eq!(ctx.memory(|m| m.focused()), Some(scope.with("SEfirst")));
+        // another tab shows the focus on its own first control
+        store.set_item_index("TPCtest", 1);
+        frame(&mut store);
+        let scope = frame(&mut store);
+        assert_eq!(ctx.memory(|m| m.focused()), Some(scope.with("SEother")));
+        // and back again
+        store.set_item_index("TPCtest", 0);
+        frame(&mut store);
+        let scope = frame(&mut store);
+        assert_eq!(ctx.memory(|m| m.focused()), Some(scope.with("SEfirst")));
     }
 
     #[test]
