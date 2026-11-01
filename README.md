@@ -51,7 +51,7 @@ python -I tools/export_forms.py
 [MIT License](LICENSE) です。
 
 - 原作の資産は MIT の対象外です。原作の exe、ヘルプ、サンプル、取り出した画像は、このリポジトリに含めないでください（`.gitignore` 済み）。
-- MS ゴシック等のフォントは同梱しません。実行時に `C:\Windows\Fonts` から読み込みます。
+- MS ゴシック等のフォントは同梱しません。実行時にインストール済みフォントを検索し、日本語フォントを利用します。
 - 一般操作アイコンは [Phosphor Icons](https://phosphoricons.com/)（MIT）を使っています。
 - 等高線の追跡は [contour](https://crates.io/crates/contour)、Turbo の色は [colorous](https://crates.io/crates/colorous) を使っています。
 

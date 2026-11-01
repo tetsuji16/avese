@@ -23,12 +23,66 @@ const FALLBACKS: &[(&str, u32)] = &[
     ("/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc", 0),
 ];
 
+/// Find Japanese-capable system fonts on distributions that install fonts in
+/// a versioned or user-specific directory. The fixed paths above stay first
+/// so the preferred family remains stable when it is available.
+fn discovered_fallbacks() -> Vec<(String, u32)> {
+    let mut dirs: Vec<String> = Vec::new();
+    #[cfg(target_os = "linux")]
+    dirs.extend([
+        "/usr/share/fonts".to_owned(),
+        "/usr/local/share/fonts".to_owned(),
+        std::env::var("HOME").map(|h| format!("{h}/.local/share/fonts")).unwrap_or_default(),
+        std::env::var("HOME").map(|h| format!("{h}/.fonts")).unwrap_or_default(),
+    ]);
+    #[cfg(target_os = "macos")]
+    dirs.extend([
+        "/System/Library/Fonts".to_owned(),
+        "/Library/Fonts".to_owned(),
+        std::env::var("HOME").map(|h| format!("{h}/Library/Fonts")).unwrap_or_default(),
+    ]);
+
+    let mut found = Vec::new();
+    let mut pending = dirs.into_iter().filter(|p| !p.is_empty()).map(std::path::PathBuf::from).collect::<Vec<_>>();
+    let mut visited = 0usize;
+    while let Some(dir) = pending.pop() {
+        visited += 1;
+        if visited > 20_000 { break; }
+        let Ok(entries) = std::fs::read_dir(dir) else { continue };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Ok(kind) = entry.file_type() else { continue };
+            // Do not follow symlinks: font directories can contain cycles.
+            if kind.is_dir() {
+                pending.push(path);
+                continue;
+            }
+            if !kind.is_file() { continue; }
+            let ext = path.extension().and_then(|x| x.to_str()).unwrap_or("");
+            if !["ttf", "ttc", "otf"].iter().any(|x| ext.eq_ignore_ascii_case(x)) {
+                continue;
+            }
+            let name = path.file_name().and_then(|x| x.to_str()).unwrap_or("").to_lowercase();
+            if ["notosanscjk", "notoserifcjk", "notosansjp", "notoserifjp", "ipaex", "ipag", "ipamp", "ipamincho", "hiragino", "yugoth", "yumin", "msgothic", "msmincho"]
+                .iter().any(|x| name.contains(x))
+            {
+                found.push((path.to_string_lossy().into_owned(), 0));
+            }
+        }
+    }
+    found.sort();
+    found.dedup();
+    found
+}
+
 pub fn install(ctx: &egui::Context) {
     let mut defs = FontDefinitions::default();
     let base: Vec<String> = defs.families.get(&FontFamily::Proportional).cloned().unwrap_or_default();
 
     let mut fallback: Option<String> = None;
-    for (i, (p, idx)) in FALLBACKS.iter().enumerate() {
+    let mut paths = FALLBACKS.iter().map(|(p, i)| ((*p).to_owned(), *i)).collect::<Vec<_>>();
+    paths.extend(discovered_fallbacks());
+    for (i, (p, idx)) in paths.iter().enumerate() {
         if let Some(b) = read(p) {
             let key = format!("fallback{i}");
             defs.font_data.insert(key.clone(), Arc::new(FontData::from_blob(b, *idx)));
