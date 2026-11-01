@@ -199,9 +199,12 @@ impl Dialogs {
             let mut form = sh.forms.config.clone();
             patch_font_sample(&mut form, sh.store);
             let mut picker = self.picker.take();
+            let nested_input_open = self.input;
             let this: &Dialogs = self;
             let close = viewport(ctx, "config", T_CONFIG, size, None, false, sh.center, |ui| {
-                let (a, inp) = config_body(ui, &form, &sh.forms.config, sh.store, sh.assets, this, &mut picker);
+                let blocked = nested_input_open || picker.is_some();
+                let (a, inp) = ui.add_enabled_ui(!blocked, |ui| config_body(ui, &form, &sh.forms.config, sh.store, sh.assets, this, &mut picker)).inner;
+                show_picker(ui, sh.store, &mut picker);
                 if a.is_some() {
                     act = a;
                 }
@@ -378,12 +381,14 @@ fn patch_font_sample(form: &mut Node, store: &Store) {
 
 /// Returns (Some(ok) when closed by a button, wants the label input dialog).
 fn config_body(ui: &mut egui::Ui, form: &Node, orig: &Node, store: &mut Store, assets: &Assets, d: &Dialogs, picker: &mut Option<Picker>) -> (Option<bool>, bool) {
+    let enabled = ui.is_enabled();
     let origin = ui.max_rect().min;
     apply_interlocks(store);
     let mut r = Renderer::new(ui, store, assets);
     r.draw_children(form, origin, &Fnt::form_default().with(orig));
-    let key = r.key_button(orig);
+    let key = if enabled { r.key_button(orig) } else { None };
     let mut evs = r.finish();
+    if !enabled { evs.clear(); }
     if let Some(k) = key {
         evs.push(Ev::Click(k));
     }
@@ -481,7 +486,6 @@ fn config_body(ui: &mut egui::Ui, form: &Node, orig: &Node, store: &mut Store, a
             },
         }
     }
-    show_picker(ui, store, picker);
     apply_interlocks(store);
     (result, input)
 }

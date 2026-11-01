@@ -49,8 +49,7 @@ fn discover_system_fonts() -> Vec<PathBuf> {
             } else if kind.is_file() {
                 let path = entry.path();
                 let ext = path.extension().and_then(|x| x.to_str()).unwrap_or("");
-                let name = path.file_name().and_then(|x| x.to_str()).unwrap_or("").to_lowercase();
-                if is_japanese_font_file(&name, ext) {
+                if ["ttf", "ttc", "otf"].iter().any(|x| ext.eq_ignore_ascii_case(x)) {
                     dirs.push(path);
                 }
             }
@@ -63,7 +62,7 @@ fn discover_system_fonts() -> Vec<PathBuf> {
 
 fn is_japanese_font_file(name: &str, ext: &str) -> bool {
     ["ttf", "ttc", "otf"].iter().any(|x| ext.eq_ignore_ascii_case(x))
-        && ["notosanscjk", "notoserifcjk", "notosansjp", "notoserifjp", "ipaex", "ipag", "ipamp", "ipamincho", "hiragino", "yugoth", "yumin", "msgothic", "msmincho"]
+        && ["notosanscjk", "notoserifcjk", "notosansjp", "notoserifjp", "ipaex", "ipag", "ipamp", "ipamincho", "hiragino", "ヒラギノ", "yugoth", "yumin", "msgothic", "msmincho"]
             .iter().any(|x| name.contains(x))
 }
 
@@ -105,11 +104,36 @@ fn candidates(family: &str) -> Vec<(&'static str, u32)> {
     v
 }
 
+fn matches_system_family(family: &str, path: &std::path::Path) -> bool {
+    let name: String = path.file_stem().and_then(|s| s.to_str()).unwrap_or("")
+        .chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).collect();
+    let family = normalize(family);
+    let family: String = family.chars().filter(|c| c.is_alphanumeric()).collect();
+    let key = match family.as_str() {
+        "ipaexゴシック" | "ipaexgothic" => "ipaexg",
+        "ipaex明朝" | "ipaexmincho" => "ipaexm",
+        "游ゴシック" | "yugothic" => "yugoth",
+        "游明朝" | "yumincho" => "yumin",
+        "hiraginosans" => "hiragino",
+        "notosanscjkjp" => "notosanscjk",
+        "notoserifcjkjp" => "notoserifcjk",
+        _ => family.as_str(),
+    };
+    !key.is_empty() && (name.contains(key) || (key == "hiragino" && name.contains("ヒラギノ")))
+}
+
 fn candidate_paths(family: &str) -> Vec<(PathBuf, u32)> {
-    let mut out = candidates(family).into_iter().map(|(f, i)| (windows_font_dir().join(f), i)).collect::<Vec<_>>();
-    for path in system_font_paths() {
-        out.push((path.clone(), 0));
-    }
+    let mut out = Vec::new();
+    // On other platforms, prefer the selected installed face before generic
+    // fallbacks. Otherwise changing the family in the picker has no effect.
+    #[cfg(not(windows))]
+    out.extend(system_font_paths().iter().filter(|p| matches_system_family(family, p)).map(|p| (p.clone(), 0)));
+    out.extend(candidates(family).into_iter().map(|(f, i)| (windows_font_dir().join(f), i)));
+    out.extend(system_font_paths().iter().filter(|p| {
+        let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("").to_lowercase();
+        let ext = p.extension().and_then(|s| s.to_str()).unwrap_or("");
+        is_japanese_font_file(&name, ext)
+    }).map(|p| (p.clone(), 0)));
     out
 }
 
@@ -404,6 +428,15 @@ mod tests {
         let pm = rasterize(&scene(vec![Op::Ellipse { cx: 10.0, cy: 10.0, rx: 5.0, ry: 5.0, fill: Some(Rgb(9, 9, 9)), stroke: None }]));
         assert_eq!(px(&pm, 10, 10), (9, 9, 9, 255));
         assert_eq!(px(&pm, 1, 1), (10, 20, 30, 255));
+    }
+
+    #[test]
+    fn installed_font_family_matches_filenames() {
+        use std::path::Path;
+        assert!(matches_system_family("Noto Sans CJK JP", Path::new("NotoSansCJK-Regular.ttc")));
+        assert!(matches_system_family("IPAexゴシック", Path::new("ipaexg.ttf")));
+        assert!(matches_system_family("Arial", Path::new("Arial-Bold.ttf")));
+        assert!(!matches_system_family("Arial", Path::new("NotoSansCJK-Regular.ttc")));
     }
 
     #[test]
