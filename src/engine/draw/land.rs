@@ -121,7 +121,12 @@ impl View<'_> {
 }
 
 pub(crate) fn draw(ctx: &Ctx, lay: &Layout, ops: &mut Vec<Op>) {
-    let (Some(proj), Some((zlo, zhi)), Some((x0, x1, y0, y1))) = (lay.proj, ctx.zr, ctx.field.extent()) else { return };
+    let _ = draw_with_progress(ctx, lay, ops, |_| true);
+}
+
+pub(crate) fn draw_with_progress(ctx: &Ctx, lay: &Layout, ops: &mut Vec<Op>, mut progress: impl FnMut(f32) -> bool) -> bool {
+    if !progress(0.0) { return false; }
+    let (Some(proj), Some((zlo, zhi)), Some((x0, x1, y0, y1))) = (lay.proj, ctx.zr, ctx.field.extent()) else { return true };
     let proj = proj.placed(lay.px, lay.py);
     let s = ctx.s;
     let cyl = use_cylinder(ctx.field, s).map(|c| (c, proj.wd / (2.0 * (c.r_max - c.r_min).abs().max(1e-300))));
@@ -142,17 +147,19 @@ pub(crate) fn draw(ctx: &Ctx, lay: &Layout, ops: &mut Vec<Op>) {
     if s.grid {
         floor_grid(&v, ops);
     }
+    if !progress(0.08) { return false; }
     let mut items: Items = Vec::new();
     let is_panel = matches!(ctx.field, Field::Panel(_));
     if s.scatter && !is_panel {
-        scatter(&v, &mut items);
+        if !scatter(&v, &mut items, &mut progress) { return false; }
     } else {
         match ctx.field {
-            Field::Grid(g) => grid_surface(&v, g, &mut items),
-            Field::Mesh(m) => mesh_surface(&v, m, &mut items),
-            Field::Panel(_) => panel_surface(&v, &mut items),
+            Field::Grid(g) => if !grid_surface(&v, g, &mut items, &mut progress) { return false; },
+            Field::Mesh(m) => if !mesh_surface(&v, m, &mut items, &mut progress) { return false; },
+            Field::Panel(_) => if !panel_surface(&v, &mut items, &mut progress) { return false; },
         }
     }
+    if !progress(0.82) { return false; }
     items.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
     ops.extend(items.into_iter().map(|i| i.1));
     if s.axis {
@@ -160,29 +167,35 @@ pub(crate) fn draw(ctx: &Ctx, lay: &Layout, ops: &mut Vec<Op>) {
     }
     if s.point {
         let total = nodes(ctx.field).count();
-        for n in nodes(ctx.field).step_by(total.div_ceil(50_000).max(1)) {
+        let stride = total.div_ceil(50_000).max(1);
+        for (i, n) in nodes(ctx.field).step_by(stride).enumerate() {
+            if i % 256 == 0 && !progress(0.82 + 0.17 * i as f32 / (total.div_ceil(stride).max(1) as f32)) { return false; }
             if let Some(z) = n.z {
                 ops.push(dot_op(0, v.pt(n.x, n.y, z).0.0, v.pt(n.x, n.y, z).0.1, 3.0, s.fg));
             }
         }
     }
+    progress(1.0)
 }
 
-fn scatter(v: &View, items: &mut Items) {
+fn scatter(v: &View, items: &mut Items, progress: &mut impl FnMut(f32) -> bool) -> bool {
     let s = v.ctx.s;
     let total = nodes(v.ctx.field).count();
-    for n in nodes(v.ctx.field).step_by(total.div_ceil(MAX_POLYS * 2).max(1)) {
+    let stride = total.div_ceil(MAX_POLYS * 2).max(1);
+    for (i, n) in nodes(v.ctx.field).step_by(stride).enumerate() {
+        if i % 256 == 0 && !progress(0.08 + 0.72 * i as f32 / total.div_ceil(stride).max(1) as f32) { return false; }
         let Some(z) = n.z else { continue };
         let ((px, py), d) = v.pt(n.x, n.y, z);
         items.push((d, dot_op(s.scatter_mode, px, py, s.dot_size.max(1) as f32, v.ctx.color(z))));
     }
+    true
 }
 
 fn poly(pts: Vec<(f32, f32)>, c: Rgb, wire: bool) -> Op {
     if wire { Op::Polygon { pts, fill: None, stroke: Some(c) } } else { Op::Polygon { pts, fill: Some(c), stroke: Some(c) } }
 }
 
-fn grid_surface(v: &View, g: &GridField, items: &mut Items) {
+fn grid_surface(v: &View, g: &GridField, items: &mut Items, progress: &mut impl FnMut(f32) -> bool) -> bool {
     let s = v.ctx.s;
     let (nx, ny) = (g.xs.len(), g.ys.len());
     let full = (nx - 1) * (ny - 1);
@@ -196,8 +209,12 @@ fn grid_surface(v: &View, g: &GridField, items: &mut Items) {
     };
     let (is, js) = (idx(nx), idx(ny));
     let k = if stride == 1 { ((MAX_POLYS as f64 / full as f64).sqrt().floor() as usize).clamp(1, 4) } else { 1 };
+    let total = js.len().saturating_sub(1) * is.len().saturating_sub(1);
+    let mut done = 0usize;
     for jw in js.windows(2) {
         for iw in is.windows(2) {
+            done += 1;
+            if done % 128 == 0 && !progress(0.08 + 0.72 * done as f32 / total.max(1) as f32) { return false; }
             let (ia, ib, ja, jb) = (iw[0], iw[1], jw[0], jw[1]);
             let (Some(z00), Some(z10), Some(z01), Some(z11)) = (g.at(ia, ja), g.at(ib, ja), g.at(ia, jb), g.at(ib, jb)) else { continue };
             if !s.surface {
@@ -234,23 +251,30 @@ fn grid_surface(v: &View, g: &GridField, items: &mut Items) {
             }
         }
     }
+    true
 }
 
-fn mesh_surface(v: &View, m: &MeshField, items: &mut Items) {
+fn mesh_surface(v: &View, m: &MeshField, items: &mut Items, progress: &mut impl FnMut(f32) -> bool) -> bool {
     let stride = m.tris.len().div_ceil(MAX_POLYS).max(1);
-    for t in m.tris.iter().step_by(stride) {
+    for (i, t) in m.tris.iter().step_by(stride).enumerate() {
+        if i % 256 == 0 && !progress(0.08 + 0.72 * i as f32 / m.tris.len().div_ceil(stride).max(1) as f32) { return false; }
         let (Some(a), Some(b), Some(c)) = (m.z[t[0]], m.z[t[1]], m.z[t[2]]) else { continue };
         let p: Vec<((f32, f32), f64)> = [(t[0], a), (t[1], b), (t[2], c)].iter().map(|&(k, z)| v.pt(m.nodes[k].0, m.nodes[k].1, z)).collect();
         let depth = p.iter().map(|q| q.1).sum::<f64>() / 3.0;
         items.push((depth, poly(p.iter().map(|q| q.0).collect(), v.ctx.color((a + b + c) / 3.0), !v.ctx.s.surface)));
     }
+    true
 }
 
-fn panel_surface(v: &View, items: &mut Items) {
-    let Field::Panel(p) = v.ctx.field else { return };
+fn panel_surface(v: &View, items: &mut Items, progress: &mut impl FnMut(f32) -> bool) -> bool {
+    let Field::Panel(p) = v.ctx.field else { return true };
     let stride = ((p.rows * p.cols) as f64 / MAX_POLYS as f64).sqrt().ceil().max(1.0) as usize;
+    let total = p.rows.div_ceil(stride) * p.cols.div_ceil(stride);
+    let mut done = 0usize;
     for r in (0..p.rows).step_by(stride) {
         for c in (0..p.cols).step_by(stride) {
+            done += 1;
+            if done % 128 == 0 && !progress(0.08 + 0.72 * done as f32 / total.max(1) as f32) { return false; }
             let Some(z) = p.z[r * p.cols + c] else { continue };
             let (x, y, e) = (c as f64, r as f64, stride as f64);
             let q: Vec<((f32, f32), f64)> = [(x, y), (x + e, y), (x + e, y + e), (x, y + e)].iter().map(|&(a, b)| v.pt(a, b, z)).collect();
@@ -258,6 +282,7 @@ fn panel_surface(v: &View, items: &mut Items) {
             items.push((depth, poly(q.iter().map(|q| q.0).collect(), v.ctx.color(z), !v.ctx.s.surface)));
         }
     }
+    true
 }
 
 /// Floor grid, bounding box and scale of the bird's-eye view.
@@ -421,6 +446,22 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn dense_land_surface_checks_cancellation_during_cell_generation() {
+        let f = grid(100, 100, |x, y| Some(x + y));
+        let s = land();
+        let ctx = Ctx::new(&f, &s);
+        let lay = Layout::new(&f, &s).unwrap();
+        let mut ops = Vec::new();
+        let mut checks = 0;
+        let completed = super::draw_with_progress(&ctx, &lay, &mut ops, |p| {
+            checks += 1;
+            !(p > 0.2)
+        });
+        assert!(!completed);
+        assert!(checks > 3, "cancellation should happen inside the surface loop");
     }
 
     #[test]
