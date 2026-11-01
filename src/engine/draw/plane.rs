@@ -87,9 +87,10 @@ pub fn image_with_progress(ctx: &Ctx, frame: &Frame, ops: &mut Vec<Op>, mut prog
                     let frame = *frame;
                     workers.push(scope.spawn(move || {
                         for (row_index, row) in chunk.chunks_mut(w * 4).enumerate() {
-                            if row_index % 8 == 0 && cancelled.load(Ordering::Relaxed) { break; }
+                            if cancelled.load(Ordering::Relaxed) { break; }
                             let j = chunk_index * rows_per + row_index;
                             for i in 0..w {
+                                if i % 4096 == 0 && cancelled.load(Ordering::Relaxed) { return; }
                                 let p = frame.from_px_raw(frame.ox + i as f64 + 0.5, frame.oy + j as f64 + 0.5);
                                 if let Some(z) = p.and_then(|(x, y)| ctx.field.sample(x, y)) {
                                     let c = ctx.color(z);
@@ -101,13 +102,15 @@ pub fn image_with_progress(ctx: &Ctx, frame: &Frame, ops: &mut Vec<Op>, mut prog
                     }));
                 }
                 let mut reported = 0usize;
+                let mut last_check = std::time::Instant::now();
                 loop {
                     let now = completed.load(Ordering::Relaxed);
                     // A panicked worker cannot finish its rows; leave the loop so
                     // thread::scope can propagate the panic to the job handler.
                     if now >= h || cancelled.load(Ordering::Relaxed) || workers.iter().all(|w| w.is_finished()) { break; }
-                    if now.saturating_sub(reported) >= 8 {
+                    if now.saturating_sub(reported) >= 8 || last_check.elapsed() >= std::time::Duration::from_millis(10) {
                         reported = now;
+                        last_check = std::time::Instant::now();
                         if !progress(now as f32 / h.max(1) as f32) {
                             cancelled.store(true, Ordering::Relaxed);
                             break;

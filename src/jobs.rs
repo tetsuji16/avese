@@ -340,6 +340,44 @@ mod tests {
     }
 
     #[test]
+    fn batch_cancellation_during_render_preserves_existing_outputs() {
+        let dir = std::env::temp_dir().join(format!("avese-batch-cancel-{}-{:?}", std::process::id(), std::thread::current().id()));
+        std::fs::create_dir(&dir).unwrap();
+        let input = dir.join("input.txt");
+        std::fs::write(&input, b"0 0 0\n1 0 1\n0 1 1\n1 1 2\n").unwrap();
+        let mut store = Settings::default_store();
+        store.set_position("SEsize", 4000);
+        store.set_checked("CBgraph", true);
+        store.set_checked("CBland", false);
+        let ctx = egui::Context::default();
+        for avi in [false, true] {
+            let target = dir.join(if avi { "output.avi" } else { "output.bmp" });
+            std::fs::write(&target, b"existing output").unwrap();
+            let kind = if avi { BatchKind::Avi { path: target.clone(), fps: 10.0, size: None } } else { BatchKind::Bmp(vec![target.clone()]) };
+            let handle = batch_job(&ctx, vec![input.to_string_lossy().into_owned()], store.clone(), kind);
+            let deadline = Instant::now() + std::time::Duration::from_secs(30);
+            while handle.sh.task() <= 0.9001 {
+                assert!(Instant::now() < deadline, "render did not start");
+                assert!(handle.poll().is_none(), "batch ended before render cancellation");
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            handle.sh.cancel();
+            let deadline = Instant::now() + std::time::Duration::from_secs(10);
+            let result = loop {
+                if let Some(result) = handle.poll() { break result; }
+                assert!(Instant::now() < deadline, "cancelled batch did not finish");
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            };
+            assert_eq!(result.unwrap_err(), CANCELLED);
+            assert_eq!(std::fs::read(&target).unwrap(), b"existing output");
+            std::fs::remove_file(target).unwrap();
+        }
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1, "temporary output was left behind");
+        std::fs::remove_file(input).unwrap();
+        std::fs::remove_dir(dir).unwrap();
+    }
+
+    #[test]
     fn status_cells() {
         let hit = ProbeHit { x: 1.23456789, y: 0.0, z: Some(1234.5678) };
         assert_eq!(probe_cells(Some(hit), false), ["X = 1.2346", "Y = 0", "Z = 1234.6"]);
