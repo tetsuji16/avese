@@ -355,12 +355,13 @@ mod tests {
     }
 
     fn sample(name: &str) -> Option<Vec<u8>> {
-        std::fs::read(Path::new("original avese").join(name)).ok()
+        std::fs::read(crate::original_fixture_dir().join(name)).ok()
     }
 
     #[test]
+    #[ignore = "requires original samples; set AVESE_ORIGINAL_DIR"]
     fn original_samples() {
-        let Some(s1) = sample("sample1.txt") else { return };
+        let s1 = sample("sample1.txt").expect("original sample1.txt not found");
         assert_eq!(parse(&s1, &opts()).points.len(), 4);
         let s2 = sample("sample2.txt").unwrap();
         assert_eq!(parse(&s2, &opts()).points.len(), 441);
@@ -380,13 +381,14 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires original samples; set AVESE_ORIGINAL_DIR"]
     fn original_sample4_include_applies() {
-        let Some(bytes) = sample("sample4.txt") else { return };
+        let bytes = sample("sample4.txt").expect("original sample4.txt not found");
         let d = parse(&bytes, &opts());
         let mut st = Settings::default_store();
         st.set_checked("CBLoadConf", true);
         st.set_position("SEsize", 999);
-        let w = apply_embedded(&mut st, &d, Some(Path::new("original avese")));
+        let w = apply_embedded(&mut st, &d, Some(&crate::original_fixture_dir()));
         assert!(w.is_empty(), "{w:?}");
         assert_eq!(st.position("SEsize"), 200);
     }
