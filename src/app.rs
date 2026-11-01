@@ -875,6 +875,34 @@ mod shortcut_tests {
     use super::*;
 
     #[test]
+    fn exit_saves_settings_and_labels_only_when_enabled() {
+        let path = std::env::temp_dir().join(format!("avese-autosave-{}-{:?}.ini", std::process::id(), std::thread::current().id()));
+        let forms = Forms::load();
+        let store = Store::from_forms(&[&forms.form1, &forms.config, &forms.avi, &forms.input, &forms.about, &forms.mesh]);
+        let mut app = App::new(&Context::default(), forms, store, Layout::default(), vec![]);
+        app.ini_path = path.clone();
+        std::fs::write(&path, b"unchanged").unwrap();
+        app.store.set_checked("CBautosave", false);
+        eframe::App::on_exit(&mut app, None);
+        assert_eq!(std::fs::read(&path).unwrap(), b"unchanged");
+
+        app.store.set_checked("CBautosave", true);
+        app.store.set_checked("CBLoadConf", false);
+        app.store.set_checked("CBDataCheck", false);
+        app.store.set_position("SEmaxbmp", 17);
+        app.store.lists.insert("LBlabel".into(), vec!["1, 2 日本語 😀".into()]);
+        eframe::App::on_exit(&mut app, None);
+        let mut restored = crate::engine::settings::Settings::default_store();
+        crate::ini::load_file(&path, &mut restored, &mut Layout::default()).unwrap();
+        std::fs::remove_file(path).unwrap();
+        assert!(restored.checked("CBautosave"));
+        assert!(!restored.checked("CBLoadConf"));
+        assert!(!restored.checked("CBDataCheck"));
+        assert_eq!(restored.position("SEmaxbmp"), 17);
+        assert_eq!(restored.list("LBlabel"), &["1, 2 日本語 😀"]);
+    }
+
+    #[test]
     fn ctrl_letters_dispatch_to_menu_actions() {
         for (k, name) in SHORTCUTS {
             let ctx = Context::default();
