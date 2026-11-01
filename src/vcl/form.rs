@@ -41,6 +41,7 @@ impl Fnt {
 
 #[derive(Default)]
 pub struct Assets {
+    pub plot_icons: Option<TextureHandle>,
     pub app: Option<TextureHandle>,
     pub about: Option<TextureHandle>,
     pub imagelist: Option<TextureHandle>,

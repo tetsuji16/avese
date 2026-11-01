@@ -137,34 +137,19 @@ pub fn exe_dir() -> PathBuf {
     std::env::current_exe().ok().and_then(|p| p.parent().map(|p| p.to_path_buf())).unwrap_or_default()
 }
 
-fn asset_dir() -> Option<PathBuf> {
-    let mut c = vec![PathBuf::from("assets/local")];
-    let e = exe_dir();
-    c.push(e.join("assets/local"));
-    c.push(e.join("../../assets/local"));
-    c.into_iter().find(|p| p.join("imagelist.png").exists())
-}
-
-fn load_tex(ctx: &Context, dir: &Path, file: &str) -> Option<egui::TextureHandle> {
-    let img = image::open(dir.join(file)).ok()?.to_rgba8();
-    let (w, h) = (img.width() as usize, img.height() as usize);
-    Some(ctx.load_texture(file, egui::ColorImage::from_rgba_unmultiplied([w, h], img.as_raw()), egui::TextureOptions::NEAREST))
-}
-
 impl App {
     pub fn new(ctx: &Context, forms: Forms, store: Store, layout: Layout, files: Vec<PathBuf>) -> App {
         let mut assets = Assets::default();
-        if let Some(d) = asset_dir() {
-            assets.imagelist = load_tex(ctx, &d, "imagelist.png");
-            if let Ok(img) = image::open(d.join("imagelist.png")) {
-                let (chk, dis) = crate::icons::bake_variants(&img.to_rgba8());
-                let [c0, c1] = chk;
-                assets.imagelist_chk = Some(ctx.load_texture("imagelist_chk", c0, egui::TextureOptions::NEAREST));
-                assets.imagelist_chk1 = Some(ctx.load_texture("imagelist_chk1", c1, egui::TextureOptions::NEAREST));
-                assets.imagelist_dis = Some(ctx.load_texture("imagelist_dis", dis, egui::TextureOptions::NEAREST));
-            }
-            assets.about = load_tex(ctx, &d, "about.png");
-            assets.app = load_tex(ctx, &d, "app.png");
+        // Embed the generated artwork so packaged and local builds look the same.
+        if let Ok(img) = image::load_from_memory(include_bytes!("../assets/generated/plot-icons.png")) {
+            let img = img.to_rgba8();
+            assets.plot_icons = Some(ctx.load_texture("plot-icons", egui::ColorImage::from_rgba_unmultiplied([img.width() as usize, img.height() as usize], img.as_raw()), egui::TextureOptions::LINEAR));
+        }
+        if let Ok(img) = image::load_from_memory(include_bytes!("../assets/generated/avese-logo.png")) {
+            let img = img.resize_exact(64, 64, image::imageops::FilterType::Lanczos3).to_rgba8();
+            let texture = ctx.load_texture("avese-logo", egui::ColorImage::from_rgba_unmultiplied([64, 64], img.as_raw()), egui::TextureOptions::LINEAR);
+            assets.about = Some(texture.clone());
+            assets.app = Some(texture);
         }
         let menu = forms.form1.find("MainMenu1").map(|m| m.kids.iter().map(build_menu).collect()).unwrap_or_default();
         App {

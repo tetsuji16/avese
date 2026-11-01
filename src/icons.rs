@@ -108,6 +108,7 @@ pub fn draw_tb(p: &Painter, a: &Assets, idx: usize, r: Rect, enabled: bool, chec
         draw_standard(p, idx, r, enabled);
         return;
     }
+    if draw_custom(p, a.plot_icons.as_ref(), idx, r, enabled) { return; }
     // the pattern is anchored to the VCL client origin, which sits one pixel row (odd) above ours
     let odd = ((r.min.x + r.min.y).round() as i64).rem_euclid(2) == 0;
     let variant = if !enabled { a.imagelist_dis.as_ref() } else if checked { if odd { a.imagelist_chk1.as_ref() } else { a.imagelist_chk.as_ref() } } else { a.imagelist.as_ref() };

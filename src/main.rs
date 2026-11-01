@@ -58,13 +58,7 @@ fn main() -> eframe::Result {
 }
 
 fn load_icon() -> Option<egui::IconData> {
-    for d in ["assets/local", "../../assets/local"] {
-        let p = std::path::Path::new(d).join("app.png");
-        let p = if p.exists() { p } else { app::exe_dir().join(d).join("app.png") };
-        if let Ok(img) = image::open(&p) {
-            let img = img.to_rgba8();
-            return Some(egui::IconData { width: img.width(), height: img.height(), rgba: img.into_raw() });
-        }
-    }
-    None
+    let img = image::load_from_memory(include_bytes!("../assets/generated/avese-logo.png")).ok()?
+        .resize_exact(64, 64, image::imageops::FilterType::Lanczos3).to_rgba8();
+    Some(egui::IconData { width: img.width(), height: img.height(), rgba: img.into_raw() })
 }
