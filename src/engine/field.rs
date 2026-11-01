@@ -33,7 +33,6 @@ struct Spline {
     zyy: Vec<f64>,
     mxyy: Vec<f64>,
     row_ok: Vec<bool>,
-    col_ok: Vec<bool>,
 }
 
 #[derive(Clone, Debug)]
@@ -223,7 +222,6 @@ impl Spline {
     fn new(xs: &[f64], ys: &[f64], z: &[Option<f64>]) -> Spline {
         let (nx, ny) = (xs.len(), ys.len());
         let row_ok: Vec<bool> = (0..ny).map(|j| (0..nx).all(|i| z[j * nx + i].is_some())).collect();
-        let col_ok: Vec<bool> = (0..nx).map(|i| (0..ny).all(|j| z[j * nx + i].is_some())).collect();
         let mut mx = vec![0.0; nx * ny];
         for j in (0..ny).filter(|&j| row_ok[j]) {
             let row: Vec<f64> = (0..nx).map(|i| z[j * nx + i].unwrap_or(0.0)).collect();
@@ -231,16 +229,28 @@ impl Spline {
         }
         let mut zyy = vec![0.0; nx * ny];
         let mut mxyy = vec![0.0; nx * ny];
-        for i in (0..nx).filter(|&i| col_ok[i]) {
-            let zc: Vec<f64> = (0..ny).map(|j| z[j * nx + i].unwrap_or(0.0)).collect();
-            let mc: Vec<f64> = (0..ny).map(|j| mx[j * nx + i]).collect();
-            let (a, b) = (natural_m2(ys, &zc), natural_m2(ys, &mc));
-            for j in 0..ny {
-                zyy[j * nx + i] = a[j];
-                mxyy[j * nx + i] = b[j];
+        // A missing value invalidates the x derivatives of its entire row.
+        // Build y derivatives within each contiguous run of complete rows so
+        // those uncomputed derivatives cannot distort other valid regions.
+        let mut start = 0;
+        while start < ny {
+            if !row_ok[start] { start += 1; continue; }
+            let mut end = start + 1;
+            while end < ny && row_ok[end] { end += 1; }
+            if end - start >= 2 {
+                for i in 0..nx {
+                    let zc: Vec<f64> = (start..end).map(|j| z[j * nx + i].unwrap_or(0.0)).collect();
+                    let mc: Vec<f64> = (start..end).map(|j| mx[j * nx + i]).collect();
+                    let (a, b) = (natural_m2(&ys[start..end], &zc), natural_m2(&ys[start..end], &mc));
+                    for j in start..end {
+                        zyy[j * nx + i] = a[j - start];
+                        mxyy[j * nx + i] = b[j - start];
+                    }
+                }
             }
+            start = end;
         }
-        Spline { mx, zyy, mxyy, row_ok, col_ok }
+        Spline { mx, zyy, mxyy, row_ok }
     }
 }
 
@@ -285,7 +295,7 @@ impl GridField {
         let k = j * nx + i;
         let (z00, z10, z01, z11) = (self.z[k]?, self.z[k + 1]?, self.z[k + nx]?, self.z[k + nx + 1]?);
         if let Some(sp) = &self.spline {
-            if sp.row_ok[j] && sp.row_ok[j + 1] && sp.col_ok[i] && sp.col_ok[i + 1] {
+            if sp.row_ok[j] && sp.row_ok[j + 1] {
                 let hx = self.xs[i + 1] - self.xs[i];
                 let hy = self.ys[j + 1] - self.ys[j];
                 let (a, b) = (1.0 - tx, tx);
@@ -557,6 +567,23 @@ mod tests {
         let (f, _) = build(&df, &settings(true)).unwrap();
         assert!(f.sample(2.5, 2.5).is_some());
         assert_eq!(f.sample(0.5, 0.5), None);
+    }
+
+    #[test]
+    fn missing_row_does_not_corrupt_spline_in_another_region() {
+        let mut with_hole = grid_df(6, |x, y| x * x * (1.0 + y * y));
+        with_hole.points[5].z = None;
+        let mut clean_run = with_hole.clone();
+        clean_run.points.retain(|p| p.y != Some(0.0));
+        let field = build(&with_hole, &settings(true)).unwrap().0;
+        let expected = build(&clean_run, &settings(true)).unwrap().0;
+        let linear = build(&clean_run, &settings(false)).unwrap().0;
+        for (x, y) in [(1.5, 1.5), (2.3, 2.4), (3.5, 3.5)] {
+            let actual = field.sample(x, y).unwrap();
+            assert!((actual - expected.sample(x, y).unwrap()).abs() < 1e-9, "spline crossed a missing row at ({x}, {y})");
+            assert!((actual - linear.sample(x, y).unwrap()).abs() > 0.01, "the complete region should retain spline interpolation");
+        }
+        assert!(field.sample(4.5, 0.5).is_none(), "cells touching the missing value remain transparent");
     }
 
     #[test]
