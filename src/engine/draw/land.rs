@@ -255,15 +255,100 @@ fn grid_surface(v: &View, g: &GridField, items: &mut Items, progress: &mut impl 
 }
 
 fn mesh_surface(v: &View, m: &MeshField, items: &mut Items, progress: &mut impl FnMut(f32) -> bool) -> bool {
-    let stride = m.tris.len().div_ceil(MAX_POLYS).max(1);
-    for (i, t) in m.tris.iter().step_by(stride).enumerate() {
-        if i % 256 == 0 && !progress(0.08 + 0.72 * i as f32 / m.tris.len().div_ceil(stride).max(1) as f32) { return false; }
-        let (Some(a), Some(b), Some(c)) = (m.z[t[0]], m.z[t[1]], m.z[t[2]]) else { continue };
-        let p: Vec<((f32, f32), f64)> = [(t[0], a), (t[1], b), (t[2], c)].iter().map(|&(k, z)| v.pt(m.nodes[k].0, m.nodes[k].1, z)).collect();
+    let reduced;
+    let (nodes, values, tris) = if m.tris.len() > MAX_POLYS {
+        let Some(r) = reduce_mesh(m, progress) else { return false };
+        reduced = r;
+        (&reduced.0[..], &reduced.1[..], &reduced.2[..])
+    } else {
+        (&m.nodes[..], &m.z[..], &m.tris[..])
+    };
+    for (i, t) in tris.iter().enumerate() {
+        if i % 256 == 0 && !progress(0.08 + 0.72 * i as f32 / tris.len().max(1) as f32) { return false; }
+        let (Some(a), Some(b), Some(c)) = (values[t[0]], values[t[1]], values[t[2]]) else { continue };
+        let p: Vec<((f32, f32), f64)> = [(t[0], a), (t[1], b), (t[2], c)].iter().map(|&(k, z)| v.pt(nodes[k].0, nodes[k].1, z)).collect();
         let depth = p.iter().map(|q| q.1).sum::<f64>() / 3.0;
         items.push((depth, poly(p.iter().map(|q| q.0).collect(), v.ctx.color((a + b + c) / 3.0), !v.ctx.s.surface)));
     }
     true
+}
+
+/// Reduce a large Delaunay mesh by spatially sampling its source vertices, then
+/// retriangulating them. Keeping source hull vertices preserves the full boundary;
+/// retriangulation covers the reduced domain without dropping scattered triangles.
+fn reduce_mesh(m: &MeshField, progress: &mut impl FnMut(f32) -> bool) -> Option<(Vec<(f64, f64)>, Vec<Option<f64>>, Vec<[usize; 3]>)> {
+    use std::collections::HashMap;
+    use delaunator::{Point, triangulate};
+
+    const NODE_BUDGET: usize = MAX_POLYS / 2 - 128;
+    if m.nodes.len() <= NODE_BUDGET { return Some((m.nodes.clone(), m.z.clone(), m.tris.clone())); }
+    let mut edge_counts = HashMap::<(usize, usize), u8>::new();
+    for (i, tri) in m.tris.iter().enumerate() {
+        if i % 8192 == 0 && !progress(0.01 * i as f32 / m.tris.len() as f32) { return None; }
+        for (a, b) in [(tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])] {
+            let key = if a < b { (a, b) } else { (b, a) };
+            *edge_counts.entry(key).or_default() += 1;
+        }
+    }
+    let mut boundary = edge_counts.into_iter().flat_map(|((a,b),n)| if n == 1 { vec![a,b] } else { Vec::new() }).collect::<Vec<_>>();
+    boundary.sort_unstable();
+    boundary.dedup();
+    let interior_budget = NODE_BUDGET.saturating_sub(boundary.len().min(NODE_BUDGET));
+    let boundary_budget = NODE_BUDGET.saturating_sub(interior_budget);
+    if boundary.len() > boundary_budget {
+        let center = (
+            m.nodes.iter().map(|p| p.0).sum::<f64>() / m.nodes.len() as f64,
+            m.nodes.iter().map(|p| p.1).sum::<f64>() / m.nodes.len() as f64,
+        );
+        boundary.sort_by(|&a,&b| {
+            (m.nodes[a].1-center.1).atan2(m.nodes[a].0-center.0)
+                .total_cmp(&(m.nodes[b].1-center.1).atan2(m.nodes[b].0-center.0))
+        });
+        let step = boundary.len().div_ceil(boundary_budget.max(1));
+        let mut keep = boundary.into_iter().step_by(step).collect::<Vec<_>>();
+        for extreme in [
+            (0..m.nodes.len()).min_by(|&a,&b| m.nodes[a].0.total_cmp(&m.nodes[b].0)),
+            (0..m.nodes.len()).max_by(|&a,&b| m.nodes[a].0.total_cmp(&m.nodes[b].0)),
+            (0..m.nodes.len()).min_by(|&a,&b| m.nodes[a].1.total_cmp(&m.nodes[b].1)),
+            (0..m.nodes.len()).max_by(|&a,&b| m.nodes[a].1.total_cmp(&m.nodes[b].1)),
+        ].into_iter().flatten() { keep.push(extreme); }
+        keep.sort_unstable();
+        keep.dedup();
+        boundary = keep;
+    }
+
+    let (x0,x1,y0,y1) = m.nodes.iter().fold((f64::INFINITY,f64::NEG_INFINITY,f64::INFINITY,f64::NEG_INFINITY), |a,p| (a.0.min(p.0),a.1.max(p.0),a.2.min(p.1),a.3.max(p.1)));
+    let side = (interior_budget as f64).sqrt().floor() as usize;
+    let mut selected = boundary;
+    if side > 0 && x1 > x0 && y1 > y0 {
+        let sx = x1-x0;
+        let sy = y1-y0;
+        let mut best = vec![None::<(f64,usize)>; side*side];
+        for (i,&(x,y)) in m.nodes.iter().enumerate() {
+            if i % 8192 == 0 && !progress(0.01 + 0.025 * i as f32 / m.nodes.len() as f32) { return None; }
+            let cx = (((x-x0)/sx*side as f64).floor() as usize).min(side-1);
+            let cy = (((y-y0)/sy*side as f64).floor() as usize).min(side-1);
+            let center = (x0+(cx as f64+0.5)*sx/side as f64,y0+(cy as f64+0.5)*sy/side as f64);
+            let d = (x-center.0).powi(2)+(y-center.1).powi(2);
+            let slot = &mut best[cy*side+cx];
+            if slot.is_none_or(|v| d<v.0) { *slot=Some((d,i)); }
+        }
+        selected.extend(best.into_iter().flatten().map(|(_,i)| i));
+    }
+    selected.sort_unstable();
+    selected.dedup();
+    let nodes = selected.iter().map(|&i| m.nodes[i]).collect::<Vec<_>>();
+    let z = selected.iter().map(|&i| m.z[i]).collect::<Vec<_>>();
+    let points = nodes.iter().map(|&(x,y)| Point{x,y}).collect::<Vec<_>>();
+    if !progress(0.04) { return None; }
+    let triangulation = triangulate(&points);
+    let tris = triangulation.triangles.chunks_exact(3).filter_map(|t| {
+        let tri = [t[0],t[1],t[2]];
+        let center = (0..3).map(|i| nodes[tri[i]]).fold((0.0,0.0), |p,q| (p.0+q.0/3.0,p.1+q.1/3.0));
+        m.sample(center.0,center.1).map(|_| tri)
+    }).collect::<Vec<_>>();
+    if tris.len() > MAX_POLYS { return None; }
+    Some((nodes,z,tris))
 }
 
 fn panel_surface(v: &View, items: &mut Items, progress: &mut impl FnMut(f32) -> bool) -> bool {
@@ -441,6 +526,7 @@ fn axes(v: &View, ops: &mut Vec<Op>) {
 mod tests {
     use super::super::testutil::*;
     use super::super::*;
+    use super::{reduce_mesh, MAX_POLYS};
 
     fn land() -> Settings {
         let mut s = settings();
@@ -566,5 +652,63 @@ mod tests {
         let (m, _) = crate::engine::field::build(&df, &s).unwrap();
         let b = build_scene(&m, &s, &[]).unwrap();
         assert_eq!(count_ops(&b.scene.ops, |o| matches!(o, Op::Polygon { .. })), 2);
+    }
+
+    #[test]
+    fn oversized_mesh_is_retriangulated_without_triangle_skips() {
+        use crate::engine::data::{DataFile, Point};
+        let mut df = DataFile::default();
+        let n = 350usize;
+        for j in 0..n {
+            for i in 0..n {
+                df.points.push(Point { x:Some(i as f64), y:Some(j as f64), z:Some((i+j) as f64), u:None, v:None });
+            }
+        }
+        df.mesh_auto = true;
+        let (Field::Mesh(m), _) = crate::engine::field::build(&df, &land()).unwrap() else { panic!("expected mesh") };
+        assert!(m.tris.len() > MAX_POLYS);
+        let mut progress = |_| true;
+        let reduced = reduce_mesh(&m, &mut progress).expect("reduction completes");
+        assert!(reduced.2.len() <= MAX_POLYS);
+        for corner in [(0.0,0.0),(349.0,0.0),(0.0,349.0),(349.0,349.0)] {
+            assert!(reduced.0.contains(&corner), "source hull corner {corner:?} was discarded");
+        }
+        let covered = |p:(f64,f64)| reduced.2.iter().any(|t| {
+            let (a,b,c)=(reduced.0[t[0]],reduced.0[t[1]],reduced.0[t[2]]);
+            let cross=|u:(f64,f64),v:(f64,f64),w:(f64,f64)| (v.0-u.0)*(w.1-u.1)-(v.1-u.1)*(w.0-u.0);
+            let x=cross(a,b,p); let y=cross(b,c,p); let z=cross(c,a,p);
+            (x>=-1e-8 && y>=-1e-8 && z>=-1e-8) || (x<=1e-8 && y<=1e-8 && z<=1e-8)
+        });
+        for p in [(0.01,0.01),(348.99,0.01),(0.01,348.99),(348.99,348.99),(174.5,174.5),(100.2,201.7)] {
+            assert!(covered(p), "retriangulated mesh leaves a hole at {p:?}");
+        }
+        let b=build_scene(&Field::Mesh(m),&land(),&[]).unwrap();
+        let poly_count=count_ops(&b.scene.ops,|o|matches!(o,Op::Polygon{..}));
+        assert!(poly_count <= MAX_POLYS);
+
+        let mut triangle = DataFile::default();
+        let side = 310usize;
+        for j in 0..side {
+            for i in 0..(side-j) {
+                triangle.points.push(Point { x:Some(i as f64), y:Some(j as f64), z:Some(1.0), u:None, v:None });
+            }
+        }
+        triangle.mesh_auto = true;
+        let (Field::Mesh(source),_) = crate::engine::field::build(&triangle,&land()).unwrap() else { panic!("expected triangular mesh") };
+        assert!(source.tris.len()>MAX_POLYS);
+        let mut progress=|_| true;
+        let reduced=reduce_mesh(&source,&mut progress).unwrap();
+        assert!(reduced.2.len()<=MAX_POLYS);
+        assert!(reduced.0.contains(&(0.0,0.0)) && reduced.0.contains(&((side-1) as f64,0.0)) && reduced.0.contains(&(0.0,(side-1) as f64)));
+        assert!(reduced.0.iter().all(|&(x,y)| x+y <= (side-1) as f64 + 1e-8), "reduction must not extend beyond the source hull");
+        for p in [(0.1,0.1),(100.2,100.3),(200.1,50.1),(0.1,308.7)] {
+            let covered = reduced.2.iter().any(|t| {
+                let (a,b,c)=(reduced.0[t[0]],reduced.0[t[1]],reduced.0[t[2]]);
+                let cross=|u:(f64,f64),v:(f64,f64),w:(f64,f64)| (v.0-u.0)*(w.1-u.1)-(v.1-u.1)*(w.0-u.0);
+                let (x,y,z)=(cross(a,b,p),cross(b,c,p),cross(c,a,p));
+                (x>=-1e-8 && y>=-1e-8 && z>=-1e-8) || (x<=1e-8 && y<=1e-8 && z<=1e-8)
+            });
+            assert!(covered,"triangular hull has a gap at {p:?}");
+        }
     }
 }
