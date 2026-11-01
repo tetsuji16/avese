@@ -1060,7 +1060,8 @@ impl App {
                     pp.rect_filled(state_rect, 4, background);
                     pp.rect_stroke(state_rect, 4, egui::Stroke::new(1.0, border), egui::StrokeKind::Inside);
                 }
-                let ir = Rect::from_min_size(Pos2::new(rr.min.x + ((rr.width() - 20.0) / 2.0).floor(), rr.min.y + ((rr.height() - 20.0) / 2.0).floor() + 2.0), Vec2::splat(20.0));
+                let icon_size = 22.0_f32.min(rr.height() - 4.0).min(rr.width() - 4.0);
+                let ir = Rect::from_center_size(rr.center(), Vec2::splat(icon_size));
                 crate::icons::draw_tb(&pp, &self.assets, k.int("ImageIndex").max(0) as usize, ir, en, false);
                 r.tip(id, k.hint(), resp.hovered());
                 if en && resp.clicked() {

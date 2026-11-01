@@ -16,7 +16,6 @@ fn standard_icon(idx: usize) -> Option<&'static str> {
         14 => ph::ARROW_CLOCKWISE,
         4 => ph::GEAR,
         5 => ph::QUESTION,
-        18 => ph::CROSSHAIR,
         _ => return None,
     })
 }
@@ -35,7 +34,6 @@ fn draw_standard(p: &Painter, idx: usize, r: Rect, enabled: bool) {
         14 => Color32::from_rgb(50, 112, 202), // reload
         4 => Color32::from_rgb(89, 114, 146),
         5 => Color32::from_rgb(45, 126, 205), // blue help mark
-        18 => Color32::from_rgb(38, 154, 165),
         _ => BLACK,
     };
     let font = egui::FontId::new(17.0, egui::FontFamily::Name("phosphor".into()));
@@ -117,8 +115,44 @@ fn lx_ok(v: usize) -> bool {
     v % 20 != 19
 }
 
+/// Simple coordinate symbols stay legible at toolbar size.
+fn draw_coordinate_icon(p: &Painter, idx: usize, r: Rect, enabled: bool) -> bool {
+    if !matches!(idx, 11 | 12 | 18 | 19) { return false; }
+    let ink = if enabled { Color32::from_rgb(30, 45, 65) } else { SHADOW };
+    let blue = if enabled { Color32::from_rgb(32, 96, 190) } else { SHADOW };
+    let pt = |x: f32, y: f32| Pos2::new(r.min.x + x * r.width() / 20.0, r.min.y + y * r.height() / 20.0);
+    let line = |a: (f32, f32), b: (f32, f32), color| { p.line_segment([pt(a.0, a.1), pt(b.0, b.1)], egui::Stroke::new(1.5, color)); };
+    match idx {
+        11 => {
+            line((4.0, 16.0), (16.0, 16.0), ink);
+            line((4.0, 16.0), (4.0, 4.0), ink);
+            line((16.0, 16.0), (13.0, 13.0), ink);
+            line((4.0, 4.0), (7.0, 7.0), ink);
+        }
+        12 => {
+            for t in [4.0, 8.0, 12.0, 16.0] {
+                line((4.0, t), (16.0, t), ink);
+                line((t, 4.0), (t, 16.0), ink);
+            }
+        }
+        18 => {
+            p.text(r.center(), egui::Align2::CENTER_CENTER, "XY", egui::FontId::proportional(13.0), blue);
+        }
+        19 => {
+            // Cylinder outline and central axis distinguish it from Cartesian XY.
+            line((5.0, 6.0), (5.0, 14.0), blue);
+            line((15.0, 6.0), (15.0, 14.0), blue);
+            for (a, b) in [((5.0, 6.0), (8.0, 4.0)), ((8.0, 4.0), (12.0, 4.0)), ((12.0, 4.0), (15.0, 6.0)), ((5.0, 6.0), (8.0, 8.0)), ((8.0, 8.0), (12.0, 8.0)), ((12.0, 8.0), (15.0, 6.0)), ((5.0, 14.0), (8.0, 16.0)), ((8.0, 16.0), (12.0, 16.0)), ((12.0, 16.0), (15.0, 14.0))] { line(a, b, blue); }
+            line((10.0, 17.0), (10.0, 3.0), ink);
+        }
+        _ => unreachable!(),
+    }
+    true
+}
+
 /// Toolbar glyph in its button state (normal, pressed/checked, disabled).
 pub fn draw_tb(p: &Painter, a: &Assets, idx: usize, r: Rect, enabled: bool, checked: bool) {
+    if draw_coordinate_icon(p, idx, r, enabled) { return; }
     if standard_icon(idx).is_some() {
         draw_standard(p, idx, r, enabled);
         return;
