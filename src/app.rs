@@ -248,7 +248,7 @@ impl App {
     fn create_mesh(&mut self, ctx: &Context) {
         if self.job.is_some() { return; }
         let Some(loaded) = self.loaded.take() else { return };
-        if loaded.data.mesh_auto || matches!(loaded.field, crate::engine::field::Field::Panel(_)) {
+        if loaded.data.mesh_auto || matches!(&*loaded.field, crate::engine::field::Field::Panel(_)) {
             self.loaded = Some(loaded);
             return;
         }
@@ -932,7 +932,7 @@ impl App {
 fn menu_item_enabled(name: &str, redraw_enabled: bool, loaded: Option<&Loaded>) -> bool {
     match name {
         "menredraw" => redraw_enabled,
-        "menmeshcreate" => loaded.is_some_and(|l| !l.data.mesh_auto && !matches!(l.field, crate::engine::field::Field::Panel(_))),
+        "menmeshcreate" => loaded.is_some_and(|l| !l.data.mesh_auto && !matches!(&*l.field, crate::engine::field::Field::Panel(_))),
         _ => true,
     }
 }
@@ -1109,9 +1109,9 @@ impl eframe::App for App {
                 let out = egui::ScrollArea::both().auto_shrink([false, false]).show(ui, |ui| ui.add(egui::Image::new((tex.id(), sz))));
                 let img = out.inner.rect;
                 let pos = ctx.input(|i| i.pointer.hover_pos()).filter(|p| inner.contains(*p) && img.contains(*p));
-                if let (Some(pos), Some(r), Some(l)) = (pos, &self.rendered, &self.loaded) {
+                if let (Some(pos), Some(r)) = (pos, &self.rendered) {
                     let d = pos - img.min;
-                    cells = jobs::probe_cells(r.probe.at_field(d.x as f64, d.y as f64, &l.field), r.probe.frame().is_some_and(|f| f.cyl.is_some()));
+                    cells = jobs::probe_cells(r.probe.at_field(d.x as f64, d.y as f64, &r.field), r.probe.frame().is_some_and(|f| f.cyl.is_some()));
                 }
             });
         }
