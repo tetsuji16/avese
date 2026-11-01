@@ -274,6 +274,10 @@ impl GridField {
         Some((i, ((p - axis[i]) / h).clamp(0.0, 1.0)))
     }
 
+    pub fn has_spline(&self) -> bool {
+        self.spline.is_some()
+    }
+
     pub fn sample(&self, x: f64, y: f64) -> Option<f64> {
         let nx = self.xs.len();
         let (i, tx) = Self::locate(&self.xs, x)?;

@@ -2,10 +2,15 @@
 use super::{Ctx, Frame};
 use crate::engine::field::{Field, GridField, MeshField};
 use crate::engine::scene::{Op, Rgb};
-use std::collections::{HashMap, VecDeque};
+use contour::ContourBuilder;
+use geo_types::Coord;
 
 const MAX_DOTS: usize = 200_000;
 const MAX_LEVELS: usize = 1000;
+/// sub-cells per grid cell when contouring spline data
+const SPLINE_REFINE: usize = 4;
+const MAX_MESH_SAMPLES: usize = 2048;
+const EDGE_TOL: f64 = 1e-9;
 
 pub(crate) struct Node {
     pub x: f64,
@@ -137,13 +142,6 @@ pub fn scatter(ctx: &Ctx, frame: &Frame, ops: &mut Vec<Op>) {
 
 type Pt = (f64, f64);
 
-struct Seg {
-    ka: u64,
-    a: Pt,
-    kb: u64,
-    b: Pt,
-}
-
 /// Contour levels in increasing order.
 pub fn contour_levels(ctx: &Ctx) -> Vec<f64> {
     let s = ctx.s;
@@ -165,120 +163,83 @@ pub fn contour_levels(ctx: &Ctx) -> Vec<f64> {
     }
 }
 
-fn cross(l: f64, pa: Pt, va: f64, pb: Pt, vb: f64) -> Pt {
-    let t = if vb == va { 0.5 } else { ((l - va) / (vb - va)).clamp(0.0, 1.0) };
-    (pa.0 + t * (pb.0 - pa.0), pa.1 + t * (pb.1 - pa.1))
-}
-
-fn grid_segments(g: &GridField, levels: &[f64]) -> Vec<Vec<Seg>> {
-    let (nx, ny) = (g.xs.len(), g.ys.len());
-    let mut out: Vec<Vec<Seg>> = (0..levels.len()).map(|_| Vec::new()).collect();
-    for j in 0..ny.saturating_sub(1) {
-        for i in 0..nx.saturating_sub(1) {
-            let k = j * nx + i;
-            let (Some(v00), Some(v10), Some(v01), Some(v11)) = (g.z[k], g.z[k + 1], g.z[k + nx], g.z[k + nx + 1]) else { continue };
-            let lo = v00.min(v10).min(v01).min(v11);
-            let hi = v00.max(v10).max(v01).max(v11);
-            let (a, b) = (levels.partition_point(|&l| l <= lo), levels.partition_point(|&l| l <= hi));
-            if a >= b {
-                continue;
-            }
-            let p = [(g.xs[i], g.ys[j]), (g.xs[i + 1], g.ys[j]), (g.xs[i + 1], g.ys[j + 1]), (g.xs[i], g.ys[j + 1])];
-            let v = [v00, v10, v11, v01];
-            let c = ((k * 2) as u64, (2 * (k + 1) + 1) as u64, (2 * (k + nx)) as u64, (k * 2 + 1) as u64);
-            // bottom, right, top, left as corner pairs
-            let edges = [(0, 1, c.0), (1, 2, c.1), (3, 2, c.2), (0, 3, c.3)];
-            for li in a..b {
-                polygon_segments(levels[li], &p, &v, &edges, &mut out[li]);
-            }
-        }
+/// Node values of a grid; spline data is refined so that the lines follow the interpolated surface.
+fn grid_samples(g: &GridField) -> (Vec<f64>, Vec<f64>, Vec<Option<f64>>) {
+    if !g.has_spline() {
+        return (g.xs.clone(), g.ys.clone(), g.z.clone());
     }
-    out
-}
-
-/// Segments of one level inside a convex cell with corners `p`/`v` in order and its edges as (corner, corner, key).
-fn polygon_segments(l: f64, p: &[Pt], v: &[f64], edges: &[(usize, usize, u64)], out: &mut Vec<Seg>) {
-    let mut hits: Vec<(usize, u64, Pt)> = Vec::with_capacity(4);
-    for (e, &(a, b, key)) in edges.iter().enumerate() {
-        if (v[a] >= l) != (v[b] >= l) {
-            hits.push((e, key, cross(l, p[a], v[a], p[b], v[b])));
-        }
-    }
-    match hits.len() {
-        2 => out.push(Seg { ka: hits[0].1, a: hits[0].2, kb: hits[1].1, b: hits[1].2 }),
-        4 => {
-            // saddle: the centre value decides which diagonal pair stays connected
-            let centre_high = v.iter().sum::<f64>() / 4.0 >= l;
-            for c in 0..4 {
-                if (v[c] >= l) != centre_high {
-                    let (e1, e2) = ((c + 3) % 4, c);
-                    out.push(Seg { ka: hits[e1].1, a: hits[e1].2, kb: hits[e2].1, b: hits[e2].2 });
-                }
-            }
-        }
-        _ => {}
-    }
-}
-
-fn mesh_segments(m: &MeshField, levels: &[f64]) -> Vec<Vec<Seg>> {
-    let n = m.nodes.len() as u64;
-    let mut out: Vec<Vec<Seg>> = (0..levels.len()).map(|_| Vec::new()).collect();
-    for t in &m.tris {
-        let (Some(z0), Some(z1), Some(z2)) = (m.z[t[0]], m.z[t[1]], m.z[t[2]]) else { continue };
-        let v = [z0, z1, z2];
-        let (lo, hi) = (z0.min(z1).min(z2), z0.max(z1).max(z2));
-        let (a, b) = (levels.partition_point(|&l| l <= lo), levels.partition_point(|&l| l <= hi));
-        let p = [m.nodes[t[0]], m.nodes[t[1]], m.nodes[t[2]]];
-        let key = |a: usize, b: usize| t[a].min(t[b]) as u64 * n + t[a].max(t[b]) as u64;
-        let edges = [(0, 1, key(0, 1)), (1, 2, key(1, 2)), (2, 0, key(2, 0))];
-        for li in a..b {
-            polygon_segments(levels[li], &p, &v, &edges, &mut out[li]);
-        }
-    }
-    out
-}
-
-/// Joins segments that share an edge key into chains of points.
-fn chain(segs: &[Seg]) -> Vec<Vec<Pt>> {
-    let mut at: HashMap<u64, [u32; 2]> = HashMap::with_capacity(segs.len() * 2);
-    for (i, s) in segs.iter().enumerate() {
-        for k in [s.ka, s.kb] {
-            let e = at.entry(k).or_insert([u32::MAX; 2]);
-            if e[0] == u32::MAX {
-                e[0] = i as u32;
-            } else {
-                e[1] = i as u32;
-            }
-        }
-    }
-    let next = |key: u64, from: usize, done: &[bool]| -> Option<usize> {
-        at.get(&key)?.iter().map(|&i| i as usize).find(|&i| i != u32::MAX as usize && i != from && !done[i])
+    let refine = |axis: &[f64]| -> Vec<f64> {
+        let inner = axis.windows(2).flat_map(|w| (0..SPLINE_REFINE).map(move |i| w[0] + (w[1] - w[0]) * i as f64 / SPLINE_REFINE as f64));
+        inner.chain(axis.last().copied()).collect()
     };
-    let mut done = vec![false; segs.len()];
+    let (xs, ys) = (refine(&g.xs), refine(&g.ys));
+    let z = ys.iter().flat_map(|&y| xs.iter().map(move |&x| g.sample(x, y))).collect();
+    (xs, ys, z)
+}
+
+/// A mesh resampled on a regular grid of about one sample per pixel.
+fn mesh_samples(m: &MeshField, field: &Field, frame: &Frame) -> Option<(Vec<f64>, Vec<f64>, Vec<Option<f64>>)> {
+    let (x0, x1, y0, y1) = field.extent()?;
+    let axis = |a: f64, b: f64, px: f64| -> Vec<f64> {
+        let n = (px.round() as usize).clamp(2, MAX_MESH_SAMPLES);
+        (0..n).map(|i| a + (b - a) * i as f64 / (n - 1) as f64).collect()
+    };
+    let (xs, ys) = (axis(x0, x1, frame.w), axis(y0, y1, frame.h));
+    let z = ys.iter().flat_map(|&y| xs.iter().map(move |&x| m.sample(x, y))).collect();
+    Some((xs, ys, z))
+}
+
+/// Traces the levels with the `contour` crate and keeps the parts inside cells whose four corners have data.
+/// The crate closes its rings around the grid and treats a hole as a low value; those parts are not contour lines.
+fn isolines(xs: &[f64], ys: &[f64], z: &[Option<f64>], levels: &[f64]) -> Vec<Vec<Pt>> {
+    let (nx, ny) = (xs.len(), ys.len());
+    if nx < 2 || ny < 2 {
+        return vec![];
+    }
+    let known = || z.iter().flatten().chain(levels).copied();
+    let (lo, hi) = (known().fold(f64::INFINITY, f64::min), known().fold(f64::NEG_INFINITY, f64::max));
+    let below = lo - (hi - lo).max(1.0);
+    let values: Vec<f64> = z.iter().map(|v| v.unwrap_or(below)).collect();
+    let Ok(lines) = ContourBuilder::new(nx, ny, true).lines(&values, levels) else { return vec![] };
+    let inside = |a: Coord<f64>, b: Coord<f64>| {
+        // the crate places node i at i + 0.5
+        let (u, v) = ((a.x + b.x) / 2.0 - 0.5, (a.y + b.y) / 2.0 - 0.5);
+        if u < -EDGE_TOL || v < -EDGE_TOL || u > (nx - 1) as f64 + EDGE_TOL || v > (ny - 1) as f64 + EDGE_TOL {
+            return false;
+        }
+        let k = (v.max(0.0) as usize).min(ny - 2) * nx + (u.max(0.0) as usize).min(nx - 2);
+        [k, k + 1, k + nx, k + nx + 1].iter().all(|&c| z[c].is_some())
+    };
+    let at = |axis: &[f64], u: f64| {
+        let u = (u - 0.5).clamp(0.0, (axis.len() - 1) as f64);
+        let i = (u as usize).min(axis.len() - 2);
+        axis[i] + (axis[i + 1] - axis[i]) * (u - i as f64)
+    };
     let mut out = Vec::new();
-    for s0 in 0..segs.len() {
-        if done[s0] {
-            continue;
+    for line in &lines {
+        for ring in &line.geometry().0 {
+            let mut parts: Vec<Vec<Pt>> = Vec::new();
+            let mut open = false;
+            for w in ring.0.windows(2) {
+                let keep = inside(w[0], w[1]);
+                if keep {
+                    let p = (at(xs, w[1].x), at(ys, w[1].y));
+                    if open {
+                        parts.last_mut().unwrap().push(p);
+                    } else {
+                        parts.push(vec![(at(xs, w[0].x), at(ys, w[0].y)), p]);
+                    }
+                }
+                open = keep;
+            }
+            // the ring may start in the middle of a line
+            let joined = ring.0.len() >= 2 && ring.0.first() == ring.0.last() && inside(ring.0[0], ring.0[1]) && open && parts.len() >= 2;
+            if joined {
+                let head = parts.remove(0);
+                parts.last_mut().unwrap().extend(&head[1..]);
+            }
+            out.append(&mut parts);
         }
-        done[s0] = true;
-        let mut pts: VecDeque<Pt> = VecDeque::from([segs[s0].a, segs[s0].b]);
-        let mut tail = (s0, segs[s0].kb);
-        while let Some(n) = next(tail.1, tail.0, &done) {
-            done[n] = true;
-            let s = &segs[n];
-            let (p, k) = if s.ka == tail.1 { (s.b, s.kb) } else { (s.a, s.ka) };
-            pts.push_back(p);
-            tail = (n, k);
-        }
-        let mut head = (s0, segs[s0].ka);
-        while let Some(n) = next(head.1, head.0, &done) {
-            done[n] = true;
-            let s = &segs[n];
-            let (p, k) = if s.ka == head.1 { (s.b, s.kb) } else { (s.a, s.ka) };
-            pts.push_front(p);
-            head = (n, k);
-        }
-        out.push(pts.into());
     }
     out
 }
@@ -288,16 +249,15 @@ pub fn contours(ctx: &Ctx, frame: &Frame, ops: &mut Vec<Op>) {
     if levels.is_empty() {
         return;
     }
-    let per_level = match ctx.field {
-        Field::Grid(g) => grid_segments(g, &levels),
-        Field::Mesh(m) => mesh_segments(m, &levels),
+    let samples = match ctx.field {
+        Field::Grid(g) => Some(grid_samples(g)),
+        Field::Mesh(m) => mesh_samples(m, ctx.field, frame),
         Field::Panel(_) => return,
     };
-    for segs in per_level {
-        for pts in chain(&segs) {
-            let pts: Vec<(f32, f32)> = pts.iter().map(|&(x, y)| frame.to_px(x, y)).collect();
-            ops.push(Op::Polyline { pts, color: ctx.s.toko_color, width: 1.0 });
-        }
+    let Some((xs, ys, z)) = samples else { return };
+    for line in isolines(&xs, &ys, &z, &levels) {
+        let pts: Vec<(f32, f32)> = line.iter().map(|&(x, y)| frame.to_px(x, y)).collect();
+        ops.push(Op::Polyline { pts, color: ctx.s.toko_color, width: 1.0 });
     }
 }
 
@@ -363,7 +323,23 @@ pub fn vectors(ctx: &Ctx, frame: &Frame, ops: &mut Vec<Op>) {
 mod tests {
     use super::super::testutil::*;
     use super::super::*;
+    use super::{SPLINE_REFINE, Pt, grid_samples, isolines};
+    use crate::engine::data::{DataFile, Point};
+    use crate::engine::field;
     use crate::engine::scene::Op;
+
+    fn spline_grid(nx: usize, ny: usize, f: impl Fn(f64, f64) -> f64) -> Field {
+        let mut df = DataFile::default();
+        for j in 0..ny {
+            for i in 0..nx {
+                let (x, y) = (i as f64, j as f64);
+                df.points.push(Point { x: Some(x), y: Some(y), z: Some(f(x, y)), u: None, v: None });
+            }
+        }
+        let mut s = settings();
+        s.spline = true;
+        field::build(&df, &s).unwrap().0
+    }
 
     #[test]
     fn holes_are_transparent() {
@@ -437,6 +413,70 @@ mod tests {
     }
 
     #[test]
+    fn contour_line_lies_on_its_level() {
+        let f = grid(11, 3, |x, _| Some(x));
+        let mut s = settings();
+        s.toko = true;
+        s.toko_by_count = true;
+        s.toko_count = 1; // level 5
+        let ctx = Ctx::new(&f, &s);
+        let Field::Grid(g) = &f else { unreachable!() };
+        let lines = isolines(&g.xs, &g.ys, &g.z, &plane::contour_levels(&ctx));
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0].len(), 3);
+        assert!(lines[0].iter().all(|p| (p.0 - 5.0).abs() < 1e-9));
+    }
+
+    #[test]
+    fn contour_follows_uneven_axes() {
+        let (xs, ys) = (vec![0.0, 1.0, 10.0], vec![0.0, 1.0]);
+        let z: Vec<_> = [0.0, 1.0, 2.0, 0.0, 1.0, 2.0].iter().map(|&v| Some(v)).collect();
+        let lines = isolines(&xs, &ys, &z, &[1.5]);
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].iter().all(|p| (p.0 - 5.5).abs() < 1e-9));
+    }
+
+    #[test]
+    fn contour_stops_at_a_hole_and_keeps_the_rest() {
+        let f = grid(5, 7, |x, y| if x == 2.0 && y == 3.0 { None } else { Some(x) });
+        let Field::Grid(g) = &f else { unreachable!() };
+        let lines = isolines(&g.xs, &g.ys, &g.z, &[1.5]);
+        assert_eq!(lines.len(), 2);
+        assert!(lines.iter().flatten().all(|p| (p.0 - 1.5).abs() < 1e-9 && (p.1 <= 2.0 || p.1 >= 4.0)));
+    }
+
+    #[test]
+    fn spline_contour_stays_on_the_interpolated_surface() {
+        let f = spline_grid(7, 7, |x, y| (x - 3.0).powi(2) + (y - 3.0).powi(2));
+        let Field::Grid(g) = &f else { unreachable!() };
+        assert!(g.has_spline());
+        let (xs, ys, z) = grid_samples(g);
+        assert_eq!(xs.len(), 6 * SPLINE_REFINE + 1);
+        let lines = isolines(&xs, &ys, &z, &[4.2]);
+        assert_eq!(lines.len(), 1);
+        let linear = isolines(&g.xs, &g.ys, &g.z, &[4.2]);
+        let err = |l: &[Pt]| l.iter().map(|&(x, y)| (g.sample(x, y).unwrap() - 4.2).abs()).fold(0.0, f64::max);
+        assert!(err(&lines[0]) < 0.05, "{}", err(&lines[0]));
+        assert!(err(&lines[0]) < err(&linear[0]));
+    }
+
+    #[test]
+    fn mesh_contour_is_drawn_inside_the_mesh() {
+        let mut df = DataFile::default();
+        for (x, y) in [(0.0, 0.0), (10.0, 0.0), (0.0, 10.0), (10.0, 10.0), (5.0, 5.0)] {
+            df.points.push(Point { x: Some(x), y: Some(y), z: Some(x), u: None, v: None });
+        }
+        df.mesh_auto = true;
+        let f = field::build(&df, &settings()).unwrap().0;
+        let mut s = settings();
+        s.toko = true;
+        s.toko_by_count = true;
+        s.toko_count = 1;
+        let b = build_scene(&f, &s, &[]).unwrap();
+        assert!(count_ops(&b.scene.ops, |o| matches!(o, Op::Polyline { .. })) >= 1);
+    }
+
+    #[test]
     fn vector_head_keeps_direction_under_scaling() {
         let f = grid_uv(2, 2, |x, y| if x == 0.0 && y == 0.0 { (1.0, 1.0) } else { (0.0, 0.0) });
         let mut s = settings();
@@ -490,7 +530,6 @@ mod tests {
 
     #[test]
     fn mesh_is_rasterised_per_triangle() {
-        use crate::engine::data::{DataFile, Point};
         let mut df = DataFile::default();
         for (x, y) in [(0.0, 0.0), (10.0, 0.0), (0.0, 10.0), (10.0, 10.0), (5.0, 5.0)] {
             df.points.push(Point { x: Some(x), y: Some(y), z: Some(x + y), u: None, v: None });

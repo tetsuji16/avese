@@ -24,7 +24,7 @@ Scene → emf / wmf（ベクトル形式の保存）
 | `data.rs` | データファイルの解析。`parse(bytes, &DataOptions) -> DataFile` |
 | `field.rs` | 格子、三角メッシュ、パネルの統一表現と補間。範囲の計算 |
 | `mesh.rs` | Delaunay 分割（`delaunator`） |
-| `gradient.rs` | 9 種類のグラデーション（`CBtype` の 0〜2 は jet ではなく Google の Turbo、3〜5 はグレー、6〜8 はスペクトル）、色数、反転、折り返し |
+| `gradient.rs` | 9 種類のグラデーション（`CBtype` の 0〜2 は jet ではなく Google の Turbo で `colorous` を使う、3〜5 はグレー、6〜8 はスペクトル）、色数、反転、折り返し |
 | `scene.rs` | `Scene`、`Op`（描画命令） |
 | `raster.rs` | `Scene` を `tiny_skia::Pixmap` に描く。文字は `ab_glyph` |
 | `draw/mod.rs` | `build_scene`。画像サイズの決定、描画順、余白 |
@@ -82,7 +82,7 @@ pub enum Op {
 - パネル：セルごとに一色。等高線とベクトルは描かない。行の先頭が画像の上。
 - 三角メッシュ：三角形ごとに重心座標で補間する。
 - ベクトル：基準長は `SEsize / 20`。`EDvector` はその百分率。最大の大きさ（`CBenVMax` なら `EDenVMax`）が基準長になる。方向は倍率の影響を受けず、成分に忠実に描く。間引きは `CBskipx/y`、`EDstepx/y`、`EDoffsetx/y`。矢印は `CBvectorhead`、`EDhead`（%）、`SEvectorheadangle`、`CBfix`（最大の矢印に揃える）、`CBpaint`（`SPvectorheadcolor` で塗る）。`CBcolorvector` なら大きさで色分けする。
-- 等高線：マーチングスクエアで線分を生成する（三角メッシュは三角形ごと）。`RBctmode1` は `SEtoko` 本を等分、`RBctmode2` は `EDdt` の整数倍。範囲は `CBentokomin/max`。色は `SPtokocolor`。
+- 等高線：`contour` クレートで追跡し、データのあるセルの中だけを残す。`CBSpline` のときはセルを 4 分割して補間後の値を使い、三角メッシュは 1 ピクセルに約 1 点で格子に再サンプルする。`RBctmode1` は `SEtoko` 本を等分、`RBctmode2` は `EDdt` の整数倍。範囲は `CBentokomin/max`。色は `SPtokocolor`。
 - 円筒座標：列 1 がθ、列 2 が r。θの最小から最大を 0〜2π に対応づけ、周方向は閉じる。r の最小値が中心。ベクトルはθ、r 成分を変換して描く。
 
 ## 俯瞰図
