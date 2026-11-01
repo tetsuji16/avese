@@ -21,9 +21,31 @@ fn standard_icon(idx: usize) -> Option<&'static str> {
 }
 
 fn draw_standard(p: &Painter, idx: usize, r: Rect, enabled: bool) {
-    if let Some(glyph) = standard_icon(idx) {
-        let color = if enabled { BLACK } else { SHADOW };
-        p.text(r.center(), egui::Align2::CENTER_CENTER, glyph, egui::FontId::new(17.0, egui::FontFamily::Name("phosphor".into())), color);
+    let Some(glyph) = standard_icon(idx) else { return };
+    if !enabled {
+        p.text(r.center(), egui::Align2::CENTER_CENTER, glyph, egui::FontId::new(17.0, egui::FontFamily::Name("phosphor".into())), SHADOW);
+        return;
+    }
+    let color = match idx {
+        0 => Color32::from_rgb(225, 174, 24), // warm yellow folder
+        1 => Color32::from_rgb(48, 104, 190), // blue save disk
+        2 => Color32::from_rgb(164, 117, 70), // paper/clipboard brown
+        3 | 14 => Color32::from_rgb(210, 62, 66),
+        4 => Color32::from_rgb(89, 114, 146),
+        5 => Color32::from_rgb(45, 126, 205), // blue help mark
+        18 => Color32::from_rgb(38, 154, 165),
+        _ => BLACK,
+    };
+    let font = egui::FontId::new(17.0, egui::FontFamily::Name("phosphor".into()));
+    if idx == 3 || idx == 14 {
+        // The original refresh glyph combines red and blue curved arrows.
+        let icon = Rect::from_center_size(r.center(), Vec2::splat(16.0));
+        let left = Rect::from_min_max(icon.min, Pos2::new(icon.center().x, icon.max.y));
+        let right = Rect::from_min_max(Pos2::new(icon.center().x, icon.min.y), icon.max);
+        p.with_clip_rect(left).text(r.center(), egui::Align2::CENTER_CENTER, glyph, font.clone(), color);
+        p.with_clip_rect(right).text(r.center(), egui::Align2::CENTER_CENTER, glyph, font, Color32::from_rgb(50, 112, 202));
+    } else {
+        p.text(r.center(), egui::Align2::CENTER_CENTER, glyph, font, color);
     }
 }
 
