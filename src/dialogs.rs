@@ -526,6 +526,9 @@ fn font_picker(store: &Store) -> Option<Picker> {
 
 fn show_picker(ui: &mut egui::Ui, store: &mut Store, picker: &mut Option<Picker>) {
     let Some(active) = picker.as_mut() else { return };
+    // An open color or font popup gets the first Escape; a subsequent press
+    // cancels the picker without applying its temporary values.
+    let popup_open = egui::Popup::is_any_open(ui.ctx());
     let mut accepted = false;
     let mut cancelled = false;
     match active {
@@ -567,6 +570,7 @@ fn show_picker(ui: &mut egui::Ui, store: &mut Store, picker: &mut Option<Picker>
             }
         }
     }
+    cancelled |= !popup_open && escape_pressed(ui.ctx());
     if accepted || cancelled { *picker = None; }
 }
 
