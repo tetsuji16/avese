@@ -323,6 +323,16 @@ impl App {
         let Some(job) = self.job.take() else { return };
         if std::mem::take(&mut self.dlg.mesh_cancel) {
             job.sh().0.cancel();
+            // Keep an active viewport available while a slow worker winds down.
+            // Otherwise cancelling closes the last visible window before the
+            // worker has returned and the main viewport can be restored.
+            if matches!(job, Job::Batch(_)) {
+                self.batch_hide_pending = false;
+                if self.batch_root_hidden {
+                    self.batch_root_hidden = false;
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                }
+            }
             // loading and parsing have nothing to keep
             if matches!(job, Job::Load(_) | Job::Reparse(_)) {
                 self.status_msg = jobs::CANCELLED.into();
