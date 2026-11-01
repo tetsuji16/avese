@@ -120,6 +120,17 @@ fn build_menu(n: &Node) -> MItem {
     }
 }
 
+/// #82: 原作のファイルメニューには終了項目がないため、末尾に足す。
+/// `assets/forms` は原作の DFM から作り直すので、ここで足して再生成に耐えるようにする。
+fn add_exit_item(menu: &mut [MItem]) {
+    let Some(file) = menu.iter_mut().find(|m| m.name == "mentopload") else { return };
+    if file.kids.iter().any(|k| k.name == "menexit") {
+        return;
+    }
+    file.kids.push(MItem { name: "N10".into(), sep: true, cap: "-".into(), sc: String::new(), img: None, kids: Vec::new() });
+    file.kids.push(MItem { name: "menexit".into(), sep: false, cap: "アプリを閉じる(&Q)".into(), sc: "Alt+F4".into(), img: None, kids: Vec::new() });
+}
+
 /// View item behind a menu entry or tool button name.
 fn item_of(name: &str) -> Option<Item> {
     let s = name.strip_prefix("TB").or_else(|| name.strip_prefix("men"))?;
@@ -212,7 +223,8 @@ impl App {
             assets.about = Some(texture.clone());
             assets.app = Some(texture);
         }
-        let menu = forms.form1.find("MainMenu1").map(|m| m.kids.iter().map(build_menu).collect()).unwrap_or_default();
+        let mut menu: Vec<MItem> = forms.form1.find("MainMenu1").map(|m| m.kids.iter().map(build_menu).collect()).unwrap_or_default();
+        add_exit_item(&mut menu);
         App {
             forms,
             store,
@@ -738,6 +750,8 @@ impl App {
             "mensave" | "TBsave" => self.save_image(),
             "menClipbrd" | "TBclip" => self.copy_clipboard(),
             "menclose" => self.close_data(),
+            // #82: アプリを閉じる。設定の自動保存は eframe の終了処理（on_exit）が行う。
+            "menexit" => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
             "menredraw" | "TBRedraw" => self.redraw(ctx),
             "menmeshcreate" => self.create_mesh(ctx),
             "menconfig" | "TBConfig" => self.dlg.open_config(&self.store),
@@ -1299,6 +1313,36 @@ mod shortcut_tests {
         let mesh = pipeline::reparse_with_mesh(bytes, &Settings::from_store(&store), true, |_| {}).unwrap();
         assert!(!menu_item_enabled("menmeshcreate", true, Some(&mesh)));
         assert!(!menu_item_enabled("menredraw", false, Some(&loaded)));
+    }
+
+    #[test]
+    fn file_menu_ends_with_the_exit_command() {
+        let mut menu = vec![MItem { name: "mentopload".into(), sep: false, cap: "ファイル(&F)".into(), sc: String::new(), img: None, kids: Vec::new() }];
+        add_exit_item(&mut menu);
+        let kids = &menu[0].kids;
+        assert_eq!(kids.len(), 2);
+        assert!(kids[0].sep);
+        assert_eq!(kids[1].name, "menexit");
+        let (cap, _, accel) = parse_caption(&kids[1].cap);
+        assert_eq!(cap, "アプリを閉じる(Q)", "原作の表記にならい `&` だけを落とす");
+        assert_eq!(accel, Some('Q'));
+        assert_eq!(kids[1].sc, "Alt+F4");
+        add_exit_item(&mut menu);
+        assert_eq!(menu[0].kids.len(), 2, "二重に足さない");
+    }
+
+    #[test]
+    fn exit_command_closes_the_window() {
+        let ctx = Context::default();
+        let forms = Forms::load();
+        let store = Settings::default_store();
+        let mut app = App::new(&ctx, forms, store, Layout::default(), vec![]);
+        let _ = ctx.begin_pass(Default::default());
+        app.action(&ctx, "menexit");
+        let mut out = ctx.end_pass();
+        let closed = out.viewport_output.values().any(|v| v.commands.iter().any(|c| matches!(c, egui::ViewportCommand::Close)));
+        out.textures_delta.clear();
+        assert!(closed, "menexit should ask the window to close");
     }
 }
 
