@@ -36,7 +36,21 @@ pub fn with_extension(path: &Path, fmt: ImageFormat) -> PathBuf {
 
 pub fn pick(use_wmf: bool) -> Option<(PathBuf, ImageFormat)> {
     let (path, fmt) = imp::pick(default_index(use_wmf))?;
-    Some((with_extension(&path, fmt), fmt))
+    let target = with_extension(&path, fmt);
+    // Native overwrite confirmation applies to the entered path. If we add an
+    // extension afterwards, ask again for the actual destination.
+    if target != path && target.exists() {
+        let answer = rfd::MessageDialog::new()
+            .set_title("画像のセーブ")
+            .set_description(format!("{} は既に存在します。上書きしますか？", target.display()))
+            .set_level(rfd::MessageLevel::Warning)
+            .set_buttons(rfd::MessageButtons::YesNo)
+            .show();
+        if !matches!(answer, rfd::MessageDialogResult::Yes) {
+            return None;
+        }
+    }
+    Some((target, fmt))
 }
 
 #[cfg(windows)]
@@ -86,15 +100,29 @@ mod imp {
 mod imp {
     use super::*;
 
-    pub fn pick(_index: u32) -> Option<(PathBuf, ImageFormat)> {
-        let mut d = rfd::FileDialog::new().set_title("画像のセーブ").set_file_name("default");
-        for (name, ext, _) in FILTERS {
-            d = d.add_filter(name, &[ext]);
-        }
-        let p = d.save_file()?;
-        // the selected filter is not reported: the extension decides, so RLE BMP is not reachable here
+    pub fn pick(index: u32) -> Option<(PathBuf, ImageFormat)> {
+        // rfd does not expose the selected filter. Ask about BMP compression
+        // after choosing a BMP destination instead of presenting two identical filters.
+        let initial = if index == default_index(true) { "default.wmf" } else { "default.bmp" };
+        let p = rfd::FileDialog::new()
+            .set_title("画像のセーブ（拡張子で形式を指定）")
+            .set_file_name(initial)
+            .add_filter("画像ファイル (*.bmp;*.png;*.emf;*.wmf)", &["bmp", "png", "emf", "wmf"])
+            .save_file()?;
         let fmt = ImageFormat::from_extension(&p).unwrap_or(ImageFormat::Bmp);
-        Some((p, fmt))
+        if fmt != ImageFormat::Bmp {
+            return Some((p, fmt));
+        }
+        let answer = rfd::MessageDialog::new()
+            .set_title("BMP の圧縮")
+            .set_description("RLE 圧縮を使用しますか？")
+            .set_buttons(rfd::MessageButtons::YesNoCancel)
+            .show();
+        match answer {
+            rfd::MessageDialogResult::Yes => Some((p, ImageFormat::RleBmp)),
+            rfd::MessageDialogResult::No => Some((p, ImageFormat::Bmp)),
+            _ => None,
+        }
     }
 }
 
