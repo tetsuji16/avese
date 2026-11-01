@@ -150,6 +150,16 @@ mod tests {
         let e = result.err().expect("cancellation must not return an image");
         assert_eq!(e, RENDER_CANCELLED);
         assert!(last >= 0.5);
+
+        let mut land = s.clone();
+        land.land = true;
+        let mut last = 0.0;
+        render_with_progress(&l, &land, |p| {
+            assert!(p >= last, "land progress regressed from {last} to {p}");
+            last = p;
+            true
+        }).unwrap();
+        assert_eq!(last, 1.0);
     }
 
     #[test]

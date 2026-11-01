@@ -269,15 +269,14 @@ pub fn build_scene_with_progress(
     let mut ops = Vec::new();
     let mut probe = Probe::default();
     if s.land {
-        land::draw(&ctx, &lay, &mut ops);
+        if !land::draw_with_progress(&ctx, &lay, &mut ops, |p| progress(p * 0.8)) { return Err(CANCELLED.into()); }
     } else if let Some(frame) = lay.frame(field, s) {
         let is_panel = matches!(field, Field::Panel(_));
         let scatter = s.scatter && !is_panel;
         if scatter {
             plane::scatter(&ctx, &frame, &mut ops);
         } else {
-            plane::image(&ctx, &frame, &mut ops);
-            if !progress(0.35) { return Err(CANCELLED.into()); }
+            if !plane::image_with_progress(&ctx, &frame, &mut ops, |p| progress(p * 0.35)) { return Err(CANCELLED.into()); }
             if !is_panel && s.toko {
                 plane::contours(&ctx, &frame, &mut ops);
             }
