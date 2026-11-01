@@ -195,7 +195,7 @@ fn poly(pts: Vec<(f32, f32)>, c: Rgb, wire: bool) -> Op {
     if wire { Op::Polygon { pts, fill: None, stroke: Some(c) } } else { Op::Polygon { pts, fill: Some(c), stroke: Some(c) } }
 }
 
-fn unit_grid_cells(v: &View, g: &GridField, i0: usize, i1: usize, j0: usize, j1: usize, items: &mut Items, progress: &mut impl FnMut(f32) -> bool, from: f32, to: f32) -> bool {
+fn unit_grid_cells(v: &View, g: &GridField, i0: usize, i1: usize, j0: usize, j1: usize, items: &mut Items, progress: &mut impl FnMut(f32) -> bool, from: f32, to: f32, wire: bool) -> bool {
     let total = (i1 - i0) * (j1 - j0);
     let mut done = 0usize;
     for j in j0..j1 {
@@ -205,8 +205,15 @@ fn unit_grid_cells(v: &View, g: &GridField, i0: usize, i1: usize, j0: usize, j1:
             let [Some(z0),Some(z1),Some(z2),Some(z3)] = [g.at(i,j),g.at(i+1,j),g.at(i+1,j+1),g.at(i,j+1)] else { continue };
             let corners = [(i,j,z0),(i+1,j,z1),(i+1,j+1,z2),(i,j+1,z3)];
             let p: Vec<_> = corners.iter().map(|&(x,y,z)| v.pt(g.xs[x],g.ys[y],z)).collect();
-            let depth = p.iter().map(|q| q.1).sum::<f64>() / 4.0;
-            items.push((depth, poly(p.iter().map(|q| q.0).collect(), v.ctx.color((z0+z1+z2+z3)/4.0), false)));
+            if wire {
+                for edge in 0..4 {
+                    let (a,b)=(p[edge],p[(edge+1)%4]);
+                    items.push(((a.1+b.1)/2.0, Op::Polyline { pts: vec![a.0,b.0], color: v.ctx.color((corners[edge].2+corners[(edge+1)%4].2)/2.0), width: 1.0 }));
+                }
+            } else {
+                let depth = p.iter().map(|q| q.1).sum::<f64>() / 4.0;
+                items.push((depth, poly(p.iter().map(|q| q.0).collect(), v.ctx.color((z0+z1+z2+z3)/4.0), false)));
+            }
         }
     }
     progress(to)
@@ -214,6 +221,7 @@ fn unit_grid_cells(v: &View, g: &GridField, i0: usize, i1: usize, j0: usize, j1:
 
 fn grid_surface(v: &View, g: &GridField, items: &mut Items, progress: &mut impl FnMut(f32) -> bool) -> bool {
     let s = v.ctx.s;
+    let base_items = items.len();
     let (nx, ny) = (g.xs.len(), g.ys.len());
     let full = (nx - 1) * (ny - 1);
     if full > MAX_POLYS && s.surface && !g.z.iter().all(Option::is_some) {
@@ -227,7 +235,8 @@ fn grid_surface(v: &View, g: &GridField, items: &mut Items, progress: &mut impl 
         if let Some(completed) = reduced_grid_surface(v, g, items, progress) {
             return completed;
         }
-        return unit_grid_cells(v, g, 0, nx - 1, 0, ny - 1, items, progress, 0.08, 0.82);
+        items.truncate(base_items);
+        return unit_grid_cells(v, g, 0, nx - 1, 0, ny - 1, items, progress, 0.57, 0.82, !s.surface);
     }
     let stride = ((full as f64 / MAX_POLYS as f64).sqrt().ceil() as usize).max(1);
     let idx = |n: usize| -> Vec<usize> {
@@ -351,6 +360,7 @@ fn reduced_grid_surface(v: &View, g: &GridField, items: &mut Items, progress: &m
 
 fn reduced_sparse_grid_surface(v: &View, g: &GridField, items: &mut Items, progress: &mut impl FnMut(f32) -> bool) -> bool {
     let (nx, ny) = (g.xs.len(), g.ys.len());
+    let base_items = items.len();
     let full = (nx - 1) * (ny - 1);
     let target_blocks = (MAX_POLYS / 32).max(1);
     let mut stride = ((full as f64 / target_blocks as f64).sqrt().ceil() as usize).max(1);
@@ -363,6 +373,7 @@ fn reduced_sparse_grid_surface(v: &View, g: &GridField, items: &mut Items, progr
     let total = bw * bh;
     let mut complete = vec![true; total];
     let mut detailed_cells = 0usize;
+    let mut last_progress = 0.08f32;
     for by in 0..bh {
         for bx in 0..bw {
             let idx = by * bw + bx;
@@ -384,20 +395,26 @@ fn reduced_sparse_grid_surface(v: &View, g: &GridField, items: &mut Items, progr
     // reduced mesh budget, fall back to every original valid unit cell.
     let detail = detailed_cells <= MAX_POLYS / 4;
     if !detail {
-        return unit_grid_cells(v, g, 0, nx - 1, 0, ny - 1, items, progress, 0.08, 0.82);
+        return unit_grid_cells(v, g, 0, nx - 1, 0, ny - 1, items, progress, 0.08, 0.82, false);
     }
     let mut done = 0usize;
     for by in 0..bh {
         for bx in 0..bw {
             let idx = by * bw + bx;
             done += 1;
-            if done % 64 == 0 && !progress(0.08 + 0.72 * done as f32 / total.max(1) as f32) { return false; }
+            let tile_progress = 0.08 + 0.72 * done as f32 / total.max(1) as f32;
+            if done % 64 == 0 {
+                if !progress(tile_progress) { return false; }
+                last_progress = tile_progress;
+            }
             let (i0, i1, j0, j1) = (is[bx], is[bx+1], js[by], js[by+1]);
             if !complete[idx] {
-                let from=0.08+0.72*done.saturating_sub(1) as f32/total.max(1) as f32;
-                let to=0.08+0.72*done as f32/total.max(1) as f32;
-                if !unit_grid_cells(v,g,i0,i1,j0,j1,items,progress,from,to) { return false; }
-                if items.len() > MAX_POLYS { items.clear(); return unit_grid_cells(v,g,0,nx-1,0,ny-1,items,progress,0.08,0.82); }
+                if !unit_grid_cells(v,g,i0,i1,j0,j1,items,progress,last_progress,tile_progress,false) { return false; }
+                last_progress = tile_progress;
+                if items.len() > MAX_POLYS {
+                    items.truncate(base_items);
+                    return unit_grid_cells(v,g,0,nx-1,0,ny-1,items,progress,tile_progress,0.82,false);
+                }
                 continue;
             }
 
@@ -441,28 +458,37 @@ fn reduced_sparse_grid_surface(v: &View, g: &GridField, items: &mut Items, progr
             // Geometry failure is not cancellation: fall back to original valid
             // cells in this tile without reducing the source data.
             let Ok(tris) = crate::engine::mesh::triangulate_points(&points, |_| {}) else {
-                let from=0.08+0.72*done.saturating_sub(1) as f32/total.max(1) as f32;
-                let to=0.08+0.72*done as f32/total.max(1) as f32;
-                if !unit_grid_cells(v,g,i0,i1,j0,j1,items,progress,from,to) { return false; }
-                if items.len() > MAX_POLYS { items.clear(); return unit_grid_cells(v,g,0,nx-1,0,ny-1,items,progress,0.08,0.82); }
+                if !unit_grid_cells(v,g,i0,i1,j0,j1,items,progress,last_progress,tile_progress,false) { return false; }
+                last_progress = tile_progress;
+                if items.len() > MAX_POLYS {
+                    items.truncate(base_items);
+                    return unit_grid_cells(v,g,0,nx-1,0,ny-1,items,progress,tile_progress,0.82,false);
+                }
                 continue
             };
             if tris.is_empty() {
-                let from=0.08+0.72*done.saturating_sub(1) as f32/total.max(1) as f32;
-                let to=0.08+0.72*done as f32/total.max(1) as f32;
-                if !unit_grid_cells(v,g,i0,i1,j0,j1,items,progress,from,to) { return false; }
-                if items.len() > MAX_POLYS { items.clear(); return unit_grid_cells(v,g,0,nx-1,0,ny-1,items,progress,0.08,0.82); }
+                if !unit_grid_cells(v,g,i0,i1,j0,j1,items,progress,last_progress,tile_progress,false) { return false; }
+                last_progress = tile_progress;
+                if items.len() > MAX_POLYS {
+                    items.truncate(base_items);
+                    return unit_grid_cells(v,g,0,nx-1,0,ny-1,items,progress,tile_progress,0.82,false);
+                }
                 continue
             }
             if items.len() + tris.len() > MAX_POLYS {
-                items.clear();
-                return unit_grid_cells(v,g,0,nx-1,0,ny-1,items,progress,0.08,0.82);
+                if !progress(tile_progress) { return false; }
+                items.truncate(base_items);
+                return unit_grid_cells(v,g,0,nx-1,0,ny-1,items,progress,tile_progress,0.82,false);
             }
             for tri in tris {
                 let a=vertices[tri[0]]; let b=vertices[tri[1]]; let c=vertices[tri[2]];
                 let (za,zb,zc)=(g.at(a.0,a.1).unwrap(),g.at(b.0,b.1).unwrap(),g.at(c.0,c.1).unwrap());
                 let p=[v.pt(g.xs[a.0],g.ys[a.1],za),v.pt(g.xs[b.0],g.ys[b.1],zb),v.pt(g.xs[c.0],g.ys[c.1],zc)];
                 items.push(((p[0].1+p[1].1+p[2].1)/3.0, poly(p.iter().map(|q| q.0).collect(), v.ctx.color((za+zb+zc)/3.0), false)));
+            }
+            if done % 64 != 0 {
+                if !progress(tile_progress) { return false; }
+                last_progress = tile_progress;
             }
         }
     }
@@ -752,7 +778,7 @@ fn axes(v: &View, ops: &mut Vec<Op>) {
 mod tests {
     use super::super::testutil::*;
     use super::super::*;
-    use super::{reduce_mesh, reduced_grid_surface, reduced_sparse_grid_surface, Map, View, MAX_POLYS};
+    use super::{reduce_mesh, reduced_grid_surface, reduced_sparse_grid_surface, unit_grid_cells, Map, View, MAX_POLYS};
 
     fn land() -> Settings {
         let mut s = settings();
@@ -1058,12 +1084,33 @@ mod tests {
         let (x0,x1,y0,y1)=f.extent().unwrap();
         let view=View{ctx:&ctx,map:Map{x0,y0,xr:x1-x0,yr:y1-y0,wd:proj.wd,hd:proj.hd,cyl:None,flip:false,zlo:0.0,zr:1.0,hz:s.land_height.max(1) as f64},proj,bounds:(layout.w,layout.h)};
         let Field::Grid(g)=&f else { unreachable!() };
-        let mut items=Vec::new();
-        let mut progress=|_|true;
+        let sentinel=Op::Polyline{pts:vec![(0.0,0.0),(1.0,1.0)],color:Rgb::BLACK,width:1.0};
+        let mut items=vec![(0.0,sentinel.clone())];
+        let mut progress_values=Vec::new();
+        let mut progress=|p| { progress_values.push(p); true };
         assert!(reduced_sparse_grid_surface(&view,g,&mut items,&mut progress));
         let expected=(0..239).flat_map(|j|(0..239).map(move |i|(i,j)))
             .filter(|&(i,j)|[g.at(i,j),g.at(i+1,j),g.at(i+1,j+1),g.at(i,j+1)].iter().all(Option::is_some)).count();
         assert!(expected > MAX_POLYS/4, "test must exercise the unit-cell fallback");
-        assert_eq!(items.len(),expected,"all complete original cells must be retained");
+        assert_eq!(items.len()-1,expected,"all complete original cells must be retained");
+        assert!(matches!(items[0].1,Op::Polyline{..}), "fallback must preserve items owned by the caller");
+        assert!(progress_values.windows(2).all(|w| w[0] <= w[1]), "progress must be monotonic during fallback");
+    }
+
+    #[test]
+    fn unit_cell_fallback_preserves_wire_mode() {
+        let f=grid(4,4,|x,y|Some(x+y));
+        let mut s=land(); s.surface=false;
+        let ctx=Ctx::new(&f,&s);
+        let layout=Layout::new(&f,&s).unwrap();
+        let proj=layout.proj.unwrap().placed(layout.px,layout.py);
+        let (x0,x1,y0,y1)=f.extent().unwrap();
+        let zr=ctx.zr.unwrap();
+        let view=View{ctx:&ctx,map:Map{x0,y0,xr:x1-x0,yr:y1-y0,wd:proj.wd,hd:proj.hd,cyl:None,flip:false,zlo:zr.0,zr:(zr.1-zr.0).max(1e-300),hz:s.land_height.max(1) as f64},proj,bounds:(layout.w,layout.h)};
+        let Field::Grid(g)=&f else{unreachable!()};
+        let mut items=Vec::new(); let mut progress=|_|true;
+        assert!(unit_grid_cells(&view,g,0,3,0,3,&mut items,&mut progress,0.57,0.82,true));
+        assert_eq!(items.iter().filter(|(_,op)|matches!(op,Op::Polyline{..})).count(),36);
+        assert_eq!(items.iter().filter(|(_,op)|matches!(op,Op::Polygon{..})).count(),0);
     }
 }
