@@ -120,6 +120,9 @@ pub struct App {
     hot: Option<usize>,
     drag: Option<usize>,
     started_hwnd: bool,
+    batch_root_hidden: bool,
+    batch_hide_pending: bool,
+    batch_progress_frames: u8,
     bytes: Option<Arc<Vec<u8>>>,
     data_path: Option<PathBuf>,
     loaded: Option<Loaded>,
@@ -182,6 +185,9 @@ impl App {
             hot: None,
             drag: None,
             started_hwnd: false,
+            batch_root_hidden: false,
+            batch_hide_pending: false,
+            batch_progress_frames: 0,
             bytes: None,
             data_path: None,
             loaded: None,
@@ -317,6 +323,16 @@ impl App {
         let Some(job) = self.job.take() else { return };
         if std::mem::take(&mut self.dlg.mesh_cancel) {
             job.sh().0.cancel();
+            // Keep an active viewport available while a slow worker winds down.
+            // Otherwise cancelling closes the last visible window before the
+            // worker has returned and the main viewport can be restored.
+            if matches!(job, Job::Batch(_)) {
+                self.batch_hide_pending = false;
+                if self.batch_root_hidden {
+                    self.batch_root_hidden = false;
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                }
+            }
             // loading and parsing have nothing to keep
             if matches!(job, Job::Load(_) | Job::Reparse(_)) {
                 self.status_msg = jobs::CANCELLED.into();
@@ -369,7 +385,15 @@ impl App {
             },
             Job::Batch(h) => match h.poll() {
                 None => self.job = Some(Job::Batch(h)),
-                Some(r) => self.job_result = Some(r),
+                Some(r) => {
+                    self.batch_hide_pending = false;
+                    if self.batch_root_hidden {
+                        self.batch_root_hidden = false;
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                    }
+                    self.dlg.mesh = false;
+                    self.job_result = Some(r);
+                },
             },
         }
         if self.job_result.is_some() {
@@ -419,6 +443,8 @@ impl App {
             }
         };
         self.job = Some(Job::Batch(jobs::batch_job(ctx, files, self.store.clone(), kind)));
+        self.batch_hide_pending = true;
+        self.batch_progress_frames = 0;
     }
 
     fn save_image(&mut self) {
@@ -1036,6 +1062,11 @@ impl eframe::App for App {
         if self.first {
             self.first = false;
             dialogs::apply_interlocks(&mut self.store);
+            // Create startup dialogs only after the root viewport has been
+            // presented once; creating an owned viewport during the first
+            // frame can leave it blank on Windows.
+            if !self.start_files.is_empty() { ctx.request_repaint(); }
+        } else if !self.start_files.is_empty() {
             let files = std::mem::take(&mut self.start_files);
             self.load_files(&ctx, files);
         }
@@ -1105,6 +1136,26 @@ impl eframe::App for App {
         {
             let mut sh = Shared { forms: &self.forms, store: &mut self.store, assets: &self.assets, center };
             self.dlg.show(&ctx, &mut sh);
+        }
+        // Let the progress viewport be created and rendered for a full frame
+        // before hiding its native owner. Hiding the owner in start_batch can
+        // prevent Windows from ever showing the newly requested child window.
+        if self.batch_hide_pending {
+            if self.job.is_none() {
+                self.batch_hide_pending = false;
+            } else if let Some(progress_hwnd) = self.dlg.mesh.then(|| plat::find(Some(dialogs::T_MESH))).flatten() {
+                self.batch_progress_frames = self.batch_progress_frames.saturating_add(1);
+                if self.batch_progress_frames >= 2 {
+                    self.batch_hide_pending = false;
+                    // Windows hides owned windows together with their owner.
+                    // Detach the progress window before hiding the root so the
+                    // user retains access to the cancellation control.
+                    plat::detach_owner(progress_hwnd);
+                    self.batch_root_hidden = true;
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+                }
+                ctx.request_repaint();
+            }
         }
         if cfg_was_open && self.dlg.config.is_none() && std::mem::take(&mut self.dlg.config_ok) && self.bytes.is_some() {
             self.redraw(&ctx);

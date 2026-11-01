@@ -54,6 +54,11 @@ mod imp {
         }
     }
 
+    /// Keep a progress window visible when its owner is hidden.
+    pub fn detach_owner(h: isize) {
+        unsafe { SetWindowLongPtrW(h as HWND, GWLP_HWNDPARENT, 0); }
+    }
+
     pub fn enable(h: isize, on: bool) {
         unsafe {
             EnableWindow(h as HWND, on as BOOL);
@@ -129,6 +134,8 @@ mod imp {
         None
     }
     pub fn style_dialog(_: isize, _: Option<isize>) {}
+    pub fn detach_owner(_: isize) {}
+
     pub fn enable(_: isize, _: bool) {}
     pub fn activate(_: isize) {}
     pub fn choose_color(_: Option<isize>, _: u32) -> Option<u32> {
