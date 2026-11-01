@@ -168,7 +168,7 @@ pub fn batch_job(ctx: &egui::Context, files: Vec<String>, base: Store, kind: Bat
             let [fw, fh] = first.size();
             let (w, h) = batch::avi_size(size, (fw as u32, fh as u32));
             let mut first = Some(first);
-            export::avi::write_avi(
+            export::avi::write_avi_cancellable(
                 &path,
                 files.len(),
                 w,
@@ -185,8 +185,11 @@ pub fn batch_job(ctx: &egui::Context, files: Vec<String>, base: Store, kind: Bat
                     let [fw, fh] = r.size();
                     Ok((r.rgba(), fw as u32, fh as u32))
                 },
-                |p| sh.set_all(p),
-            )?;
+                |p| {
+                    sh.set_all(p);
+                    if sh.cancelled() { Err(CANCELLED.to_string()) } else { Ok(()) }
+                },
+            ).map_err(|e| if sh.cancelled() { CANCELLED.to_string() } else { e })?;
             Ok(format!("{} フレーム ({w} x {h}) の AVI ファイルを作成しました。", files.len()))
         }
     })
