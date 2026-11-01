@@ -619,7 +619,15 @@ impl App {
                 sw = sw.max(text_size(&p, &k.sc, &font).x);
             }
         }
-        let width = (30.0 + (tw_sc + 17.0 + sw).max(tw_plain + 19.0) + 14.0).round();
+        // The last two popups have small per-menu right-margin differences in the
+        // Win32 reference (redraw +2px, help +1px). Their caption/shortcut widths
+        // alone do not account for that native menu-template padding.
+        let native_margin = match i {
+            3 => 2.0, // 再描画
+            4 => 1.0, // ヘルプ
+            _ => 0.0,
+        };
+        let width = (30.0 + (tw_sc + 17.0 + sw).max(tw_plain + 19.0) + 14.0).round() + native_margin;
         let mut ys = vec![];
         let mut y = 3.0;
         for k in kids {
