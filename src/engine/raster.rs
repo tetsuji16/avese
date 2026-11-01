@@ -8,6 +8,9 @@ use tiny_skia::{Color, FillRule, Paint, Path, PathBuilder, Pixmap, Rect, Stroke,
 
 type FontCache = Mutex<HashMap<(PathBuf, u32), Option<Arc<FontVec>>>>;
 
+/// Horizontal lean of a synthesised italic, about 12 degrees (tan 12° ≈ 0.21).
+const ITALIC_SHEAR: f32 = 0.21;
+
 fn cache() -> &'static FontCache {
     static C: OnceLock<FontCache> = OnceLock::new();
     C.get_or_init(|| Mutex::new(HashMap::new()))
@@ -310,11 +313,27 @@ fn draw_text(pm: &mut Pixmap, x: f32, y: f32, text: &str, font: &FontRef, color:
     let (left, top) = anchor_origin(anchor, x, y, w, h);
     let base = top + layout.ascent;
     let strikes = if font.style & 1 != 0 { 2 } else { 1 };
+    // fsItalic: lean the glyph pixels around the baseline, the way GDI synthesises an
+    // italic face. The shift is split over the two columns it falls between so the
+    // stroke keeps its weight instead of stair-stepping.
+    let shear = if font.style & 2 != 0 { ITALIC_SHEAR } else { 0.0 };
     for glyph in &layout.glyphs {
         if let Some(o) = glyph.face.outline_glyph(glyph.id.with_scale_and_position(glyph.scale, point(left + glyph.x, base))) {
             let b = o.px_bounds();
             for s in 0..strikes {
-                o.draw(|gx, gy, cov| blend(pm, b.min.x as i32 + gx as i32 + s, b.min.y as i32 + gy as i32, color, cov));
+                o.draw(|gx, gy, cov| {
+                    let px = b.min.x as i32 + gx as i32 + s;
+                    let py = b.min.y as i32 + gy as i32;
+                    if shear == 0.0 {
+                        blend(pm, px, py, color, cov);
+                    } else {
+                        let dx = (base - py as f32) * shear;
+                        let whole = dx.floor();
+                        let f = dx - whole;
+                        blend(pm, px + whole as i32, py, color, cov * (1.0 - f));
+                        blend(pm, px + whole as i32 + 1, py, color, cov * f);
+                    }
+                });
             }
         }
     }
@@ -515,6 +534,34 @@ mod tests {
         assert!(Arc::ptr_eq(&layout.glyphs[2].face, &primary));
         assert_ne!(layout.glyphs[1].id.0, 0);
         assert_eq!(measure_text("A日B", &font), (layout.width, layout.ascent - layout.descent));
+    }
+
+    /// fsItalic leans the glyph pixels to the right around the baseline (#18).
+    #[test]
+    fn italic_text_leans_right_above_the_baseline() {
+        let upright = FontRef { family: "ＭＳ Ｐゴシック".into(), size_pt: 24.0, style: 0 };
+        if layout_text("H", &upright).is_none() {
+            return; // no Japanese font on this machine
+        }
+        let italic = FontRef { style: 2, ..upright.clone() };
+        let draw = |font: FontRef| {
+            rasterize(&Scene {
+                width: 80,
+                height: 80,
+                bg: Rgb(255, 255, 255),
+                ops: vec![Op::Text { x: 10.0, y: 10.0, text: "H".into(), font, color: Rgb::BLACK, anchor: Anchor::TopLeft }],
+            })
+        };
+        let (a, b) = (draw(upright), draw(italic));
+        let ink_rows = |pm: &Pixmap| (0..pm.height()).filter(|y| (0..pm.width()).any(|x| px(pm, x, *y).0 < 200)).collect::<Vec<_>>();
+        let left_of = |pm: &Pixmap, y: u32| (0..pm.width()).find(|x| px(pm, *x, y).0 < 200).unwrap();
+        let (ra, rb) = (ink_rows(&a), ink_rows(&b));
+        assert!(!ra.is_empty() && !rb.is_empty(), "both faces must draw ink");
+        assert_eq!(ra.len(), rb.len(), "the shear must not change the height");
+        // the top of the italic stem sits further right, the baseline barely moves
+        assert!(left_of(&b, rb[0]) > left_of(&a, ra[0]), "italic must lean right at the top");
+        let (top, bottom) = (left_of(&b, rb[0]) as i32 - left_of(&a, ra[0]) as i32, left_of(&b, *rb.last().unwrap()) as i32 - left_of(&a, *ra.last().unwrap()) as i32);
+        assert!(top > bottom, "the lean must shrink towards the baseline: top={top} bottom={bottom}");
     }
 
     #[test]
