@@ -7,7 +7,7 @@ license = "MIT"
 [dependencies]
 ab_glyph = "0.2.32"
 colorous = "1"
-contour = "0.13"
+contour = { path = "vendor/contour" }
 delaunator = "1.1.0"
 eframe = { version = "0.37", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
 egui = "0.37"
@@ -26,6 +26,7 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_
 
 [dev-dependencies]
 image = { version = "0.25", default-features = false, features = ["png", "bmp"] }
+contour_reference = { package = "contour", version = "0.13.1" }
 
 [profile.release]
 opt-level = 2
