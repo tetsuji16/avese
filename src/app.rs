@@ -1062,6 +1062,11 @@ impl eframe::App for App {
         if self.first {
             self.first = false;
             dialogs::apply_interlocks(&mut self.store);
+            // Create startup dialogs only after the root viewport has been
+            // presented once; creating an owned viewport during the first
+            // frame can leave it blank on Windows.
+            if !self.start_files.is_empty() { ctx.request_repaint(); }
+        } else if !self.start_files.is_empty() {
             let files = std::mem::take(&mut self.start_files);
             self.load_files(&ctx, files);
         }
