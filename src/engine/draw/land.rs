@@ -322,10 +322,14 @@ fn reduced_grid_surface(v: &View, g: &GridField, items: &mut Items, progress: &m
         for (ai, iw) in is.windows(2).enumerate() {
             let index = bi * (is.len() - 1) + ai;
             if index % 128 == 0 && !progress(0.08 + 0.48 * index as f32 / block_count.max(1) as f32) { return Some(false); }
+            let block_progress = 0.08 + 0.48 * index as f32 / block_count.max(1) as f32;
             let mut lo = (iw[0], jw[0], g.at(iw[0], jw[0]).unwrap());
             let mut hi = lo;
+            let mut scanned = 0usize;
             for j in jw[0]..=jw[1] {
                 for i in iw[0]..=iw[1] {
+                    scanned += 1;
+                    if scanned % 8192 == 0 && !progress(block_progress) { return Some(false); }
                     let z = g.at(i, j).unwrap();
                     if z < lo.2 { lo = (i, j, z); }
                     if z > hi.2 { hi = (i, j, z); }
@@ -376,12 +380,15 @@ fn reduced_sparse_grid_surface(v: &View, g: &GridField, items: &mut Items, progr
     let total = bw * bh;
     let mut complete = vec![true; total];
     let mut detailed_cells = 0usize;
+    let mut scanned = 0usize;
     let mut last_progress = 0.08f32;
     for by in 0..bh {
         for bx in 0..bw {
             let idx = by * bw + bx;
             'scan: for j in js[by]..=js[by + 1] {
                 for i in is[bx]..=is[bx + 1] {
+                    scanned += 1;
+                    if scanned % 8192 == 0 && !progress(0.08) { return false; }
                     if g.at(i, j).is_none() { complete[idx] = false; break 'scan; }
                 }
             }
@@ -1073,6 +1080,27 @@ mod tests {
             inside
         };
         assert!(!items.iter().any(|(_,op)| matches!(op,Op::Polygon{pts,..} if contains(pts))), "missing cell was covered by a coarse triangle");
+    }
+
+    #[test]
+    fn oversized_sparse_grid_can_cancel_during_pre_scan() {
+        let f = grid(450, 450, |x, y| {
+            if x == 20.0 && y == 20.0 { None } else { Some(0.0) }
+        });
+        let s = land();
+        let ctx = Ctx::new(&f, &s);
+        let layout = Layout::new(&f, &s).unwrap();
+        let proj = layout.proj.unwrap().placed(layout.px, layout.py);
+        let (x0,x1,y0,y1) = f.extent().unwrap();
+        let zr = ctx.zr.unwrap();
+        let view = View { ctx: &ctx, map: Map { x0,y0,xr:x1-x0,yr:y1-y0,wd:proj.wd,hd:proj.hd,cyl:None,flip:false,zlo:zr.0,zr:(zr.1-zr.0).max(1e-300),hz:s.land_height.max(1) as f64 }, proj, bounds:(layout.w,layout.h) };
+        let Field::Grid(g) = &f else { unreachable!() };
+        let mut calls = 0;
+        let mut progress = |_| { calls += 1; false };
+        let mut items = Vec::new();
+        assert!(!reduced_sparse_grid_surface(&view, g, &mut items, &mut progress));
+        assert_eq!(calls, 1, "cancellation should be observed at the first periodic pre-scan check");
+        assert!(items.is_empty());
     }
 
     #[test]
