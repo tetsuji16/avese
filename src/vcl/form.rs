@@ -909,17 +909,11 @@ impl<'a> Renderer<'a> {
         self.set_hover(n, id, &resp);
     }
 
-    /// Wire-frame box preview (PBangle). Pixel geometry is measured from the original at eta=30, phi=30;
-    /// other angles use a plausible projection (the original formula is not recoverable from one reference).
+    /// Wire-frame box preview (PBangle). The geometry is anchored on the original at eta=30, phi=30
+    /// (59, 34, 49, 39) and follows an orthographic rotation for every other angle.
     fn angle_box(&mut self, r: Rect) {
         let p = self.p().with_clip_rect(r);
-        let eta = self.store.position("SEeta").clamp(-45, 45) as f32;
-        let phi = self.store.position("SEphi").clamp(0, 85) as f32;
-        let (e, ph) = (eta.to_radians(), phi.to_radians());
-        let sx = e.cos() / 30f32.to_radians().cos();
-        let sy = (0.35 + 0.65 * ph.sin()) / (0.35 + 0.65 * 0.5);
-        let sz = ph.cos().max(0.1) / 30f32.to_radians().cos();
-        let (w, ydx, ydy, h) = ((59.0 * sx).round() as i32, (68.0 * e.sin()).round() as i32, (49.0 * sy).round() as i32, (39.0 * sz).round() as i32);
+        let (w, ydx, ydy, h) = angle_box_metrics(self.store.position("SEeta"), self.store.position("SEphi"));
         let org = (r.min.x as i32 + 3, r.min.y as i32 + 97); // top-left pixel of the 2x2 axis corner
         let dot = |x: i32, y: i32| fill(&p, Rect::from_min_size(Pos2::new(x as f32, y as f32), Vec2::splat(1.0)), BLACK);
         let line = |a: (i32, i32), b: (i32, i32), thick: bool| {
@@ -1117,6 +1111,25 @@ impl<'a> Renderer<'a> {
     }
 }
 
+/// Box size for the PBangle preview: (front width, back offset x, back offset y, height).
+///
+/// The original could only be measured at eta=30, phi=30, which gives (59, 34, 49, 39).
+/// Every other angle uses the same orthographic rotation as the bird's-eye view
+/// (`engine::draw::land::Proj`), normalized so that the measured angle is reproduced exactly:
+/// the horizontal edge keeps its length times cos(eta), the depth edge foreshortens by
+/// cos(eta) * cos(phi), and the vertical edge by cos(phi). Both shrink to nothing in a top view
+/// (phi=85) and are largest in a side view (phi=0).
+fn angle_box_metrics(eta: i32, phi: i32) -> (i32, i32, i32, i32) {
+    let e = (eta.clamp(-45, 45) as f32).to_radians();
+    let p = (phi.clamp(0, 85) as f32).to_radians();
+    let (a, b) = (30f32.to_radians(), 30f32.to_radians());
+    let w = 59.0 * e.cos() / a.cos();
+    let dx = 68.0 * e.sin();
+    let dy = 49.0 * e.cos() * p.cos() / (a.cos() * b.cos());
+    let h = 39.0 * p.cos() / b.cos();
+    (w.round() as i32, dx.round() as i32, dy.round().max(0.0) as i32, h.round().max(0.0) as i32)
+}
+
 fn find_flag(n: &Node, flag: &str) -> Option<String> {
     if n.class == "TButton" && n.flag(flag, false) {
         return Some(n.name.clone());
@@ -1127,6 +1140,34 @@ fn find_flag(n: &Node, flag: &str) -> Option<String> {
 #[cfg(test)]
 mod modal_tests {
     use super::*;
+
+    #[test]
+    fn angle_box_reproduces_the_measured_default_and_follows_the_view() {
+        // measured from the original at the default 30/30
+        assert_eq!(angle_box_metrics(30, 30), (59, 34, 49, 39));
+        // eta=0: no depth offset, the widest front face
+        assert_eq!(angle_box_metrics(0, 30), (68, 0, 57, 39));
+        // the depth edge and the height both shrink as the view tilts towards the top
+        let depth: Vec<i32> = (0..=85).step_by(5).map(|p| angle_box_metrics(30, p).2).collect();
+        let height: Vec<i32> = (0..=85).step_by(5).map(|p| angle_box_metrics(30, p).3).collect();
+        assert!(depth.windows(2).all(|w| w[0] >= w[1]), "depth edge must not grow with phi: {depth:?}");
+        assert!(height.windows(2).all(|w| w[0] >= w[1]), "height must not grow with phi: {height:?}");
+        assert_eq!(*depth.last().unwrap(), 5, "top view keeps a thin depth edge");
+        assert_eq!(*height.last().unwrap(), 4, "top view flattens the box");
+        // the side view keeps the box tall and deep
+        assert_eq!(angle_box_metrics(0, 0).3, 45);
+        assert!(angle_box_metrics(0, 0).2 > 49);
+        // every legal angle gives a drawable box
+        for eta in -45..=45 {
+            for phi in 0..=85 {
+                let (w, dx, dy, h) = angle_box_metrics(eta, phi);
+                assert!(w > 0 && dy >= 0 && h >= 0, "eta={eta} phi={phi}");
+                assert!(dx.abs() <= 49, "eta={eta} phi={phi} dx={dx}");
+            }
+        }
+        // out of range values are clamped, not wrapped
+        assert_eq!(angle_box_metrics(-90, 120), angle_box_metrics(-45, 85));
+    }
 
     #[test]
     fn disabled_parent_controls_do_not_take_tab_or_accept_input() {

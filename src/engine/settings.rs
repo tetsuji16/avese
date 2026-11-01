@@ -341,4 +341,20 @@ mod tests {
         assert_eq!(s.size, 300);
         assert!(!s.size_by_height);
     }
+
+    /// The settings dialog links TBeta/SEeta and TBphi/SEphi one to one. The DFM shows the same
+    /// range, hint and default for each pair, so the conversion is the identity (issue #8).
+    #[test]
+    fn angle_trackbars_and_spins_share_their_range_and_default() {
+        let f = crate::forms::Forms::load();
+        let cfg = &f.config;
+        for (track, spin, lo, hi, default) in [("TBeta", "SEeta", -45, 45, 30), ("TBphi", "SEphi", 0, 85, 30)] {
+            let t = cfg.find(track).unwrap_or_else(|| panic!("{track} missing"));
+            let s = cfg.find(spin).unwrap_or_else(|| panic!("{spin} missing"));
+            assert_eq!((t.int("Min"), t.int("Max")), (lo, hi), "{track} range");
+            assert_eq!((s.int("MinValue"), s.int("MaxValue")), (lo, hi), "{spin} range");
+            assert_eq!(t.int("Position"), default, "{track} default");
+            assert_eq!(s.int("Value"), default, "{spin} default");
+        }
+    }
 }
