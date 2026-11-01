@@ -430,4 +430,35 @@ mod tests {
         let edge = b.probe.at(c + 49.0, c).unwrap();
         assert!(edge.y > 3.8);
     }
+
+    #[test]
+    fn cylindrical_panel_uses_columns_as_angle_and_rows_as_radius() {
+        use crate::engine::data::PanelData;
+        let f = Field::Panel(PanelData { rows:2, cols:4, z:vec![Some(0.0),Some(1.0),Some(2.0),Some(3.0),Some(4.0),Some(5.0),Some(6.0),Some(7.0)] });
+        let mut s = settings();
+        s.panel = true;
+        s.cylindrical = true;
+        s.scale_h = 3.0;
+        s.scale_v = 0.5;
+        let b = build_scene(&f, &s, &[]).unwrap();
+        let frame = b.probe.frame().unwrap();
+        assert_eq!((frame.w, frame.h), (100.0, 100.0));
+        assert!(frame.cyl.is_some());
+        let Op::Image { w, h, rgba, .. } = &b.scene.ops[0] else { panic!("missing panel image") };
+        assert_eq!((*w, *h), (100, 100));
+        let center = frame.centre();
+        let ctx = Ctx::new(&f, &s);
+        for (col, angle) in [(0,45.0_f64),(1,135.0),(2,225.0),(3,315.0)] {
+            let (sn, cs) = angle.to_radians().sin_cos();
+            let (px, py) = (center.0 + 18.0 * cs, center.1 - 18.0 * sn);
+            let hit = b.probe.at_field(px, py, &f).unwrap();
+            assert_eq!(hit.z, Some(col as f64));
+            let ix = (px - frame.ox) as usize;
+            let iy = (py - frame.oy) as usize;
+            let pixel = &rgba[(iy * *w as usize + ix) * 4..][..4];
+            let c = ctx.color(col as f64);
+            assert_eq!(pixel, &[c.0,c.1,c.2,255]);
+        }
+        assert_eq!(rgba[3], 0, "outside the circle must remain transparent");
+    }
 }
