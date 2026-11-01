@@ -127,6 +127,15 @@ pub fn install(ctx: &egui::Context) {
     if let Some(f) = &fallback {
         defs.families.entry(FontFamily::Proportional).or_default().push(f.clone());
     }
+    // Phosphor icons are MIT licensed; the font bytes come from egui-phosphor.
+    // Register them against this application's egui version rather than using
+    // the helper's egui types, which are tied to a different minor version.
+    let icon_key = "phosphor".to_owned();
+    defs.font_data.insert(icon_key.clone(), Arc::new(FontData::from_static(egui_phosphor::variants::bytes::regular::FONT)));
+    let mut proportional = defs.families.get(&FontFamily::Proportional).cloned().unwrap_or_default();
+    proportional.insert(proportional.len().min(1), icon_key.clone());
+    defs.families.insert(FontFamily::Proportional, proportional.clone());
+    defs.families.insert(FontFamily::Name(icon_key.into()), proportional);
     ctx.set_fonts(defs);
 }
 

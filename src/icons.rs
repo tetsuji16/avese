@@ -1,7 +1,31 @@
-//! Toolbar/menu icons: textures from assets/local/imagelist.png when present, otherwise drawn in code.
+//! Toolbar/menu icons: Phosphor for common actions, generated custom art for plot modes.
 use crate::vcl::form::Assets;
 use crate::vcl::*;
 use egui::{Color32, Painter, Pos2, Rect, TextureHandle, Vec2};
+
+/// Phosphor regular icons used for common file and view actions.
+/// Phosphor is MIT licensed. Font/codepoint source: https://github.com/amPerl/egui-phosphor
+/// and https://github.com/phosphor-icons/core. See the package license in Cargo.toml.
+fn standard_icon(idx: usize) -> Option<&'static str> {
+    use egui_phosphor::regular as ph;
+    Some(match idx {
+        0 => ph::FOLDER_OPEN,
+        1 => ph::FLOPPY_DISK,
+        2 => ph::COPY,
+        3 | 14 => ph::ARROW_CLOCKWISE,
+        4 => ph::GEAR,
+        5 => ph::QUESTION,
+        18 => ph::CROSSHAIR,
+        _ => return None,
+    })
+}
+
+fn draw_standard(p: &Painter, idx: usize, r: Rect, enabled: bool) {
+    if let Some(glyph) = standard_icon(idx) {
+        let color = if enabled { BLACK } else { SHADOW };
+        p.text(r.center(), egui::Align2::CENTER_CENTER, glyph, egui::FontId::new(17.0, egui::FontFamily::Name("phosphor".into())), color);
+    }
+}
 
 /// Fallback glyphs per ImageList index: (text, background).
 const GLYPHS: [(&str, (u8, u8, u8)); 20] = [
@@ -12,6 +36,10 @@ const GLYPHS: [(&str, (u8, u8, u8)); 20] = [
 ];
 
 pub fn draw(p: &Painter, sheet: Option<&TextureHandle>, idx: usize, r: Rect, enabled: bool) {
+    if standard_icon(idx).is_some() {
+        draw_standard(p, idx, r, enabled);
+        return;
+    }
     let tint = if enabled { Color32::WHITE } else { Color32::from_gray(150) };
     if let Some(t) = sheet {
         let (cx, cy) = ((idx % 4) as f32, (idx / 4) as f32);
@@ -76,6 +104,10 @@ fn lx_ok(v: usize) -> bool {
 
 /// Toolbar glyph in its button state (normal, pressed/checked, disabled).
 pub fn draw_tb(p: &Painter, a: &Assets, idx: usize, r: Rect, enabled: bool, checked: bool) {
+    if standard_icon(idx).is_some() {
+        draw_standard(p, idx, r, enabled);
+        return;
+    }
     // the pattern is anchored to the VCL client origin, which sits one pixel row (odd) above ours
     let odd = ((r.min.x + r.min.y).round() as i64).rem_euclid(2) == 0;
     let variant = if !enabled { a.imagelist_dis.as_ref() } else if checked { if odd { a.imagelist_chk1.as_ref() } else { a.imagelist_chk.as_ref() } } else { a.imagelist.as_ref() };
@@ -85,6 +117,24 @@ pub fn draw_tb(p: &Painter, a: &Assets, idx: usize, r: Rect, enabled: bool, chec
         }
         _ => draw(p, None, idx, r, enabled),
     }
+}
+
+/// Draw a generated custom icon from the 4x3, 20px-cell sheet.
+/// Indices follow the application's ImageList positions. Returns true when mapped.
+pub fn draw_custom(p: &Painter, sheet: Option<&TextureHandle>, idx: usize, r: Rect, enabled: bool) -> bool {
+    let cell = match idx {
+        6 => 0, 7 => 1, 8 => 2, 9 => 3, 10 => 4, 11 => 5, 12 => 6,
+        15 => 7, 16 => 8, 17 => 9, 19 => 11,
+        _ => return false,
+    };
+    let Some(t) = sheet else { return false };
+    let uv = Rect::from_min_max(
+        Pos2::new((cell % 4) as f32 / 4.0, (cell / 4) as f32 / 3.0),
+        Pos2::new((cell % 4 + 1) as f32 / 4.0, (cell / 4 + 1) as f32 / 3.0),
+    );
+    let tint = if enabled { Color32::WHITE } else { Color32::from_gray(150) };
+    p.image(t.id(), r, uv, tint);
+    true
 }
 
 pub fn draw_fallback_logo(p: &Painter, r: Rect) {
