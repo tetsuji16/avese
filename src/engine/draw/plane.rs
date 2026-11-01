@@ -195,8 +195,21 @@ pub fn contour_levels(ctx: &Ctx) -> Vec<f64> {
         if !(s.toko_dt > 0.0) {
             return vec![];
         }
-        let k0 = (lo / s.toko_dt).ceil();
-        (0..MAX_LEVELS).map(|n| (k0 + n as f64) * s.toko_dt).take_while(|&v| v <= hi).collect()
+        let quotient = lo / s.toko_dt;
+        if !quotient.is_finite() { return vec![]; }
+        let nearest = quotient.round();
+        let index_tolerance = (8.0 * f64::EPSILON * quotient.abs().max(1.0)).min(0.25);
+        let k0 = if (quotient - nearest).abs() <= index_tolerance { nearest } else { quotient.ceil() };
+        let mut levels = Vec::new();
+        for n in 0..MAX_LEVELS {
+            let v = (k0 + n as f64) * s.toko_dt;
+            let tolerance = (8.0 * f64::EPSILON * hi.abs().max(v.abs()).max(s.toko_dt)).min(s.toko_dt * 0.25);
+            if !v.is_finite() || (v > hi && v - hi > tolerance) { break; }
+            // Very small steps relative to the offset can round to the same
+            // f64 value; do not draw the same line hundreds of times.
+            if levels.last().is_none_or(|last| *last != v) { levels.push(v); }
+        }
+        levels
     } else {
         let n = (s.toko_count as usize).min(MAX_LEVELS);
         (1..=n).map(|k| lo + (hi - lo) * k as f64 / (n + 1) as f64).collect()
@@ -599,6 +612,34 @@ mod tests {
         s.toko_min = 3.0;
         let ctx = Ctx::new(&f, &s);
         assert_eq!(plane::contour_levels(&ctx), vec![5.0, 7.5, 10.0]);
+    }
+
+    #[test]
+    fn contour_step_includes_decimal_boundaries_without_leaking_past_range() {
+        let f = grid(2, 2, |x, _| Some(x));
+        let mut s = settings();
+        s.toko_by_count = false;
+        s.toko_by_step = true;
+        s.toko_dt = 0.1;
+        s.toko_min_on = true;
+        s.toko_max_on = true;
+        s.toko_min = -0.3;
+        s.toko_max = 0.3;
+        let levels = plane::contour_levels(&Ctx::new(&f, &s));
+        assert_eq!(levels.len(), 7);
+        for (actual, expected) in levels.iter().zip([-0.3,-0.2,-0.1,0.0,0.1,0.2,0.3]) {
+            assert!((actual - expected).abs() < 1e-14);
+        }
+        s.toko_min = -0.299;
+        s.toko_max = 0.299;
+        let levels = plane::contour_levels(&Ctx::new(&f, &s));
+        assert_eq!(levels.len(), 5);
+        assert!(levels.iter().all(|v| *v >= s.toko_min && *v <= s.toko_max));
+        s.toko_dt = 1.0;
+        s.toko_min = 1_000_000_000_000_000.4;
+        s.toko_max = 1_000_000_000_000_002.0;
+        let levels = plane::contour_levels(&Ctx::new(&f, &s));
+        assert_eq!(levels, vec![1_000_000_000_000_001.0, 1_000_000_000_000_002.0]);
     }
 
     #[test]
