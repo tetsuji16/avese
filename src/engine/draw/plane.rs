@@ -80,11 +80,12 @@ pub fn image_with_progress(ctx: &Ctx, frame: &Frame, ops: &mut Vec<Op>, mut prog
             let completed = AtomicUsize::new(0);
             let cancelled = AtomicBool::new(false);
             std::thread::scope(|scope| {
+                let mut workers = Vec::new();
                 for (chunk_index, chunk) in rgba.chunks_mut(rows_per * w * 4).enumerate() {
                     let completed = &completed;
                     let cancelled = &cancelled;
                     let frame = *frame;
-                    scope.spawn(move || {
+                    workers.push(scope.spawn(move || {
                         for (row_index, row) in chunk.chunks_mut(w * 4).enumerate() {
                             if row_index % 8 == 0 && cancelled.load(Ordering::Relaxed) { break; }
                             let j = chunk_index * rows_per + row_index;
@@ -97,12 +98,14 @@ pub fn image_with_progress(ctx: &Ctx, frame: &Frame, ops: &mut Vec<Op>, mut prog
                             }
                             completed.fetch_add(1, Ordering::Relaxed);
                         }
-                    });
+                    }));
                 }
                 let mut reported = 0usize;
                 loop {
                     let now = completed.load(Ordering::Relaxed);
-                    if now >= h || cancelled.load(Ordering::Relaxed) { break; }
+                    // A panicked worker cannot finish its rows; leave the loop so
+                    // thread::scope can propagate the panic to the job handler.
+                    if now >= h || cancelled.load(Ordering::Relaxed) || workers.iter().all(|w| w.is_finished()) { break; }
                     if now.saturating_sub(reported) >= 8 {
                         reported = now;
                         if !progress(now as f32 / h.max(1) as f32) {
