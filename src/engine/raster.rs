@@ -615,8 +615,9 @@ mod tests {
         // Where the real bold face exists, no extra synthetic pixel is added.
         let arial = layout_text("Hello", &f("Arial", 1));
         if let Some(l) = arial.filter(|l| l.glyphs.iter().all(|g| !g.fake_bold)) {
-            let advance: f32 = l.width;
-            assert!(advance > 0.0);
+            let last = l.glyphs.last().unwrap();
+            let bare = last.x + last.face.as_scaled(last.scale).h_advance(last.id);
+            assert_eq!(l.width, bare);
         }
     }
 

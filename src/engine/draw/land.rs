@@ -139,15 +139,16 @@ pub(crate) fn draw_with_progress(ctx: &Ctx, lay: &Layout, ops: &mut Vec<Op>, mut
             Field::Panel(_) => if !panel_surface(&v, &mut items, &mut progress) { return false; },
         }
         if !s.surface {
-            match ctx.field {
-                Field::Grid(g) => grid_skirts(&v, g, &mut items),
-                Field::Mesh(m) => mesh_skirts(&v, m, &mut items),
-                Field::Panel(_) => {}
-            }
+            let done = match ctx.field {
+                Field::Grid(g) => grid_skirts(&v, g, &mut items, &mut progress),
+                Field::Mesh(m) => mesh_skirts(&v, m, &mut items, &mut progress),
+                Field::Panel(_) => true,
+            };
+            if !done { return false; }
         }
     }
-    if s.grid && s.grid_mesh {
-        surface_mesh(&v, &mut items);
+    if s.grid && s.grid_mesh && !surface_mesh(&v, &mut items, &mut progress) {
+        return false;
     }
     if !progress(0.82) { return false; }
     items.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
@@ -663,30 +664,38 @@ fn faces_viewer(v: &View, a: (f64, f64), b: (f64, f64), inner: (f64, f64)) -> bo
 }
 
 /// Draw the skirts for edges given in world coordinates, sharing the polygon budget between them.
+/// Only heavily fragmented data has more walls than the budget; an even share of them is kept.
 fn push_walls(v: &View, walls: &[((f64, f64, f64), (f64, f64, f64))], items: &mut Items) {
-    let budget = (MAX_POLYS / 4) / walls.len().max(1);
-    let bands = ((v.map.hz / 1.5).ceil() as usize).min(COLOR_STEPS as usize).min(budget).max(1);
-    for &(a, b) in walls {
+    let budget = MAX_POLYS / 4;
+    let bands = ((v.map.hz / 1.5).ceil() as usize).min(COLOR_STEPS as usize).min(budget / walls.len().max(1)).max(1);
+    for &(a, b) in walls.iter().step_by(walls.len().div_ceil(budget).max(1)) {
         wall(v, a, b, bands, items);
+    }
+}
+
+/// The cell column beside a column of cells, if any. Theta (x) wraps around in cylindrical
+/// coordinates: the first and last columns meet.
+fn neighbour_column(n: Option<usize>, nx: usize, cyl: bool) -> Option<usize> {
+    match n {
+        Some(n) if n + 1 < nx => Some(n),
+        Some(_) => cyl.then_some(0),
+        None => cyl.then(|| nx - 2),
     }
 }
 
 /// With `CBsurface` off the original closes the surface with solid walls down to the floor along
 /// the edges that face the viewer, including the edges of missing data.
-fn grid_skirts(v: &View, g: &GridField, items: &mut Items) {
+fn grid_skirts(v: &View, g: &GridField, items: &mut Items, progress: &mut impl FnMut(f32) -> bool) -> bool {
     let (nx, ny) = (g.xs.len(), g.ys.len());
     let cyl = v.map.cyl.is_some();
     let ok = |i: usize, j: usize| i + 1 < nx && j + 1 < ny && g.at(i, j).is_some() && g.at(i + 1, j).is_some() && g.at(i, j + 1).is_some() && g.at(i + 1, j + 1).is_some();
     let mut walls = Vec::new();
     for j in 0..ny.saturating_sub(1) {
+        if j % 16 == 0 && !progress(0.82) { return false; }
         for i in 0..nx.saturating_sub(1) {
             if !ok(i, j) { continue; }
             let inner = v.map.xy((g.xs[i] + g.xs[i + 1]) / 2.0, (g.ys[j] + g.ys[j + 1]) / 2.0);
-            // theta (x) wraps around: the first and last columns meet, so there is no wall
-            let open_i = |n: Option<usize>| match n {
-                Some(n) if n + 1 < nx => !ok(n, j),
-                _ => !cyl,
-            };
+            let open_i = |n: Option<usize>| neighbour_column(n, nx, cyl).is_none_or(|n| !ok(n, j));
             let edges = [
                 (j == 0 || !ok(i, j - 1), (i, j), (i + 1, j)),
                 (!ok(i, j + 1), (i, j + 1), (i + 1, j + 1)),
@@ -713,43 +722,86 @@ fn grid_skirts(v: &View, g: &GridField, items: &mut Items) {
         }
     }
     push_walls(v, &walls, items);
+    true
 }
 
-fn mesh_skirts(v: &View, m: &MeshField, items: &mut Items) {
+fn mesh_skirts(v: &View, m: &MeshField, items: &mut Items, progress: &mut impl FnMut(f32) -> bool) -> bool {
     use std::collections::HashMap;
     let mut edges = HashMap::<(usize, usize), (u32, usize)>::new();
-    for t in &m.tris {
+    for (n, t) in m.tris.iter().enumerate() {
+        if n % 8192 == 0 && !progress(0.82) { return false; }
         if t.iter().any(|&k| m.z[k].is_none()) { continue; }
         for (a, b, c) in [(t[0], t[1], t[2]), (t[1], t[2], t[0]), (t[2], t[0], t[1])] {
             edges.entry((a.min(b), a.max(b))).or_insert((0, c)).0 += 1;
         }
     }
     let world = |k: usize| v.map.xy(m.nodes[k].0, m.nodes[k].1);
-    let walls: Vec<_> = edges.into_iter().filter(|e| e.1.0 == 1 && faces_viewer(v, world(e.0.0), world(e.0.1), world(e.1.1))).filter_map(|((a, b), _)| {
+    let mut open: Vec<_> = edges.into_iter().filter(|e| e.1.0 == 1 && faces_viewer(v, world(e.0.0), world(e.0.1), world(e.1.1))).collect();
+    // Equal depths keep this order through the stable sort, so it must not depend on the hash.
+    open.sort_unstable_by_key(|e| e.0);
+    let walls: Vec<_> = open.into_iter().filter_map(|((a, b), _)| {
         let (pa, pb) = (world(a), world(b));
         Some(((pa.0, pa.1, v.map.z(m.z[a]?)), (pb.0, pb.1, v.map.z(m.z[b]?))))
     }).collect();
     push_walls(v, &walls, items);
+    true
 }
 
 /// Mesh lines of the bird's-eye view follow the data cells over the surface, so that nearer parts
 /// of it hide them.
-fn surface_mesh(v: &View, items: &mut Items) {
+fn surface_mesh(v: &View, items: &mut Items, progress: &mut impl FnMut(f32) -> bool) -> bool {
     let s = v.ctx.s;
     let m = &v.map;
     // the original draws no mesh lines in cylindrical coordinates
-    if m.cyl.is_some() { return; }
+    if m.cyl.is_some() { return true; }
     let (col, lw) = (s.fg, s.grid_line_width.max(1) as f32);
     // enough to win over the polygon the line lies on, not enough to show through a ridge
     let bias = 3.0 * (m.wd * m.hd / items.len().max(1) as f64).sqrt().clamp(1.0, 10.0);
     const STEP_PX: f64 = 3.0;
-    let mut run = |a: (f64, f64), b: (f64, f64)| {
+    const MAX_SEGMENTS: f64 = (MAX_POLYS / 2) as f64;
+    let thin = |t: &[f64]| -> Vec<f64> {
+        let stride = t.len().div_ceil(MESH_LINES).max(1);
+        let mut out: Vec<f64> = t.iter().copied().step_by(stride).collect();
+        if out.last() != t.last() { out.extend(t.last()); }
+        out
+    };
+    let lines: Vec<((f64, f64), (f64, f64))> = match v.ctx.field {
+        Field::Grid(g) => {
+            let (xs, ys) = (thin(&g.xs), thin(&g.ys));
+            xs.iter().map(|&x| ((x, m.y0), (x, m.y0 + m.yr))).chain(ys.iter().map(|&y| ((m.x0, y), (m.x0 + m.xr, y)))).collect()
+        }
+        Field::Mesh(mesh) => {
+            let mut edges: Vec<(usize, usize)> = mesh.tris.iter().flat_map(|t| [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])]).map(|(a, b)| (a.min(b), a.max(b))).collect();
+            edges.sort_unstable();
+            edges.dedup();
+            let stride = edges.len().div_ceil(MESH_LINES * MESH_LINES).max(1);
+            edges.into_iter().step_by(stride).map(|(a, b)| (mesh.nodes[a], mesh.nodes[b])).collect()
+        }
+        Field::Panel(p) => {
+            let cols = (0..=p.cols).map(|c| { let x = (c as f64).min(p.cols as f64 - 1e-9); ((x, 0.0), (x, p.rows as f64 - 1e-9)) });
+            let rows = (0..=p.rows).map(|r| { let y = (r as f64).min(p.rows as f64 - 1e-9); ((0.0, y), (p.cols as f64 - 1e-9, y)) });
+            cols.chain(rows).collect()
+        }
+    };
+    let length = |&(a, b): &((f64, f64), (f64, f64))| {
         let (wa, wb) = (m.xy(a.0, a.1), m.xy(b.0, b.1));
-        let n = (((wb.0 - wa.0).hypot(wb.1 - wa.1) / STEP_PX).ceil() as usize).max(1);
+        (wb.0 - wa.0).hypot(wb.1 - wa.1)
+    };
+    // A large image gets longer segments rather than more of them.
+    let step = STEP_PX.max(lines.iter().map(length).sum::<f64>() / MAX_SEGMENTS);
+    for (i, line) in lines.iter().enumerate() {
+        if i % 16 == 0 && !progress(0.82) { return false; }
+        let (a, b) = *line;
+        let n = ((length(line) / step).ceil() as usize).max(1);
         let at = |k: usize| {
             let t = k as f64 / n as f64;
             let (x, y) = (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t);
-            v.ctx.field.sample(x, y).map(|z| v.pt(x, y, z))
+            // The surface is bilinear even with spline interpolation on, and the line lies on it.
+            let z = match v.ctx.field {
+                Field::Grid(g) => g.sample_linear(x, y),
+                field => field.sample(x, y),
+            };
+            z.map(|z| v.pt(x, y, z))
         };
         let mut last = at(0);
         for k in 1..=n {
@@ -759,34 +811,8 @@ fn surface_mesh(v: &View, items: &mut Items) {
             }
             last = next;
         }
-    };
-    let thin = |t: &[f64]| -> Vec<f64> {
-        let stride = t.len().div_ceil(MESH_LINES).max(1);
-        let mut out: Vec<f64> = t.iter().copied().step_by(stride).collect();
-        if out.last() != t.last() { out.extend(t.last()); }
-        out
-    };
-    match v.ctx.field {
-        Field::Grid(g) => {
-            let (xs, ys) = (thin(&g.xs), thin(&g.ys));
-            for &x in &xs { run((x, m.y0), (x, m.y0 + m.yr)); }
-            for &y in &ys { run((m.x0, y), (m.x0 + m.xr, y)); }
-        }
-        Field::Mesh(mesh) => {
-            let mut seen = std::collections::HashSet::new();
-            for t in &mesh.tris {
-                for (a, b) in [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])] {
-                    if seen.len() < MESH_LINES * MESH_LINES && seen.insert((a.min(b), a.max(b))) {
-                        run(mesh.nodes[a], mesh.nodes[b]);
-                    }
-                }
-            }
-        }
-        Field::Panel(p) => {
-            for c in 0..=p.cols { let x = (c as f64).min(p.cols as f64 - 1e-9); run((x, 0.0), (x, p.rows as f64 - 1e-9)); }
-            for r in 0..=p.rows { let y = (r as f64).min(p.rows as f64 - 1e-9); run((0.0, y), (p.cols as f64 - 1e-9, y)); }
-        }
     }
+    true
 }
 
 /// Bounding box and scale of the bird's-eye view, drawn over the surface.
@@ -943,7 +969,7 @@ fn axes(v: &View, ops: &mut Vec<Op>) {
 mod tests {
     use super::super::testutil::*;
     use super::super::*;
-    use super::{faces_viewer, reduce_mesh, reduced_grid_surface, reduced_sparse_grid_surface, Map, View, MAX_POLYS};
+    use super::{faces_viewer, grid_skirts, mesh_skirts, neighbour_column, reduce_mesh, reduced_grid_surface, reduced_sparse_grid_surface, surface_mesh, Items, Map, View, MAX_POLYS};
 
     fn land() -> Settings {
         let mut s = settings();
@@ -998,6 +1024,84 @@ mod tests {
         let off = build_scene(&f, &s, &[]).unwrap();
         assert!(count_ops(&off.scene.ops, |o| matches!(o, Op::Polygon { .. })) > polys_on);
         assert_eq!(count_ops(&off.scene.ops, |o| matches!(o, Op::Polyline { .. })), 0);
+    }
+
+    /// A triangulated strip of two rows of nodes, `n` cells long.
+    fn strip_mesh(n: usize) -> Field {
+        use crate::engine::data::{DataFile, Point};
+        let mut df = DataFile::default();
+        for j in 0..2 {
+            for i in 0..=n {
+                df.points.push(Point { x: Some(i as f64), y: Some(j as f64), z: Some(0.5), u: None, v: None });
+            }
+        }
+        df.mesh_auto = true;
+        let (f, _) = crate::engine::field::build(&df, &land()).unwrap();
+        assert!(matches!(f, Field::Mesh(_)));
+        f
+    }
+
+    /// Run `draw` on a view of `f` spanning `size` world pixels with x and y in 0..=`range`.
+    fn items_of(f: &Field, range: f64, size: f64, draw: impl FnOnce(&View, &mut Items) -> bool) -> Items {
+        let s = land();
+        let ctx = Ctx::new(f, &s);
+        let layout = Layout::new(f, &s).unwrap();
+        let proj = layout.proj.unwrap();
+        let v = View { ctx: &ctx, map: Map { x0: 0.0, y0: 0.0, xr: range, yr: range, wd: size, hd: size, cyl: None, flip: false, zlo: 0.0, zr: 1.0, hz: 40.0 }, proj, bounds: (layout.w, layout.h) };
+        let mut items = Vec::new();
+        assert!(draw(&v, &mut items));
+        items
+    }
+
+    #[test]
+    fn fragmented_walls_stay_within_their_budget_and_can_be_cancelled() {
+        let f = grid(400, 400, |x, y| (x as usize % 3 != 0 || y as usize % 3 != 0).then_some(0.5));
+        let Field::Grid(g) = &f else { unreachable!() };
+        let items = items_of(&f, 399.0, 800.0, |v, items| grid_skirts(v, g, items, &mut |_| true));
+        assert!(!items.is_empty());
+        assert!(items.len() <= MAX_POLYS / 4, "{} walls", items.len());
+        items_of(&f, 399.0, 800.0, |v, items| !grid_skirts(v, g, items, &mut |_| false));
+    }
+
+    #[test]
+    fn theta_seam_looks_at_the_column_on_the_other_side() {
+        assert_eq!(neighbour_column(None, 9, true), Some(7));
+        assert_eq!(neighbour_column(Some(8), 9, true), Some(0));
+        assert_eq!(neighbour_column(None, 9, false), None);
+        assert_eq!(neighbour_column(Some(8), 9, false), None);
+        assert_eq!(neighbour_column(Some(3), 9, true), Some(3));
+    }
+
+    #[test]
+    fn mesh_walls_come_in_the_same_order_every_time() {
+        let f = strip_mesh(50);
+        let Field::Mesh(m) = &f else { unreachable!() };
+        let depths = || items_of(&f, 50.0, 400.0, |v, items| mesh_skirts(v, m, items, &mut |_| true)).iter().map(|i| i.0).collect::<Vec<_>>();
+        let first = depths();
+        assert!(!first.is_empty());
+        assert_eq!(first, depths());
+    }
+
+    #[test]
+    fn mesh_lines_stay_within_the_limit_on_a_large_image() {
+        let f = grid(200, 200, |x, y| Some((x + y) / 398.0));
+        let items = items_of(&f, 199.0, 6000.0, |v, items| surface_mesh(v, items, &mut |_| true));
+        assert!(!items.is_empty());
+        assert!(items.len() <= MAX_POLYS, "{} segments", items.len());
+    }
+
+    #[test]
+    fn thinned_mesh_lines_cover_the_whole_mesh() {
+        let f = strip_mesh(10_000);
+        let items = items_of(&f, 10_000.0, 1000.0, |v, items| surface_mesh(v, items, &mut |_| true));
+        assert!(items.len() <= MAX_POLYS, "{} segments", items.len());
+        let xs: Vec<f32> = items.iter().filter_map(|i| match &i.1 { Op::Polyline { pts, .. } => Some(pts[0].0), _ => None }).collect();
+        let (lo, hi) = xs.iter().fold((f32::MAX, f32::MIN), |(l, h), &x| (l.min(x), h.max(x)));
+        let span = hi - lo;
+        for part in 0..10 {
+            let (a, b) = (lo + span * part as f32 / 10.0, lo + span * (part + 1) as f32 / 10.0);
+            assert!(xs.iter().any(|&x| x >= a && x <= b), "no mesh line in part {part} of the mesh");
+        }
     }
 
     #[test]

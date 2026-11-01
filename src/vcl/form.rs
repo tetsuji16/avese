@@ -203,7 +203,8 @@ impl<'a> Renderer<'a> {
         let en = self.is_enabled(n);
         let id = self.scope.with(&n.name);
         // A disabled control cannot take the focus, so page focus skips it, as Delphi does.
-        if en && matches!(n.class.as_str(), "TEdit" | "TSpinEdit" | "TCheckBox" | "TRadioButton" | "TComboBox" | "TTrackBar" | "TListBox" | "TButton" | "TSpeedButton") {
+        // A read-only edit is not interactive here, so it cannot take the focus either.
+        if en && !self.store.readonly(&n.name) && matches!(n.class.as_str(), "TEdit" | "TSpinEdit" | "TCheckBox" | "TRadioButton" | "TComboBox" | "TTrackBar" | "TListBox" | "TButton" | "TSpeedButton") {
             self.focusable.push((self.cur_path.clone(), id));
         }
         match n.class.as_str() {
@@ -1120,12 +1121,13 @@ impl<'a> Renderer<'a> {
         }
         // The original puts the focus on the page's first tab stop when the dialog opens and
         // when another tab is shown, with the text of an edit fully selected.
-        // A gap in the pass count means the dialog was closed and is open again.
+        // A break in the pass count means the dialog was closed and is open again. Its viewport may
+        // have been dropped meanwhile, which restarts the count, so a lower number is a break too.
         let seen = self.scope.with((n.name.as_str(), "page_shown"));
         let pass = ctx.cumulative_pass_nr();
         let previous: Option<(usize, u64)> = ctx.data(|d| d.get_temp(seen));
         ctx.data_mut(|d| d.insert_temp(seen, (cur, pass)));
-        if previous.is_none_or(|(page, last)| page != cur || last + 1 < pass) {
+        if previous.is_none_or(|(page, last)| page != cur || pass != last + 1) {
             if let Some(first) = self.focusable[mark..].iter().min_by(|a, b| a.0.cmp(&b.0)).map(|t| t.1) {
                 ctx.memory_mut(|m| m.request_focus(first));
                 ctx.data_mut(|d| d.insert_temp(first.with("select_all"), true));
