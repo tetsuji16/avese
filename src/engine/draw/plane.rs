@@ -1,15 +1,22 @@
 //! Flat views: distribution, scatter, panel, contour lines and vectors (Cartesian and cylindrical).
 use super::{Ctx, Frame};
-use crate::engine::field::{Field, GridField, MeshField};
+use crate::engine::field::{Field, MeshField};
+#[cfg(test)]
+use crate::engine::field::GridField;
 use crate::engine::scene::{Op, Rgb};
+#[cfg(test)]
 use contour::ContourBuilder;
+#[cfg(test)]
 use geo_types::Coord;
 
 const MAX_DOTS: usize = 200_000;
 const MAX_LEVELS: usize = 1000;
 /// sub-cells per grid cell when contouring spline data
+#[cfg(test)]
 const SPLINE_REFINE: usize = 4;
+#[cfg(test)]
 const MAX_MESH_SAMPLES: usize = 2048;
+#[cfg(test)]
 const EDGE_TOL: f64 = 1e-9;
 
 pub(crate) struct Node {
@@ -180,6 +187,7 @@ pub fn scatter(ctx: &Ctx, frame: &Frame, ops: &mut Vec<Op>) {
 
 // ---- contour lines ----
 
+#[cfg(test)]
 type Pt = (f64, f64);
 
 /// Contour levels in increasing order.
@@ -217,10 +225,12 @@ pub fn contour_levels(ctx: &Ctx) -> Vec<f64> {
 }
 
 /// Node values of a grid; spline data is refined so that the lines follow the interpolated surface.
+#[cfg(test)]
 fn grid_samples(g: &GridField) -> (Vec<f64>, Vec<f64>, Vec<Option<f64>>) {
     grid_samples_with_progress(g, |_| true).expect("infallible grid sampling")
 }
 
+#[cfg(test)]
 fn grid_samples_with_progress(g: &GridField, mut progress: impl FnMut(f32) -> bool) -> Option<(Vec<f64>, Vec<f64>, Vec<Option<f64>>)> {
     if !g.has_spline() {
         let mut z = Vec::with_capacity(g.z.len());
@@ -245,10 +255,12 @@ fn grid_samples_with_progress(g: &GridField, mut progress: impl FnMut(f32) -> bo
 }
 
 /// A mesh resampled on a regular grid of about one sample per pixel.
+#[cfg(test)]
 fn mesh_samples(m: &MeshField, field: &Field, frame: &Frame) -> Option<(Vec<f64>, Vec<f64>, Vec<Option<f64>>)> {
     mesh_samples_with_progress(m, field, frame, |_| true)
 }
 
+#[cfg(test)]
 fn mesh_samples_with_progress(m: &MeshField, field: &Field, frame: &Frame, mut progress: impl FnMut(f32) -> bool) -> Option<(Vec<f64>, Vec<f64>, Vec<Option<f64>>)> {
     let (x0, x1, y0, y1) = field.extent()?;
     let axis = |a: f64, b: f64, px: f64| -> Vec<f64> {
@@ -267,10 +279,12 @@ fn mesh_samples_with_progress(m: &MeshField, field: &Field, frame: &Frame, mut p
 
 /// Traces the levels with the `contour` crate and keeps the parts inside cells whose four corners have data.
 /// The crate closes its rings around the grid and treats a hole as a low value; those parts are not contour lines.
+#[cfg(test)]
 fn isolines(xs: &[f64], ys: &[f64], z: &[Option<f64>], levels: &[f64]) -> Vec<Vec<Pt>> {
     isolines_with_progress(xs, ys, z, levels, |_| true).unwrap_or_default()
 }
 
+#[cfg(test)]
 fn isolines_with_progress(xs: &[f64], ys: &[f64], z: &[Option<f64>], levels: &[f64], mut progress: impl FnMut(f32) -> bool) -> Option<Vec<Vec<Pt>>> {
     let (nx, ny) = (xs.len(), ys.len());
     if nx < 2 || ny < 2 {
@@ -283,6 +297,7 @@ fn isolines_with_progress(xs: &[f64], ys: &[f64], z: &[Option<f64>], levels: &[f
     isolines_prepared(xs, ys, z, &values, levels, progress)
 }
 
+#[cfg(test)]
 fn isolines_prepared(
     xs: &[f64],
     ys: &[f64],
@@ -345,6 +360,7 @@ fn isolines_prepared(
     Some(out)
 }
 
+#[cfg(test)]
 fn contour_values(z: &[Option<f64>], levels: &[f64], mut progress: impl FnMut(f32) -> bool) -> Option<Vec<f64>> {
     let (mut lo, mut hi) = levels.iter().copied().fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), v| (lo.min(v), hi.max(v)));
     for (i, chunk) in z.chunks(4096).enumerate() {
@@ -363,22 +379,36 @@ fn contour_values(z: &[Option<f64>], levels: &[f64], mut progress: impl FnMut(f3
 
 pub fn contours_with_progress(ctx: &Ctx, frame: &Frame, ops: &mut Vec<Op>, mut progress: impl FnMut(f32) -> bool) -> bool {
     let levels = contour_levels(ctx);
-    if levels.is_empty() {
-        return true;
+    if levels.is_empty() || matches!(ctx.field, Field::Panel(_)) { return true; }
+    let (w, h) = (frame.w as usize, frame.h as usize);
+    if w == 0 || h == 0 { return true; }
+    let (x, y) = (frame.ox as i32, frame.oy as i32);
+    let has_image = matches!(ops.last(), Some(Op::Image { x: ix, y: iy, w: iw, h: ih, .. }) if (*ix, *iy, *iw, *ih) == (x, y, w as u32, h as u32));
+    if !has_image {
+        ops.push(Op::Image { x, y, w: w as u32, h: h as u32, rgba: vec![0; w * h * 4] });
     }
-    let samples = match ctx.field {
-        Field::Grid(g) => grid_samples_with_progress(g, |p| progress(p * 0.3)),
-        Field::Mesh(m) => mesh_samples_with_progress(m, ctx.field, frame, |p| progress(p * 0.3)),
-        Field::Panel(_) => return true,
+    let Some(Op::Image { rgba, .. }) = ops.last_mut() else { unreachable!() };
+    let mut above = vec![None::<f64>; w];
+    let color = ctx.s.toko_color;
+    let crosses = |a: Option<f64>, b: Option<f64>| match (a, b) {
+        (Some(a), Some(b)) if a.is_finite() && b.is_finite() && a != b => {
+            let (lo, hi) = (a.min(b), a.max(b));
+            levels.partition_point(|v| *v <= lo) < levels.partition_point(|v| *v <= hi)
+        }
+        _ => false,
     };
-    let Some((xs, ys, z)) = samples else { return false };
-    let Some(values) = contour_values(&z, &levels, |p| progress(0.3 + p * 0.1)) else { return false };
-    for (i, level) in levels.iter().enumerate() {
-        if !progress(0.4 + 0.6 * i as f32 / levels.len() as f32) { return false; }
-        let Some(lines) = isolines_prepared(&xs, &ys, &z, &values, &[*level], |p| progress(0.4 + 0.6 * (i as f32 + p) / levels.len() as f32)) else { return false };
-        for line in lines {
-        let pts: Vec<(f32, f32)> = line.iter().map(|&(x, y)| frame.to_px(x, y)).collect();
-        ops.push(Op::Polyline { pts, color: ctx.s.toko_color, width: 1.0 });
+    for j in 0..h {
+        let mut left = None;
+        for i in 0..w {
+            if i % 4096 == 0 && !progress((j * w + i) as f32 / (w * h) as f32) { return false; }
+            let value = frame.from_px_raw(frame.ox + i as f64 + 0.5, frame.oy + j as f64 + 0.5)
+                .and_then(|(x, y)| ctx.field.sample(x, y));
+            if crosses(left, value) || crosses(above[i], value) {
+                let offset = (j * w + i) * 4;
+                rgba[offset..offset + 4].copy_from_slice(&[color.0, color.1, color.2, 255]);
+            }
+            above[i] = value;
+            left = value;
         }
     }
     progress(1.0)
@@ -599,8 +629,11 @@ mod tests {
         s.toko_by_count = true;
         s.toko_by_step = false;
         s.toko_count = 4;
+        s.toko_color = Rgb(1, 2, 3);
         let b = build_scene(&f, &s, &[]).unwrap();
-        assert_eq!(count_ops(&b.scene.ops, |o| matches!(o, Op::Polyline { .. })), 4);
+        let Op::Image { w, rgba, .. } = &b.scene.ops[0] else { panic!("missing plot image") };
+        let marked: Vec<usize> = rgba[..*w as usize * 4].chunks_exact(4).enumerate().filter_map(|(i, p)| (p[..3] == [1, 2, 3]).then_some(i)).collect();
+        assert_eq!(marked, vec![20, 40, 60, 80]);
         let ctx = Ctx::new(&f, &s);
         assert_eq!(plane::contour_levels(&ctx), vec![2.0, 4.0, 6.0, 8.0]);
         s.toko_by_count = false;
@@ -612,6 +645,40 @@ mod tests {
         s.toko_min = 3.0;
         let ctx = Ctx::new(&f, &s);
         assert_eq!(plane::contour_levels(&ctx), vec![5.0, 7.5, 10.0]);
+    }
+
+    #[test]
+    fn bitmap_contours_honor_interval_and_range() {
+        let f = grid(11, 3, |x, _| Some(x));
+        let mut s = settings();
+        s.toko = true;
+        s.toko_by_count = false;
+        s.toko_by_step = true;
+        s.toko_dt = 2.0;
+        s.toko_min_on = true;
+        s.toko_max_on = true;
+        s.toko_min = 3.0;
+        s.toko_max = 7.0;
+        s.toko_color = Rgb(1, 2, 3);
+        let b = build_scene(&f, &s, &[]).unwrap();
+        let Op::Image { w, rgba, .. } = &b.scene.ops[0] else { panic!("missing plot image") };
+        let marked: Vec<_> = rgba[..*w as usize * 4].chunks_exact(4).enumerate().filter_map(|(i,p)| (p[..3] == [1,2,3]).then_some(i)).collect();
+        assert_eq!(marked, vec![40, 60]);
+    }
+
+    #[test]
+    fn bitmap_contour_scanning_observes_cancellation() {
+        let f = grid(3, 3, |x, y| Some(x + y));
+        let mut s = settings();
+        s.size = 512;
+        s.toko_by_count = true;
+        s.toko_count = 2;
+        let ctx = Ctx::new(&f, &s);
+        let frame = Layout::new(&f, &s).unwrap().frame(&f, &s).unwrap();
+        let mut ops = Vec::new();
+        let mut checks = 0;
+        assert!(!super::contours_with_progress(&ctx, &frame, &mut ops, |p| { checks += 1; p < 0.1 }));
+        assert!(checks > 1);
     }
 
     #[test]
@@ -643,16 +710,20 @@ mod tests {
     }
 
     #[test]
-    fn closed_contour_is_one_polyline() {
+    fn closed_contour_marks_all_sides() {
         let f = grid(9, 9, |x, y| Some(((x - 4.0).powi(2) + (y - 4.0).powi(2)).sqrt()));
         let mut s = settings();
         s.toko = true;
         s.toko_by_count = true;
         s.toko_count = 1;
+        s.toko_color = Rgb(1, 2, 3);
         let b = build_scene(&f, &s, &[]).unwrap();
-        let lines: Vec<_> = b.scene.ops.iter().filter_map(|o| if let Op::Polyline { pts, .. } = o { Some(pts) } else { None }).collect();
-        assert_eq!(lines.len(), 1);
-        assert_eq!(lines[0].first(), lines[0].last());
+        let Op::Image { w, h, rgba, .. } = &b.scene.ops[0] else { panic!("missing plot image") };
+        let points: Vec<_> = rgba.chunks_exact(4).enumerate().filter_map(|(i, p)| (p[..3] == [1, 2, 3]).then_some((i % *w as usize, i / *w as usize))).collect();
+        assert!(points.iter().any(|&(x, _)| x < *w as usize / 3));
+        assert!(points.iter().any(|&(x, _)| x > *w as usize * 2 / 3));
+        assert!(points.iter().any(|&(_, y)| y < *h as usize / 3));
+        assert!(points.iter().any(|&(_, y)| y > *h as usize * 2 / 3));
     }
 
     #[test]
@@ -661,9 +732,11 @@ mod tests {
         let mut s = settings();
         s.toko = true;
         s.toko_count = 1; // level 2 passes through the missing node
+        s.toko_color = Rgb(1, 2, 3);
         let b = build_scene(&f, &s, &[]).unwrap();
         // the level passes only through cells that touch the hole, and those are skipped
-        assert_eq!(count_ops(&b.scene.ops, |o| matches!(o, Op::Polyline { .. })), 0);
+        let Op::Image { rgba, .. } = &b.scene.ops[0] else { panic!("missing plot image") };
+        assert!(!rgba.chunks_exact(4).any(|p| p[..3] == [1, 2, 3]));
     }
 
     #[test]
@@ -726,8 +799,10 @@ mod tests {
         s.toko = true;
         s.toko_by_count = true;
         s.toko_count = 1;
+        s.toko_color = Rgb(1, 2, 3);
         let b = build_scene(&f, &s, &[]).unwrap();
-        assert!(count_ops(&b.scene.ops, |o| matches!(o, Op::Polyline { .. })) >= 1);
+        let Op::Image { rgba, .. } = &b.scene.ops[0] else { panic!("missing plot image") };
+        assert!(rgba.chunks_exact(4).any(|p| p[..3] == [1, 2, 3]));
     }
 
     #[test]

@@ -147,6 +147,24 @@ mod tests {
     }
 
     #[test]
+    fn bitmap_contours_survive_png_export() {
+        let mut st = store();
+        let l = load(text(3).as_bytes(), &mut st, None, |_| {}).unwrap();
+        let mut s = small(&st);
+        s.toko = true;
+        s.toko_by_count = true;
+        s.toko_count = 2;
+        s.toko_color = crate::engine::scene::Rgb(1, 2, 3);
+        let rendered = render(&l, &s).unwrap();
+        assert!(rendered.pixmap.data().chunks_exact(4).any(|p| p[..3] == [1, 2, 3]));
+        let path = std::env::temp_dir().join(format!("avese-contours-{}-{:?}.png", std::process::id(), std::thread::current().id()));
+        crate::engine::export::save_image(&path, &rendered, crate::engine::export::ImageFormat::Png).unwrap();
+        let pixels = image::open(&path).unwrap().to_rgba8();
+        std::fs::remove_file(path).unwrap();
+        assert!(pixels.as_raw().chunks_exact(4).any(|p| p[..3] == [1, 2, 3]));
+    }
+
+    #[test]
     fn cancelled_new_render_keeps_original_probe_data() {
         let mut st = store();
         let old = load(text(3).as_bytes(), &mut st, None, |_| {}).unwrap();
