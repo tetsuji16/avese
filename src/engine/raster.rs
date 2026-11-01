@@ -159,23 +159,64 @@ fn scale_of(face: &FontVec, size_pt: f32) -> PxScale {
     face.pt_to_px_scale(size_pt.clamp(1.0, 500.0)).unwrap_or(PxScale::from(px_per_pt(size_pt)))
 }
 
+struct PositionedGlyph {
+    face: Arc<FontVec>,
+    id: ab_glyph::GlyphId,
+    scale: PxScale,
+    x: f32,
+}
+
+struct TextLayout {
+    glyphs: Vec<PositionedGlyph>,
+    width: f32,
+    ascent: f32,
+    descent: f32,
+}
+
+/// Pick a fallback face per missing glyph, sharing the same layout for measuring and drawing.
+fn layout_text(text: &str, font: &FontRef) -> Option<TextLayout> {
+    let primary = find_face(&font.family)?;
+    let paths = candidate_paths(&font.family);
+    let mut paths = paths.iter();
+    let mut faces = vec![primary];
+    let mut glyphs = Vec::with_capacity(text.chars().count());
+    let mut width = 0.0;
+    let primary_scaled = faces[0].as_scaled(scale_of(&faces[0], font.size_pt));
+    let (mut ascent, mut descent) = (primary_scaled.ascent(), primary_scaled.descent());
+    let mut prev: Option<(usize, ab_glyph::GlyphId)> = None;
+    for ch in text.chars() {
+        let mut index = faces.iter().position(|face| face.glyph_id(ch).0 != 0);
+        while index.is_none() {
+            let Some((path, face_index)) = paths.next() else { break };
+            if let Some(face) = load_face(path, *face_index) {
+                if faces.iter().any(|f| Arc::ptr_eq(f, &face)) { continue; }
+                let covers = face.glyph_id(ch).0 != 0;
+                faces.push(face);
+                if covers { index = Some(faces.len() - 1); }
+            }
+        }
+        let index = index.unwrap_or(0);
+        let face = &faces[index];
+        let scale = scale_of(face, font.size_pt);
+        let scaled = face.as_scaled(scale);
+        let id = face.glyph_id(ch);
+        if let Some((previous_face, previous)) = prev {
+            if previous_face == index { width += scaled.kern(previous, id); }
+        }
+        ascent = ascent.max(scaled.ascent());
+        descent = descent.min(scaled.descent());
+        glyphs.push(PositionedGlyph { face: Arc::clone(face), id, scale, x: width });
+        width += scaled.h_advance(id);
+        prev = Some((index, id));
+    }
+    if font.style & 1 != 0 { width += 1.0; }
+    Some(TextLayout { glyphs, width, ascent, descent })
+}
+
 /// Width and height in pixels. Without an installed font, an estimate is returned so layout still works.
 pub fn measure_text(text: &str, font: &FontRef) -> (f32, f32) {
-    match find_face(&font.family) {
-        Some(face) => {
-            let sf = face.as_scaled(scale_of(&face, font.size_pt));
-            let mut w = 0.0;
-            let mut prev = None;
-            for ch in text.chars() {
-                let g = face.glyph_id(ch);
-                if let Some(p) = prev {
-                    w += sf.kern(p, g);
-                }
-                w += sf.h_advance(g);
-                prev = Some(g);
-            }
-            (w + if font.style & 1 != 0 { 1.0 } else { 0.0 }, sf.ascent() - sf.descent())
-        }
+    match layout_text(text, font) {
+        Some(layout) => (layout.width, layout.ascent - layout.descent),
         None => {
             let px = px_per_pt(font.size_pt);
             let w: f32 = text.chars().map(|c| if c.is_ascii() { 0.55 } else { 1.0 }).sum();
@@ -264,28 +305,18 @@ fn blend(pm: &mut Pixmap, x: i32, y: i32, c: Rgb, cov: f32) {
 }
 
 fn draw_text(pm: &mut Pixmap, x: f32, y: f32, text: &str, font: &FontRef, color: Rgb, anchor: Anchor) {
-    let Some(face) = find_face(&font.family) else { return };
-    let scale = scale_of(&face, font.size_pt);
-    let sf = face.as_scaled(scale);
-    let (w, h) = measure_text(text, font);
+    let Some(layout) = layout_text(text, font) else { return };
+    let (w, h) = (layout.width, layout.ascent - layout.descent);
     let (left, top) = anchor_origin(anchor, x, y, w, h);
-    let base = top + sf.ascent();
+    let base = top + layout.ascent;
     let strikes = if font.style & 1 != 0 { 2 } else { 1 };
-    let mut cx = left;
-    let mut prev = None;
-    for ch in text.chars() {
-        let id = face.glyph_id(ch);
-        if let Some(p) = prev {
-            cx += sf.kern(p, id);
-        }
-        if let Some(o) = face.outline_glyph(id.with_scale_and_position(scale, point(cx, base))) {
+    for glyph in &layout.glyphs {
+        if let Some(o) = glyph.face.outline_glyph(glyph.id.with_scale_and_position(glyph.scale, point(left + glyph.x, base))) {
             let b = o.px_bounds();
             for s in 0..strikes {
                 o.draw(|gx, gy, cov| blend(pm, b.min.x as i32 + gx as i32 + s, b.min.y as i32 + gy as i32, color, cov));
             }
         }
-        cx += sf.h_advance(id);
-        prev = Some(id);
     }
     let mut hline = |yy: f32| {
         for xx in left.round() as i32..(left + w).round() as i32 {
@@ -296,7 +327,7 @@ fn draw_text(pm: &mut Pixmap, x: f32, y: f32, text: &str, font: &FontRef, color:
         hline(base + 1.5);
     }
     if font.style & 8 != 0 {
-        hline(base - sf.ascent() * 0.35);
+        hline(base - layout.ascent * 0.35);
     }
 }
 
@@ -467,6 +498,23 @@ mod tests {
         let f = FontRef { family: "ＭＳ Ｐゴシック".into(), size_pt: 10.0, style: 0 };
         let pm = rasterize(&scene(vec![Op::Text { x: 10.0, y: 10.0, text: "日".into(), font: f, color: Rgb::BLACK, anchor: Anchor::Center }]));
         assert!(pm.data().chunks_exact(4).any(|px| px[..3] != [10, 20, 30]));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn mixed_text_uses_japanese_fallback_for_missing_glyphs() {
+        let arial = windows_font_dir().join("arial.ttf");
+        let gothic = windows_font_dir().join("msgothic.ttc");
+        let (Some(primary), Some(fallback)) = (load_face(&arial, 0), load_face(&gothic, 0)) else { return };
+        assert_eq!(primary.glyph_id('日').0, 0);
+        assert_ne!(fallback.glyph_id('日').0, 0);
+        let font = FontRef { family: "Arial".into(), size_pt: 12.0, style: 0 };
+        let layout = layout_text("A日B", &font).unwrap();
+        assert!(Arc::ptr_eq(&layout.glyphs[0].face, &primary));
+        assert!(Arc::ptr_eq(&layout.glyphs[1].face, &fallback));
+        assert!(Arc::ptr_eq(&layout.glyphs[2].face, &primary));
+        assert_ne!(layout.glyphs[1].id.0, 0);
+        assert_eq!(measure_text("A日B", &font), (layout.width, layout.ascent - layout.descent));
     }
 
     #[test]
