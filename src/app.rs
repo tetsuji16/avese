@@ -33,7 +33,7 @@ impl Job {
         match self {
             Job::Load(h) => (&h.sh, h.started, true),
             Job::Reparse(h) => (&h.sh, h.started, true),
-            Job::Render(h) => (&h.sh, h.started, false),
+            Job::Render(h) => (&h.sh, h.started, true),
             Job::Batch(h) => (&h.sh, h.started, true),
         }
     }
@@ -276,6 +276,10 @@ impl App {
                 }
             }
             Err(e) => {
+                if e == jobs::CANCELLED {
+                    self.status_msg = "描画を中止しました".into();
+                    return;
+                }
                 self.canvas_tex = None;
                 self.rendered = None;
                 self.status_msg = e.clone();
@@ -298,7 +302,7 @@ impl App {
         let Some(job) = self.job.take() else { return };
         if std::mem::take(&mut self.dlg.mesh_cancel) {
             job.sh().0.cancel();
-            // loading and parsing have nothing to keep; a batch ends at the next file
+            // loading and parsing have nothing to keep
             if matches!(job, Job::Load(_) | Job::Reparse(_)) {
                 self.status_msg = jobs::CANCELLED.into();
                 self.dlg.mesh = false;
