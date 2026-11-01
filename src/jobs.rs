@@ -330,7 +330,7 @@ mod tests {
             if let Some(Ok(done)) = handle.poll() {
                 assert_eq!(done.result.unwrap_err(), CANCELLED);
                 assert!(!done.loaded.data.mesh_auto);
-                assert!(matches!(done.loaded.field, Field::Grid(_)));
+                assert!(matches!(&*done.loaded.field, Field::Grid(_)));
                 assert_eq!(done.loaded.field.extent(), Some((0.0, 3.0, 0.0, 2.0)));
                 break;
             }

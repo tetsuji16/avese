@@ -7,11 +7,12 @@ use crate::engine::scene::Scene;
 use crate::engine::settings::Settings;
 use crate::state::Store;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tiny_skia::Pixmap;
 
 pub struct Loaded {
     pub data: DataFile,
-    pub field: Field,
+    pub field: Arc<Field>,
     pub warnings: Vec<String>,
     pub path: Option<PathBuf>,
     /// settings the field was built from; see `is_stale`
@@ -23,6 +24,8 @@ pub struct Rendered {
     pub scene: Scene,
     pub pixmap: Pixmap,
     pub probe: Probe,
+    /// The field used for this image, even if a later render is cancelled.
+    pub field: Arc<Field>,
 }
 
 pub const RENDER_CANCELLED: &str = "__AVese_RENDER_CANCELLED__";
@@ -62,7 +65,7 @@ pub fn reparse_with_mesh(bytes: &[u8], s: &Settings, mesh_auto: bool, progress: 
 
 fn build(df: DataFile, s: &Settings, opts: DataOptions, progress: impl FnMut(f32)) -> Result<Loaded, String> {
     let (field, warnings) = field::build_with_progress(&df, s, progress)?;
-    Ok(Loaded { data: df, field, warnings, path: None, opts, spline: s.spline })
+    Ok(Loaded { data: df, field: Arc::new(field), warnings, path: None, opts, spline: s.spline })
 }
 
 /// Read a data file: parse, apply embedded settings and IncludeINI to `store`, build the field.
@@ -98,7 +101,7 @@ pub fn render_with_progress(loaded: &Loaded, s: &Settings, mut progress: impl Fn
     let b = draw::build_scene_with_progress(&loaded.field, s, &loaded.data.labels, |p| progress(p * 0.5))
         .map_err(|e| if e == RENDER_CANCELLED { RENDER_CANCELLED.to_owned() } else { e })?;
     let pixmap = raster::rasterize_with_progress(&b.scene, |p| progress(0.5 + p * 0.5)).ok_or(RENDER_CANCELLED)?;
-    Ok(Rendered { scene: b.scene, pixmap, probe: b.probe })
+    Ok(Rendered { scene: b.scene, pixmap, probe: b.probe, field: Arc::clone(&loaded.field) })
 }
 
 #[cfg(test)]
@@ -144,19 +147,35 @@ mod tests {
     }
 
     #[test]
+    fn cancelled_new_render_keeps_original_probe_data() {
+        let mut st = store();
+        let old = load(text(3).as_bytes(), &mut st, None, |_| {}).unwrap();
+        let s = small(&st);
+        let image = render(&old, &s).unwrap();
+        let before = image.probe.at_field(12.0, 12.0, &image.field).unwrap();
+        assert!(before.z.is_some());
+        let new_text = (0..3).flat_map(|y| (0..3).map(move |x| format!("{x} {y} 1000\n"))).collect::<String>();
+        let new = load(new_text.as_bytes(), &mut st, None, |_| {}).unwrap();
+        assert_ne!(before.z, image.probe.at_field(12.0, 12.0, &new.field).unwrap().z);
+        assert!(matches!(render_with_progress(&new, &s, |_| false), Err(e) if e == RENDER_CANCELLED));
+        drop(old);
+        assert_eq!(image.probe.at_field(12.0, 12.0, &image.field), Some(before));
+    }
+
+    #[test]
     fn forced_mesh_reparse_survives_settings_changes() {
         let mut st = store();
         let bytes = text(3);
         let s = small(&st);
         let original = reparse(bytes.as_bytes(), &s, |_| {}).unwrap();
-        assert!(matches!(original.field, Field::Grid(_)));
+        assert!(matches!(&*original.field, Field::Grid(_)));
         let mesh = reparse_with_mesh(bytes.as_bytes(), &s, true, |_| {}).unwrap();
         assert!(mesh.data.mesh_auto);
-        assert!(matches!(mesh.field, Field::Mesh(_)));
+        assert!(matches!(&*mesh.field, Field::Mesh(_)));
         let mut changed = s;
         changed.spline = !changed.spline;
         let reparsed = reparse_with_mesh(bytes.as_bytes(), &changed, mesh.data.mesh_auto, |_| {}).unwrap();
-        assert!(matches!(reparsed.field, Field::Mesh(_)));
+        assert!(matches!(&*reparsed.field, Field::Mesh(_)));
     }
 
     #[test]
@@ -215,12 +234,12 @@ mod tests {
         st.set_checked("CBpanel", true);
         let src = b"1 2 3\n4 5 6\n";
         let l = load(src, &mut st, None, |_| {}).unwrap();
-        let Field::Panel(p) = &l.field else { panic!("not a panel") };
+        let Field::Panel(p) = &*l.field else { panic!("not a panel") };
         assert_eq!((p.rows, p.cols), (2, 3));
         assert_eq!(p.z[0], Some(1.0));
         st.set_checked("CBtenchi", true);
         let l = load(src, &mut st, None, |_| {}).unwrap();
-        let Field::Panel(p) = &l.field else { panic!("not a panel") };
+        let Field::Panel(p) = &*l.field else { panic!("not a panel") };
         assert_eq!((p.rows, p.cols), (3, 2));
         assert_eq!(p.z[1], Some(4.0));
         // the first row of the data is the top row of the image
