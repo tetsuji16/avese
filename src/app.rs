@@ -46,6 +46,10 @@ fn irregular_shortcut(key: Key) -> Option<dialogs::IrregularChoice> {
 
 fn irregular_close_choice() -> dialogs::IrregularChoice { dialogs::IrregularChoice::Abort }
 
+fn irregular_enter_choice(pressed: bool) -> Option<dialogs::IrregularChoice> {
+    pressed.then_some(dialogs::IrregularChoice::Generate)
+}
+
 struct AppPrevious {
     store: Store,
     title: String,
@@ -167,6 +171,7 @@ pub struct App {
     pending_warnings: Vec<String>,
     previous: Option<AppPrevious>,
     pending_irregular: Option<PendingIrregular>,
+    irregular_focus_initialized: bool,
 }
 
 pub fn exe_dir() -> PathBuf {
@@ -218,6 +223,7 @@ impl App {
             pending_warnings: vec![],
             previous: None,
             pending_irregular: None,
+            irregular_focus_initialized: false,
         }
     }
 
@@ -312,6 +318,7 @@ impl App {
     /// A field was built: show the ranges in the settings dialog, then draw.
     fn built(&mut self, ctx: &Context, loaded: Loaded) {
         if loaded.irregular_data {
+            self.irregular_focus_initialized = false;
             self.pending_irregular = Some(PendingIrregular::Reparse { loaded, store: self.store.clone() });
             return;
         }
@@ -323,6 +330,7 @@ impl App {
 
     fn choose_irregular(&mut self, ctx: &Context, choice: dialogs::IrregularChoice) {
         let Some(pending) = self.pending_irregular.take() else { return };
+        self.irregular_focus_initialized = false;
         match pending {
             PendingIrregular::Load(mut b) => {
                 if choice == dialogs::IrregularChoice::Abort {
@@ -407,11 +415,19 @@ impl App {
             ui.label("非構造格子データです\n三角メッシュを自動生成しますか？\n（時間がかかる場合があります）");
             ui.add_space(8.0);
             ui.horizontal(|ui| {
-                if ui.button(IRREGULAR_BUTTONS[0]).clicked() { choice = Some(dialogs::IrregularChoice::Generate); }
+                let yes = ui.button(IRREGULAR_BUTTONS[0]);
+                if !self.irregular_focus_initialized {
+                    yes.request_focus();
+                    self.irregular_focus_initialized = true;
+                }
+                if yes.clicked() { choice = Some(dialogs::IrregularChoice::Generate); }
                 if ui.button(IRREGULAR_BUTTONS[1]).clicked() { choice = Some(dialogs::IrregularChoice::Abort); }
                 if ui.button(IRREGULAR_BUTTONS[2]).clicked() { choice = Some(dialogs::IrregularChoice::Ignore); }
             });
         });
+        if choice.is_none() {
+            choice = ctx.input_mut(|i| irregular_enter_choice(i.consume_key(Modifiers::NONE, Key::Enter)));
+        }
         if choice.is_none() {
             choice = ctx.input_mut(|i| {
                 [Key::Y, Key::A, Key::I].into_iter().find_map(|key| {
@@ -507,6 +523,7 @@ impl App {
                 Some(Err(e)) => self.job_result = Some(Err(e)),
                 Some(Ok(b)) => {
                     if b.loaded.irregular_data {
+                        self.irregular_focus_initialized = false;
                         self.pending_irregular = Some(PendingIrregular::Load(b));
                     } else {
                         self.finish_load(ctx, b, None);
@@ -1158,7 +1175,8 @@ mod shortcut_tests {
         assert_eq!(irregular_shortcut(Key::I), Some(dialogs::IrregularChoice::Ignore));
         assert_eq!(irregular_shortcut(Key::Escape), None);
         assert_eq!(irregular_close_choice(), dialogs::IrregularChoice::Abort);
-
+        assert_eq!(irregular_enter_choice(true), Some(dialogs::IrregularChoice::Generate));
+        assert_eq!(irregular_enter_choice(false), None);
     }
 
     #[test]
