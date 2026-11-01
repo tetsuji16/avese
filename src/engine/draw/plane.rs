@@ -375,8 +375,10 @@ pub fn contours_with_progress(ctx: &Ctx, frame: &Frame, ops: &mut Vec<Op>, mut p
 
 pub fn vectors_with_progress(ctx: &Ctx, frame: &Frame, ops: &mut Vec<Op>, mut progress: impl FnMut(f32) -> bool) -> bool {
     let s = ctx.s;
-    let Some(max) = (if s.vmax_on { Some(s.vmax) } else { ctx.field.max_vector() }).filter(|m| *m > 0.0) else { return true };
+    let actual_max = ctx.field.max_vector();
+    let Some(max) = (if s.vmax_on { Some(s.vmax) } else { actual_max }).filter(|m| *m > 0.0) else { return true };
     let base = s.size as f64 / 20.0 * s.vector_len / 100.0;
+    let fixed_head_base = base * actual_max.unwrap_or(0.0) / max;
     let keep = |idx: usize, on: bool, step: u32, off: u32| !on || (idx >= off as usize && (idx - off as usize) % step.max(1) as usize == 0);
     let is_grid = matches!(ctx.field, Field::Grid(_));
     let total = nodes(ctx.field).count();
@@ -412,7 +414,7 @@ pub fn vectors_with_progress(ctx: &Ctx, frame: &Frame, ops: &mut Vec<Op>, mut pr
         let col = if s.color_vector { ctx.grad.color(m / max) } else { s.vector_color };
         ops.push(Op::Polyline { pts: vec![(px, py), (tx as f32, ty as f32)], color: col, width: 1.0 });
         if s.vector_head {
-            let hl = s.head_len / 100.0 * if s.head_fix { base } else { len };
+            let hl = s.head_len / 100.0 * if s.head_fix { fixed_head_base } else { len };
             let ang = (s.head_angle as f64).to_radians();
             let back = |sgn: f64| {
                 let (sn, cs) = (sgn * ang).sin_cos();
@@ -726,6 +728,31 @@ mod tests {
         s.offset_x = 1;
         let b = build_scene(&f, &s, &[]).unwrap();
         assert_eq!(count_ops(&b.scene.ops, |o| matches!(o, Op::Polyline { .. })), 8); // x = 1, 3 on 4 rows
+    }
+
+    #[test]
+    fn fixed_heads_follow_largest_data_vector_with_a_separate_reference() {
+        let f = grid_uv(2, 2, |x, _| if x == 0.0 { (1.0, 0.0) } else { (2.0, 0.0) });
+        let mut s = settings();
+        s.vector = true;
+        s.vector_head = true;
+        s.head_fix = true;
+        s.head_paint = false;
+        s.head_len = 50.0;
+        s.vmax_on = true;
+        s.vmax = 4.0;
+        let b = build_scene(&f, &s, &[]).unwrap();
+        let lines: Vec<_> = b.scene.ops.iter().filter_map(|o| if let Op::Polyline { pts, .. } = o { Some(pts) } else { None }).collect();
+        assert_eq!(lines.len(), 8);
+        let largest_shaft = lines.chunks_exact(2).map(|pair| {
+            let a = pair[0][0]; let b = pair[0][1];
+            (b.0 - a.0).hypot(b.1 - a.1)
+        }).fold(0.0_f32, f32::max);
+        for pair in lines.chunks_exact(2) {
+            let tip = pair[1][1]; let wing = pair[1][0];
+            let head = (tip.0 - wing.0).hypot(tip.1 - wing.1);
+            assert!((head - 0.5 * largest_shaft).abs() < 1e-3, "{head} vs largest shaft {largest_shaft}");
+        }
     }
 
     #[test]
