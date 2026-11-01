@@ -278,14 +278,14 @@ pub fn build_scene_with_progress(
         } else {
             if !plane::image_with_progress(&ctx, &frame, &mut ops, |p| progress(p * 0.35)) { return Err(CANCELLED.into()); }
             if !is_panel && s.toko {
-                plane::contours(&ctx, &frame, &mut ops);
+                if !plane::contours_with_progress(&ctx, &frame, &mut ops, |p| progress(0.35 + p * 0.25)) { return Err(CANCELLED.into()); }
             }
         }
-        if !progress(0.65) { return Err(CANCELLED.into()); }
+        if !progress(0.6) { return Err(CANCELLED.into()); }
         let bounds = (lay.w, lay.h);
         axes::grid(&ctx, &frame, bounds, &mut ops);
         if !is_panel && s.vector {
-            plane::vectors(&ctx, &frame, &mut ops);
+            if !plane::vectors_with_progress(&ctx, &frame, &mut ops, |p| progress(0.6 + p * 0.2)) { return Err(CANCELLED.into()); }
         }
         axes::axes(&ctx, &frame, bounds, &mut ops);
         axes::points(&ctx, &frame, &mut ops);
