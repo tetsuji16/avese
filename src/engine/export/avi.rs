@@ -258,6 +258,7 @@ mod tests {
     #[test]
     fn chunk_walk_and_pixels() {
         let path = tmp("walk.avi");
+        std::fs::write(&path, b"old AVI contents").unwrap();
         let mut prog = Vec::new();
         // width 5 forces row padding; the second frame has another size and is resized
         let colour = |k: usize| [(k * 80) as u8, 10, 200];
