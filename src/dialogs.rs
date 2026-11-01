@@ -128,6 +128,11 @@ fn viewport(ctx: &Context, key: &str, title: &str, size: Vec2, min: Option<Vec2>
     close
 }
 
+/// Consume an unmodified Escape so one press dismisses only the active window.
+fn escape_pressed(ctx: &Context) -> bool {
+    ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
+}
+
 fn client_size(n: &Node) -> Vec2 {
     let w = n.int_opt("ClientWidth").unwrap_or(n.int("Width"));
     let h = n.int_opt("ClientHeight").unwrap_or(n.int("Height"));
@@ -265,7 +270,7 @@ impl Dialogs {
             let mut req = None;
             let c = viewport(ctx, "avi", T_AVI, size, Some(Vec2::new(292.0, 171.0)), true, sh.center, |ui| {
                 req = avi_body(ui, &form, sh.store, sh.assets, me);
-                false
+                !me.busy && escape_pressed(ui.ctx())
             });
             if req.is_some() {
                 self.batch_req = req;
@@ -281,8 +286,10 @@ impl Dialogs {
                 let mut r = Renderer::new(ui, sh.store, sh.assets);
                 r.draw_children(form, origin, &Fnt::form_default().with(form));
                 let key = r.key_button(form);
+                let popup_open = r.popup_open;
                 let evs = r.finish();
-                key.is_some() || evs.iter().any(|e| matches!(e, Ev::Click(n) if n == "OKButton"))
+                key.is_some() || (!popup_open && escape_pressed(ui.ctx()))
+                    || evs.iter().any(|e| matches!(e, Ev::Click(n) if n == "OKButton"))
             });
             if c {
                 self.about = false;
@@ -295,7 +302,7 @@ impl Dialogs {
                 let mut r = Renderer::new(ui, sh.store, sh.assets);
                 r.draw_children(form, origin, &Fnt::form_default().with(form));
                 r.finish();
-                false
+                escape_pressed(ui.ctx())
             });
             if c {
                 self.mesh = false;
