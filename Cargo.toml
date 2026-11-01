@@ -7,12 +7,10 @@ license = "MIT"
 [dependencies]
 ab_glyph = "0.2.32"
 colorous = "1"
-contour = { path = "vendor/contour" }
 delaunator = "1.1.0"
 eframe = { version = "0.37", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
 egui = "0.37"
 encoding_rs = { version = "0.8", default-features = false, features = ["alloc"] }
-geo-types = "0.7"
 image = { version = "0.25", default-features = false, features = ["png"] }
 rfd = { version = "0.17", default-features = false }
 serde_json = { version = "1", default-features = false, features = ["std"] }
@@ -25,6 +23,8 @@ rfd = { version = "0.17", default-features = false, features = ["xdg-portal"] }
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Console", "Win32_UI_WindowsAndMessaging", "Win32_UI_Controls_Dialogs", "Win32_Graphics_Gdi", "Win32_System_Threading", "Win32_UI_Input_KeyboardAndMouse", "Win32_System_DataExchange", "Win32_System_Memory"] }
 
 [dev-dependencies]
+contour = { path = "vendor/contour" }
+geo-types = "0.7"
 image = { version = "0.25", default-features = false, features = ["png", "bmp"] }
 contour_reference = { package = "contour", version = "0.13.1" }
 
