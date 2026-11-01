@@ -160,11 +160,30 @@ pub fn to_text(store: &Store, lay: &Layout) -> String {
         s.push_str(&get_value(k, store, lay));
         s.push_str("\r\n");
     }
+    // UTF-8 encoded as hexadecimal keeps arbitrary Unicode and delimiters safe in
+    // a Shift-JIS INI without changing the original keys or their order.
+    let labels = store.list("LBlabel");
+    s.push_str(&format!("LBlabelCount={}\r\n", labels.len()));
+    for (i, row) in labels.iter().enumerate() {
+        let hex: String = row.as_bytes().iter().map(|b| format!("{b:02X}")).collect();
+        s.push_str(&format!("LBlabel{i}={hex}\r\n"));
+    }
     s
+}
+
+fn decode_label_hex(s: &str) -> Option<String> {
+    if s.len() % 2 != 0 || !s.is_ascii() { return None; }
+    let bytes = s.as_bytes().chunks_exact(2).map(|pair| {
+        let digit = |b: u8| (b as char).to_digit(16).map(|n| n as u8);
+        Some(digit(pair[0])? * 16 + digit(pair[1])?)
+    }).collect::<Option<Vec<_>>>()?;
+    String::from_utf8(bytes).ok()
 }
 
 pub fn apply_text(text: &str, store: &mut Store, lay: &mut Layout) {
     let mut in_sec = false;
+    let mut count = None;
+    let mut rows = std::collections::BTreeMap::new();
     for line in text.lines() {
         let line = line.trim_end_matches('\r');
         if let Some(sec) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) {
@@ -175,7 +194,23 @@ pub fn apply_text(text: &str, store: &mut Store, lay: &mut Layout) {
             continue;
         }
         if let Some((k, v)) = line.split_once('=') {
-            apply_pair(k, v, store, lay);
+            let key = k.trim();
+            if key.eq_ignore_ascii_case("LBlabelCount") {
+                count = v.trim().parse::<usize>().ok();
+            } else if key.get(..7).is_some_and(|prefix| prefix.eq_ignore_ascii_case("LBlabel")) && key.len() > 7 {
+                if let Ok(index) = key[7..].parse::<usize>() {
+                    rows.insert(index, decode_label_hex(v));
+                }
+            } else {
+                apply_pair(k, v, store, lay);
+            }
+        }
+    }
+    // Missing extension keys mean an older or partial INI: preserve current rows.
+    // Reject incomplete/corrupt extensions instead of silently deleting labels.
+    if let Some(n) = count {
+        if rows.len() == n && (0..n).all(|i| rows.get(&i).is_some_and(Option::is_some)) {
+            store.lists.insert("LBlabel".into(), (0..n).map(|i| rows.remove(&i).unwrap().unwrap()).collect());
         }
     }
 }
@@ -229,9 +264,68 @@ mod tests {
         let want: Vec<&str> = ORIG_ORDER.split(' ').collect();
         assert_eq!(KEYS, want.as_slice());
         let text = to_text(&store(), &Layout::default());
-        let got: Vec<&str> = text.lines().skip(1).map(|l| l.split('=').next().unwrap()).collect();
+        let got: Vec<&str> = text.lines().skip(1).take(KEYS.len()).map(|l| l.split('=').next().unwrap()).collect();
         assert_eq!(got, want);
         assert!(text.starts_with("[avese.exe]\r\n"));
+    }
+
+
+    #[test]
+    fn labels_round_trip_unicode_and_empty_list() {
+        let mut original = store();
+        let labels = vec!["1, 2  日本語 = 😀".to_string(), "3, 4  second".to_string()];
+        original.lists.insert("LBlabel".into(), labels.clone());
+        original.set_item_index("LBlabel", 1);
+        let text = to_text(&original, &Layout::default());
+        let mut restored = store();
+        apply_text(&decode(&encode(&text)), &mut restored, &mut Layout::default());
+        assert_eq!(restored.list("LBlabel"), labels);
+        assert_eq!(restored.item_index("LBlabel"), 1);
+        assert_eq!(to_text(&restored, &Layout::default()), text);
+        original.lists.insert("LBlabel".into(), vec![]);
+        apply_text(&to_text(&original, &Layout::default()), &mut restored, &mut Layout::default());
+        assert!(restored.list("LBlabel").is_empty());
+    }
+
+    #[test]
+    fn labels_persist_through_ini_file() {
+        let path = std::env::temp_dir().join(format!("avese-labels-{}-{:?}.ini", std::process::id(), std::thread::current().id()));
+        let mut original = store();
+        let labels = vec!["1, 2 日本語 😀".to_string(), "3, 4 x=y".to_string()];
+        original.lists.insert("LBlabel".into(), labels.clone());
+        save_file(&path, &original, &Layout::default()).unwrap();
+        let mut restored = store();
+        load_file(&path, &mut restored, &mut Layout::default()).unwrap();
+        std::fs::remove_file(path).unwrap();
+        assert_eq!(restored.list("LBlabel"), labels);
+    }
+
+    #[test]
+    fn original_sample_ini_round_trip() {
+        let Ok(bytes) = std::fs::read("original avese/sample4.ini") else { return };
+        let mut original = store();
+        let mut layout = Layout::default();
+        apply_text(&decode(&bytes), &mut original, &mut layout);
+        assert!(!original.checked("CBautosave"));
+        assert!(original.checked("CBLoadConf"));
+        assert!(original.checked("CBDataCheck"));
+        assert_eq!(original.position("SEmaxbmp"), 4);
+        let text = to_text(&original, &layout);
+        let mut restored = store();
+        let mut restored_layout = Layout::default();
+        apply_text(&decode(&encode(&text)), &mut restored, &mut restored_layout);
+        assert_eq!(to_text(&restored, &restored_layout), text);
+        assert_eq!(restored_layout, layout);
+    }
+
+    #[test]
+    fn old_or_corrupt_extension_preserves_labels() {
+        let mut s = store();
+        s.lists.insert("LBlabel".into(), vec!["keep".into()]);
+        for text in ["[avese.exe]\nCBpanel=1\n", "[avese.exe]\nLBlabelCount=1\nLBlabel0=ZZ\n", "[avese.exe]\nLBlabelCount=2\nLBlabel0=61\n"] {
+            apply_text(text, &mut s, &mut Layout::default());
+            assert_eq!(s.list("LBlabel"), &["keep"]);
+        }
     }
 
     #[test]
