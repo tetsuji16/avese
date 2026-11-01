@@ -54,7 +54,7 @@
 "ident": "taCenter"
 },
 "AutoSize": false,
-"Caption": "AV似非（えーぶい・えせ）",
+"Caption": "avese",
 "Font.Charset": {
 "ident": "SHIFTJIS_CHARSET"
 },
@@ -93,7 +93,7 @@
 "Top": 39,
 "Width": 91,
 "Height": 16,
-"Caption": "Version  0.93",
+"Caption": "Version  0.1.0",
 "Font.Charset": {
 "ident": "SHIFTJIS_CHARSET"
 },
@@ -118,7 +118,7 @@
 "Top": 62,
 "Width": 144,
 "Height": 13,
-"Caption": "Copyright  (c) 1997-2002",
+"Caption": "Rust 再実装版（非公式）",
 "Font.Charset": {
 "ident": "SHIFTJIS_CHARSET"
 },
@@ -152,11 +152,11 @@
 "class": "TLabel",
 "name": "Label2",
 "props": {
-"Left": 128,
+"Left": 100,
 "Top": 80,
-"Width": 45,
+"Width": 144,
 "Height": 13,
-"Caption": "おりいる",
+"Caption": "原作: おりいる",
 "Font.Charset": {
 "ident": "SHIFTJIS_CHARSET"
 },

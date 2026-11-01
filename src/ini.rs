@@ -175,10 +175,21 @@ pub fn apply_text(text: &str, store: &mut Store, lay: &mut Layout) {
             continue;
         }
         if let Some((k, v)) = line.split_once('=') {
-            if let Some(key) = KEYS.iter().find(|x| x.eq_ignore_ascii_case(k.trim())) {
-                set_value(key, v, store, lay);
-            }
+            apply_pair(k, v, store, lay);
         }
+    }
+}
+
+fn apply_pair(k: &str, v: &str, store: &mut Store, lay: &mut Layout) {
+    if let Some(key) = KEYS.iter().find(|x| x.eq_ignore_ascii_case(k.trim())) {
+        set_value(key, v, store, lay);
+    }
+}
+
+/// Apply already split `key=value` pairs (unknown keys are ignored).
+pub fn apply_pairs<'a>(pairs: impl IntoIterator<Item = (&'a str, &'a str)>, store: &mut Store, lay: &mut Layout) {
+    for (k, v) in pairs {
+        apply_pair(k, v, store, lay);
     }
 }
 

@@ -1,5 +1,6 @@
 //! Generic renderer that draws a DFM-derived form with VCL-style controls at pixel coordinates.
 use super::*;
+use crate::engine::gradient::{Gradient, GradientKind};
 use crate::forms::Node;
 use crate::state::Store;
 use egui::{Id, Key, Modifiers, Sense, TextureHandle, Ui};
@@ -275,6 +276,10 @@ impl<'a> Renderer<'a> {
             "TProgressBar" => {
                 sunken1(&p, r);
                 fill(&p, r.shrink(1.0), FACE);
+                let (lo, hi) = (n.int_opt("Min").unwrap_or(0), n.int_opt("Max").unwrap_or(100));
+                let frac = ((self.store.position(&n.name) - lo) as f32 / (hi - lo).max(1) as f32).clamp(0.0, 1.0);
+                let inner = r.shrink(2.0);
+                fill(&p, Rect::from_min_size(inner.min, Vec2::new((inner.width() * frac).floor(), inner.height())), Color32::from_rgb(0, 120, 212));
             }
             "TPaintBox" => {
                 fill(&p, r, FACE);
@@ -988,18 +993,12 @@ impl<'a> Renderer<'a> {
             let nc = self.store.position("SEcolor").max(2);
             let rev = self.store.checked("CBreverse");
             let fold = self.store.checked("CBfold");
+            let grad = Gradient::new(GradientKind::from_index(ty.max(0) as u8), nc as usize, rev, fold);
             sunken1(&p, r.expand(1.0));
             let w = r.width() as i32;
             for x in 0..w {
-                let mut t = x as f32 / (w - 1).max(1) as f32;
-                if fold {
-                    t = 1.0 - (2.0 * t - 1.0).abs();
-                }
-                if rev {
-                    t = 1.0 - t;
-                }
-                let q = ((t * (nc - 1) as f32).round() / (nc - 1) as f32).clamp(0.0, 1.0);
-                let c = gradient(ty, q);
+                let c = grad.color(x as f64 / (w - 1).max(1) as f64);
+                let c = Color32::from_rgb(c.0, c.1, c.2);
                 fill(&p, Rect::from_min_size(Pos2::new(r.min.x + x as f32, r.min.y), Vec2::new(1.0, r.height())), c);
             }
         }
@@ -1107,43 +1106,3 @@ fn find_flag(n: &Node, flag: &str) -> Option<String> {
     n.kids.iter().find_map(|k| find_flag(k, flag))
 }
 
-/// Colour-map preview used by the legend tab (approximation of the original gradients).
-pub fn gradient(ty: i32, t: f32) -> Color32 {
-    let v = |x: f32| (x.clamp(0.0, 1.0) * 255.0).round() as u8;
-    match ty / 3 {
-        1 => {
-            let g = match ty % 3 {
-                0 => t,
-                1 => 1.0 - t,
-                _ => (t * 2.0).min(1.0),
-            };
-            Color32::from_rgb(v(g), v(g), v(g))
-        }
-        2 => {
-            let (r, g, b) = hsv((1.0 - t) * 0.83, 1.0, 1.0);
-            Color32::from_rgb(v(r), v(g), v(b))
-        }
-        _ => {
-            let (r, g, b) = match ty % 3 {
-                0 => ((t * 2.0 - 0.5).clamp(0.0, 1.0), (1.0 - (t * 2.0 - 1.0).abs()).clamp(0.0, 1.0), (1.5 - t * 2.0).clamp(0.0, 1.0)),
-                1 => (t, (t * 3.14).sin().abs(), 1.0 - t),
-                _ => (t.sqrt(), t * t, (t * 6.28).sin().abs()),
-            };
-            Color32::from_rgb(v(r), v(g), v(b))
-        }
-    }
-}
-
-fn hsv(h: f32, s: f32, v: f32) -> (f32, f32, f32) {
-    let i = (h * 6.0).floor();
-    let f = h * 6.0 - i;
-    let (p, q, t) = (v * (1.0 - s), v * (1.0 - f * s), v * (1.0 - (1.0 - f) * s));
-    match (i as i32).rem_euclid(6) {
-        0 => (v, t, p),
-        1 => (q, v, p),
-        2 => (p, v, t),
-        3 => (p, q, v),
-        4 => (t, p, v),
-        _ => (v, p, q),
-    }
-}

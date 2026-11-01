@@ -1,9 +1,11 @@
 //! Modal dialogs (settings, batch list, label input, about, mesh progress) shown as OS windows.
+use crate::batch;
 use crate::forms::{Forms, Node};
+use crate::labels;
 use crate::platform_win32 as plat;
 use crate::state::Store;
 use crate::vcl::form::{Assets, Ev, Fnt, Renderer};
-use crate::vcl::{self, FACE, HILITE};
+use crate::vcl::FACE;
 use crate::view::{Item, ViewState, DIALOG_NAMES};
 use egui::{Context, Pos2, Vec2, ViewportBuilder, ViewportId};
 
@@ -11,10 +13,11 @@ pub const T_CONFIG: &str = "設定";
 pub const T_AVI: &str = "連続処理";
 pub const T_INPUT: &str = "ラベルの追加";
 pub const T_ABOUT: &str = "ﾊﾞｰｼﾞｮﾝ情報";
-pub const T_MESH: &str = "三角メッシュ自動生成";
+// the original's caption is 三角メッシュ自動生成, but this window serves loading and batch jobs too
+pub const T_MESH: &str = "処理中";
 
 const OPEN_FILTERS: [(&str, &[&str]); 4] = [
-    ("AV似非データファイル(*.txt;*.dat)", &["txt", "dat"]),
+    ("aveseデータファイル(*.txt;*.dat)", &["txt", "dat"]),
     ("テキストファイル(*.txt)", &["txt"]),
     ("データファイル(*.dat)", &["dat"]),
     ("すべてのファイル(*.*)", &["*"]),
@@ -24,8 +27,18 @@ pub fn notice(title: &str, text: &str) {
     rfd::MessageDialog::new().set_title(title).set_description(text).set_level(rfd::MessageLevel::Info).show();
 }
 
-pub fn not_implemented(what: &str) {
-    notice("AV似非", &format!("{what}は未実装です（この版は GUI のみで、描画エンジンはありません）。"));
+pub fn warn(title: &str, text: &str) {
+    rfd::MessageDialog::new().set_title(title).set_description(text).set_level(rfd::MessageLevel::Warning).show();
+}
+
+pub fn error(title: &str, text: &str) {
+    rfd::MessageDialog::new().set_title(title).set_description(text).set_level(rfd::MessageLevel::Error).show();
+}
+
+/// Yes/No question; true for Yes.
+pub fn confirm(title: &str, text: &str) -> bool {
+    let r = rfd::MessageDialog::new().set_title(title).set_description(text).set_level(rfd::MessageLevel::Warning).set_buttons(rfd::MessageButtons::YesNo).show();
+    matches!(r, rfd::MessageDialogResult::Yes)
 }
 
 pub fn pick_open_files() -> Vec<std::path::PathBuf> {
@@ -34,18 +47,6 @@ pub fn pick_open_files() -> Vec<std::path::PathBuf> {
         d = d.add_filter(n, e);
     }
     d.pick_files().unwrap_or_default()
-}
-
-pub fn pick_save_image() -> Option<std::path::PathBuf> {
-    rfd::FileDialog::new()
-        .set_title("画像のセーブ")
-        .add_filter("ビットマップファイル(*.bmp)", &["bmp"])
-        .add_filter("RLE 圧縮 ビットマップファイル(*.bmp)", &["bmp"])
-        .add_filter("ウィンドウズメタファイル(*.wmf)", &["wmf"])
-        .add_filter("エンハンストメタファイル(*.emf)", &["emf"])
-        .add_filter("PNGファイル(*.png)", &["png"])
-        .set_file_name("default")
-        .save_file()
 }
 
 pub fn pick_ini_open() -> Option<std::path::PathBuf> {
@@ -68,6 +69,11 @@ pub fn apply_interlocks(s: &mut Store) {
     // SEAVIwitdh/SEAVIheight stay enabled: the DFM has no Enabled=False nor a CBAVIsize handler, and orig_batch.png shows them enabled.
 }
 
+pub enum BatchReq {
+    Bmp(std::path::PathBuf),
+    Avi(std::path::PathBuf),
+}
+
 #[derive(Default)]
 pub struct Dialogs {
     pub config: Option<Store>, // snapshot restored on cancel
@@ -75,6 +81,14 @@ pub struct Dialogs {
     pub input: bool,
     pub about: bool,
     pub mesh: bool,
+    /// the progress window was closed while a job runs
+    pub mesh_cancel: bool,
+    /// set when the settings dialog was closed with OK
+    pub config_ok: bool,
+    /// a job is running: the batch dialog ignores its buttons
+    pub busy: bool,
+    /// request from the batch dialog, taken by the app
+    pub batch_req: Option<BatchReq>,
     pub main_hwnd: Option<isize>,
     styled: Vec<&'static str>,
     blocked: Vec<isize>,
@@ -191,7 +205,10 @@ impl Dialogs {
                 self.input = true;
             }
             match (act, close) {
-                (Some(true), _) => self.config = None,
+                (Some(true), _) => {
+                    self.config = None;
+                    self.config_ok = true;
+                }
                 (Some(false), _) | (None, true) => {
                     *sh.store = snap;
                     self.config = None;
@@ -224,11 +241,18 @@ impl Dialogs {
                 false
             });
             if done == Some(true) {
-                let line = format!("{}, {}  {}", sh.store.text("EDX"), sh.store.text("EDY"), sh.store.text("EDstr"));
-                let l = sh.store.lists.entry("LBlabel".into()).or_default();
-                l.push(line);
-                let n = l.len() as i32 - 1;
-                sh.store.set_item_index("LBlabel", n);
+                match labels::from_input(sh.store.text("EDX"), sh.store.text("EDY"), sh.store.text("EDstr")) {
+                    Ok(l) => {
+                        let list = sh.store.lists.entry("LBlabel".into()).or_default();
+                        list.push(labels::format_line(&l));
+                        let n = list.len() as i32 - 1;
+                        sh.store.set_item_index("LBlabel", n);
+                    }
+                    Err(e) => {
+                        self.modal(|| notice("avese", &e));
+                        done = None;
+                    }
+                }
             }
             if done.is_some() || c {
                 self.input = false;
@@ -237,15 +261,16 @@ impl Dialogs {
         if self.avi {
             let form = sh.forms.avi.clone();
             let size = client_size_avi(&form);
-            let mut this_close = false;
-            let owner_blocked = self.config.is_some();
-            let _ = owner_blocked;
             let me: &Dialogs = self;
+            let mut req = None;
             let c = viewport(ctx, "avi", T_AVI, size, Some(Vec2::new(292.0, 171.0)), true, sh.center, |ui| {
-                this_close = avi_body(ui, &form, sh.store, sh.assets, me);
+                req = avi_body(ui, &form, sh.store, sh.assets, me);
                 false
             });
-            if c || this_close {
+            if req.is_some() {
+                self.batch_req = req;
+            }
+            if c && !self.busy {
                 self.avi = false;
             }
         }
@@ -257,8 +282,6 @@ impl Dialogs {
                 r.draw_children(form, origin, &Fnt::form_default().with(form));
                 let key = r.key_button(form);
                 let evs = r.finish();
-                let p = ui.painter().clone();
-                vcl::caption(&p, egui::Rect::from_min_size(origin + Vec2::new(100.0, 97.0), Vec2::new(180.0, 14.0)), "非公式 Rust 再実装", crate::fonts::ui(), vcl::GRAYTEXT, vcl::HAlign::Left, false, false);
                 key.is_some() || evs.iter().any(|e| matches!(e, Ev::Click(n) if n == "OKButton"))
             });
             if c {
@@ -276,6 +299,7 @@ impl Dialogs {
             });
             if c {
                 self.mesh = false;
+                self.mesh_cancel = true;
             }
         }
         self.sync_native();
@@ -455,7 +479,8 @@ fn font_dialog(store: &mut Store, owner: Option<isize>) {
     }
 }
 
-fn avi_body(ui: &mut egui::Ui, form: &Node, store: &mut Store, assets: &Assets, d: &Dialogs) -> bool {
+/// Draws the batch dialog and runs its list buttons; BMP/AVI creation is returned as a request.
+fn avi_body(ui: &mut egui::Ui, form: &Node, store: &mut Store, assets: &Assets, d: &Dialogs) -> Option<BatchReq> {
     let rect = ui.max_rect();
     let (w, h) = (rect.width().round() as i32, rect.height().round() as i32);
     let mut f = form.clone();
@@ -473,63 +498,52 @@ fn avi_body(ui: &mut egui::Ui, form: &Node, store: &mut Store, assets: &Assets, 
     apply_interlocks(store);
     // dropped files are appended to the list
     let dropped: Vec<std::path::PathBuf> = ui.ctx().input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).collect());
-    for p in dropped {
-        store.lists.entry("savelist".into()).or_default().push(p.display().to_string());
+    if !d.busy {
+        for p in dropped {
+            store.lists.entry("savelist".into()).or_default().push(p.display().to_string());
+        }
     }
     let mut r = Renderer::new(ui, store, assets);
     r.draw_children(&f, rect.min, &Fnt::form_default().with(form));
     let evs = r.finish();
-    let mut close = false;
+    if d.busy {
+        return None;
+    }
+    let mut req = None;
     for e in evs {
         let Ev::Click(n) = e else { continue };
         let sel = store.item_index("savelist");
+        let list = store.lists.entry("savelist".into()).or_default();
         match n.as_str() {
-            "SortList" => {
-                if let Some(l) = store.lists.get_mut("savelist") {
-                    l.sort_by_key(|s| s.to_lowercase());
-                }
-            }
+            "SortList" => batch::sort_files(list),
             "listup" | "listdown" => {
-                let down = n == "listdown";
-                let len = store.list("savelist").len() as i32;
-                let j = if down { sel + 1 } else { sel - 1 };
-                if sel >= 0 && j >= 0 && j < len {
-                    if let Some(l) = store.lists.get_mut("savelist") {
-                        l.swap(sel as usize, j as usize);
-                    }
+                if let Some(j) = batch::move_item(list, sel, n == "listdown") {
                     store.set_item_index("savelist", j);
                 }
             }
             "addlist" => {
                 let files = d.modal(pick_open_files);
                 for p in files {
-                    store.lists.entry("savelist".into()).or_default().push(p.display().to_string());
+                    list.push(p.display().to_string());
                 }
             }
             "DeleteList" => {
-                if let Some(l) = store.lists.get_mut("savelist") {
-                    if sel >= 0 && (sel as usize) < l.len() {
-                        l.remove(sel as usize);
-                        let n = l.len() as i32;
-                        store.set_item_index("savelist", sel.min(n - 1));
-                    }
+                if let Some(i) = batch::remove_item(list, sel) {
+                    store.set_item_index("savelist", i);
                 }
             }
-            "makeBMP" => {
-                let p = d.modal(|| rfd::FileDialog::new().set_title("BMP作成").add_filter("ビットマップファイル(*.bmp)", &["bmp"]).set_file_name("default").save_file());
-                if p.is_some() {
-                    d.modal(|| not_implemented("BMP作成"));
-                }
-            }
-            "makeAVI" => {
-                let p = d.modal(|| rfd::FileDialog::new().set_title("AVI作成").add_filter("AVI-Files (*.avi)", &["avi"]).set_file_name("default").save_file());
-                if p.is_some() {
-                    d.modal(|| not_implemented("AVI作成"));
+            "makeBMP" | "makeAVI" => {
+                if list.is_empty() {
+                    d.modal(|| notice("avese", "リストにファイルがありません。"));
+                } else if n == "makeBMP" {
+                    req = d.modal(|| rfd::FileDialog::new().set_title("BMP を作成するフォルダ").pick_folder()).map(BatchReq::Bmp);
+                } else {
+                    let p = d.modal(|| rfd::FileDialog::new().set_title("AVI作成").add_filter("AVI-Files (*.avi)", &["avi"]).set_file_name("default.avi").save_file());
+                    req = p.map(|p| BatchReq::Avi(if p.extension().is_some_and(|e| e.eq_ignore_ascii_case("avi")) { p } else { p.with_added_extension("avi") }));
                 }
             }
             _ => {}
         }
     }
-    let _ = (&mut close, HILITE);
-    close
+    req
 }
