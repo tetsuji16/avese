@@ -154,9 +154,9 @@
 "props": {
 "Left": 100,
 "Top": 80,
-"Width": 144,
+"Width": 184,
 "Height": 13,
-"Caption": "原作: おりいる",
+"Caption": "AV似非に影響を受けています",
 "Font.Charset": {
 "ident": "SHIFTJIS_CHARSET"
 },
@@ -187,7 +187,7 @@
 "ident": "taCenter"
 },
 "AutoSize": false,
-"Caption": "このソフトはフリーウエアです。"
+"Caption": "Copyright (c) 2026 tetsuji16"
 },
 "kids": []
 },
@@ -206,7 +206,7 @@
 "ident": "taCenter"
 },
 "AutoSize": false,
-"Caption": "個人・商用を問わず、利用は無料です。"
+"Caption": "MIT License"
 },
 "kids": []
 },
@@ -225,7 +225,7 @@
 "ident": "taCenter"
 },
 "AutoSize": false,
-"Caption": "このソフトを利用する事によって生じた"
+"Caption": "ライセンス全文はリポジトリを参照してください。"
 },
 "kids": []
 },
@@ -244,7 +244,7 @@
 "ident": "taCenter"
 },
 "AutoSize": false,
-"Caption": "いかなる損害も、作者は責任を負いません。"
+"Caption": ""
 },
 "kids": []
 },
@@ -296,7 +296,7 @@
 "ParentFont": false,
 "ReadOnly": true,
 "TabOrder": 1,
-"Text": "http://hp.vector.co.jp/authors/VA011972/"
+"Text": "https://github.com/tetsuji16/avese"
 },
 "kids": []
 }
