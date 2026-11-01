@@ -945,6 +945,31 @@ mod shortcut_tests {
         assert!(shortcut_actions(&ctx, false).is_empty());
         ctx.end_pass().textures_delta.clear();
     }
+
+    #[test]
+    fn cancelled_redraw_keeps_previous_canvas_and_allows_redraw() {
+        let ctx = Context::default();
+        let forms = Forms::load();
+        let store = Settings::default_store();
+        let mut app = App::new(&ctx, forms, store.clone(), Layout::default(), vec![]);
+        let bytes = b"0 0 0\n1 0 1\n0 1 1\n1 1 2\n";
+        let mut source = store;
+        let loaded = pipeline::load(bytes, &mut source, None, |_| {}).unwrap();
+        let mut settings = Settings::from_store(&source);
+        settings.size = 20;
+        let previous = pipeline::render(&loaded, &settings).unwrap();
+        app.rendered(&ctx, RenderDone { loaded, result: Ok(previous) });
+        let original_tex = app.canvas_tex.as_ref().unwrap().id();
+        let original_pixels = app.rendered.as_ref().unwrap().rgba();
+        let loaded = app.loaded.take().unwrap();
+        app.rendered(&ctx, RenderDone { loaded, result: Err(jobs::CANCELLED.into()) });
+        assert_eq!(app.status_msg, "描画を中止しました");
+        assert_eq!(app.canvas_tex.as_ref().unwrap().id(), original_tex);
+        assert_eq!(app.rendered.as_ref().unwrap().rgba(), original_pixels);
+        let rerendered = pipeline::render(app.loaded.as_ref().unwrap(), &settings).unwrap();
+        assert_eq!(rerendered.rgba(), original_pixels);
+    }
+
 }
 
 impl eframe::App for App {
