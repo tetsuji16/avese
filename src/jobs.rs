@@ -113,21 +113,25 @@ pub struct MeshDone {
 }
 
 /// Build a triangulated field from the current data on a worker thread.
-pub fn mesh_job(ctx: &egui::Context, mut loaded: Loaded, s: Settings) -> Handle<MeshDone> {
+pub fn mesh_job(ctx: &egui::Context, loaded: Loaded, bytes: Arc<Vec<u8>>, path: Option<PathBuf>, s: Settings) -> Handle<MeshDone> {
     spawn(ctx, move |sh| {
-        let mut data = loaded.data.clone();
-        data.mesh_auto = true;
-        let result = crate::engine::field::build_with_progress(&data, &s, |p| sh.set_task(p))
-            .map(|(field, warnings)| {
-                loaded.data.mesh_auto = true;
-                loaded.field = field;
-                for warning in warnings {
-                    if !loaded.warnings.contains(&warning) { loaded.warnings.push(warning); }
-                }
-                loaded.opts = crate::engine::data::DataOptions::from_settings(&s);
-                loaded.spline = s.spline;
-            })
-            .map_err(|e| e.to_string());
+        let mut cancelled = false;
+        let generated = pipeline::reparse_with_mesh(&bytes, &s, true, |p| {
+            sh.set_task(p);
+            cancelled |= sh.cancelled();
+        });
+        let generated = match generated {
+            Ok(_) if cancelled || sh.cancelled() => Err(CANCELLED.to_string()),
+            Ok(mut generated) => {
+                generated.path = path;
+                Ok(generated)
+            }
+            Err(e) => Err(e),
+        };
+        let (loaded, result) = match generated {
+            Ok(generated) => (generated, Ok(())),
+            Err(e) => (loaded, Err(e)),
+        };
         Ok(MeshDone { loaded, result })
     })
 }
@@ -305,6 +309,31 @@ mod tests {
         assert_eq!(st.text("EDenZmin"), "0");
         assert_eq!(st.text("EDenZmax"), "99");
         assert_eq!(st.text("EDtokomax"), "3.5");
+    }
+
+    #[test]
+    fn cancelled_mesh_job_returns_the_original_loaded_field() {
+        let original = grid();
+        let mut source = String::new();
+        for y in 0..120 {
+            for x in 0..120 { source += &format!("{x} {y} {}\n", x + y); }
+        }
+        let bytes = Arc::new(source.into_bytes());
+        let ctx = egui::Context::default();
+        let handle = mesh_job(&ctx, original, bytes, None, Settings::from_store(&Settings::default_store()));
+        handle.sh.cancel();
+        let deadline = Instant::now() + std::time::Duration::from_secs(5);
+        loop {
+            if let Some(Ok(done)) = handle.poll() {
+                assert_eq!(done.result.unwrap_err(), CANCELLED);
+                assert!(!done.loaded.data.mesh_auto);
+                assert!(matches!(done.loaded.field, Field::Grid(_)));
+                assert_eq!(done.loaded.field.extent(), Some((0.0, 3.0, 0.0, 2.0)));
+                break;
+            }
+            assert!(Instant::now() < deadline, "mesh worker did not finish after cancellation");
+            std::thread::yield_now();
+        }
     }
 
     #[test]
