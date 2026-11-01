@@ -9,7 +9,7 @@
 "Cursor": {
 "ident": "crHourGlass"
 },
-"Caption": "AV似非 - nodata",
+"Caption": "avese - nodata",
 "Color": {
 "ident": "clBtnFace"
 },
@@ -1303,7 +1303,7 @@
 "class": "TOpenDialog",
 "name": "dlgOpen",
 "props": {
-"Filter": "AV似非データファイル(*.txt;*.dat)|*.txt;*.dat|テキストファイル(*.txt)|*.txt|データファイル(*.dat)|*.dat|すべてのファイル(*.*)|*.*",
+"Filter": "aveseデータファイル(*.txt;*.dat)|*.txt;*.dat|テキストファイル(*.txt)|*.txt|データファイル(*.dat)|*.dat|すべてのファイル(*.*)|*.*",
 "Options": {
 "set": [
 "ofHideReadOnly",

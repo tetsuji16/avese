@@ -1,19 +1,28 @@
-//! avese: native Rust/egui GUI reimplementation of the Delphi application AV似非 (GUI only, no drawing engine).
+//! avese: native Rust/egui GUI reimplementation of the Delphi application AV似非.
 #![cfg_attr(all(not(debug_assertions), windows), windows_subsystem = "windows")]
 
 mod app;
+mod batch;
+mod cli;
+mod clipboard;
 mod dialogs;
 mod engine;
 mod fonts;
 mod forms;
 mod icons;
+mod jobs;
+mod labels;
 mod ini;
 mod platform_win32;
+mod save_dialog;
 mod state;
 mod vcl;
 mod view;
 
 fn main() -> eframe::Result {
+    if let Some(code) = cli::run(std::env::args().skip(1).collect()) {
+        std::process::exit(code);
+    }
     let forms = forms::Forms::load();
     let mut store = state::Store::from_forms(&[&forms.form1, &forms.config, &forms.avi, &forms.input, &forms.about, &forms.mesh]);
     let mut layout = ini::Layout::default();
@@ -24,7 +33,7 @@ fn main() -> eframe::Result {
     let files: Vec<std::path::PathBuf> = std::env::args_os().skip(1).map(std::path::PathBuf::from).filter(|p| !p.to_string_lossy().starts_with("--")).collect();
 
     let mut vp = egui::ViewportBuilder::default()
-        .with_title("AV似非 - nodata")
+        .with_title("avese - nodata")
         .with_inner_size([(layout.form_width - 16).max(200) as f32, (layout.form_height - 39).max(150) as f32])
         .with_min_inner_size([200.0, 150.0])
         .with_position([layout.form_left as f32, layout.form_top as f32])

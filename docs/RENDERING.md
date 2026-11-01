@@ -1,25 +1,112 @@
-# 描画基盤とライブラリの選定
+# 描画エンジンの設計
 
-原作の描画は、ビットマップへのピクセル単位の描画（等高線はビットマップ走査方式）と、BMP/WMF/EMF/PNG への保存で成り立っている。
-チャートライブラリのグラフ部品では原作の見た目を再現できないため、ソフトウェアラスタライザで自前に描く。
+原作のマニュアルにある機能をすべて Rust で実装する。画素単位の一致は目標にしない。原作の exe には実行時に依存しない。
+外部プログラムや C ライブラリに頼らず、純 Rust のクレートと自前のコード（Windows のクリップボードと保存ダイアログのみ Win32 API）で実装する。
 
-## 採用
+## 全体の流れ
 
-| 用途 | ライブラリ | 理由 |
-|---|---|---|
-| 描画面（分布図、ベクトル、等高線、軸、グリッド、俯瞰図） | `tiny-skia` | 純 Rust のソフトウェアラスタライザ。RGBA ピクスマップに線、パス、塗りを描ける。GPU 不要で、テストで画素を直接比較できる。同じ描画をそのまま画像保存に使える |
-| 文字（軸目盛、軸タイトル、ラベル、凡例） | `ab_glyph` | `.ttc` のフォントコレクションを index 指定で読める。MS ゴシック等は実行時にシステムから読み込む（同梱しない）。ピクスマップへ自前でグリフを合成する |
-| 画面表示 | egui の `TextureHandle` | ピクスマップを `ColorImage` に変換して Image1 の位置に表示する |
-| PNG/BMP 保存 | `image`（導入済み） | 8bit パレット BMP、PNG。RLE 圧縮 BMP は自前のエンコーダ |
-| WMF/EMF 保存 | 自前の書き出し | 対応する Rust クレートが無い。レコードを直接書く |
-| AVI 保存 | 自前の書き出し | 無圧縮 8bit AVI。フレームは同じピクスマップを使う |
-| 三角メッシュ | `delaunator` | 純 Rust の Delaunay 三角形分割 |
+```
+バイト列 → data::parse → DataFile
+Store → Settings::from_store → Settings
+DataFile + Settings → field::build → Field
+Field + Settings → draw::build_scene → Scene（描画命令の列）
+Scene → raster::rasterize → Pixmap（画面、PNG、BMP、AVI、クリップボードの DIB）
+Scene → emf / wmf（ベクトル形式の保存）
+```
 
-## 採用しないもの
-- `plotters`、`egui_plot`: グラフ部品が前提で、等高線の走査方式やピクセル単位の配色を再現しにくい。
-- GPU 描画（wgpu など）: 画像保存とテストで同じ結果を得にくい。
+`src/engine/` は egui に依存しない。`Scene` を中間表現にすることで、ビットマップとメタファイルが同じ描画コードを共有する。
 
-## 構成
-- `src/engine/` は egui に依存しない（`cargo test` で画素を検証できるようにする）。
-- 描画面は `tiny_skia::Pixmap`。画面表示と画像保存は同じ描画結果を使う。
-- 入力は設定ストア（`state.rs`）から作る描画設定の構造体とデータ。
+## モジュール
+
+| ファイル | 役割 |
+|---|---|
+| `settings.rs` | `Settings`。設定項目を型付きで持つ。`from_store(&Store)` で作る |
+| `data.rs` | データファイルの解析。`parse(bytes, &DataOptions) -> DataFile` |
+| `field.rs` | 格子、三角メッシュ、パネルの統一表現と補間。範囲の計算 |
+| `mesh.rs` | Delaunay 分割（`delaunator`） |
+| `gradient.rs` | 9 種類のグラデーション（`CBtype` の 0〜2 は jet ではなく Google の Turbo で `colorous` を使う、3〜5 はグレー、6〜8 はスペクトル）、色数、反転、折り返し |
+| `scene.rs` | `Scene`、`Op`（描画命令） |
+| `raster.rs` | `Scene` を `tiny_skia::Pixmap` に描く。文字は `ab_glyph` |
+| `draw/mod.rs` | `build_scene`。画像サイズの決定、描画順、余白 |
+| `draw/plane.rs` | 平面図：分布図、散布図、パネル、ベクトル、等高線（カーテシアンと円筒） |
+| `draw/land.rs` | 俯瞰図 |
+| `draw/axes.rs` | 座標軸、グリッド、目盛、データ点 |
+| `draw/legend.rs` | 凡例、ラベル |
+| `export/bmp.rs` | 8bit BMP、RLE8 BMP、減色 |
+| `export/emf.rs`、`export/wmf.rs` | メタファイル |
+| `export/avi.rs` | 無圧縮 8bit AVI |
+| `pipeline.rs` | `load` と `render`。GUI と CLI の入口 |
+
+## Scene
+
+```rust
+pub struct Scene { pub width: u32, pub height: u32, pub bg: Rgb, pub ops: Vec<Op> }
+pub enum Op {
+    Image { x: i32, y: i32, w: u32, h: u32, rgba: Vec<u8> },   // 分布図の本体。透明な画素は描かない
+    Polyline { pts: Vec<(f32, f32)>, color: Rgb, width: f32 },
+    Polygon { pts: Vec<(f32, f32)>, fill: Option<Rgb>, stroke: Option<Rgb> },
+    Ellipse { cx: f32, cy: f32, rx: f32, ry: f32, fill: Option<Rgb>, stroke: Option<Rgb> },
+    Text { x: f32, y: f32, text: String, font: FontRef_, color: Rgb, anchor: Anchor },
+}
+```
+
+色は `Rgb(u8, u8, u8)`。線と図形はアンチエイリアスなし（8bit 保存での色数を抑えるため）。文字はフォントを `C:\Windows\Fonts` から探す。全角の「ＭＳ ゴシック」等を実ファイルに対応づけ、無ければ代替フォント、それも無ければ文字を描かない。読み込んだフォントはキャッシュする。
+
+## データファイル
+
+- 区切りはスペース、タブ、コンマの混在可。E 型可。改行は CR+LF、LF、CR のいずれも可。文字コードは Shift-JIS（UTF-8 も可）。
+- 読み飛ばす行：空行、先頭が `!"#$%&'()*` のいずれかの行、英字で始まる行、数値として解釈できない行。
+- 数値行より前に書ける指定（大文字小文字を区別しない）：
+  - `Labels x,y,文字列`：ラベル。座標は画像左上を原点とする画素。
+  - `IncludeINI ファイル名`：設定ファイル。データファイルからの相対パス。
+  - `[AVESE.EXE]` から次のセクションまで：設定の埋め込み（`キー=値`）。
+  - `Mesh AutoCreate`：三角メッシュを自動生成する。
+- 優先順位は 埋め込み > IncludeINI > 現在の設定。`CBLoadConf` がオンのときだけ反映し、Store に書き戻す。
+- `SEskip` は先頭のデータ行を読み飛ばす行数。
+- Z に `-` を与えた点は欠損。その点に接するセルを描かない。
+- `SEdataX/Y/Z/U/V` は 1 始まりの列番号。U、V、Z の列が無い行は該当値が無いものとして扱う。
+- パネル状のときは 1 行が 1 行分の Z の並びになる。`CBtenchi` で転置する。
+- `CBDataCheck` がオンで、格子状に並んでいないときは警告を返す（読み込みは続行可能）。
+
+## 画像サイズ
+
+- `CBmode` 0 なら `SEsize` が幅、1 なら高さ。もう一方はデータの縦横比から決める。`EDh`（横倍率）、`EDv`（縦倍率）を掛ける。円筒座標では倍率を無視して正方形にする。
+- `SEmar` を上下左右の余白に足す。凡例は下側に領域を追加する。
+- `SEmaxbmp`（MB）を幅×高さのバイト数が超えるときは、描画前に警告する。
+
+## 平面図
+
+- 分布図：画素ごとにセルを求めて双線形補間する。`CBSpline` がオンなら行方向、列方向の順に 3 次スプラインで補間する（欠損を含む行と列は線形に戻す）。
+- Z の範囲：`CBenZmin`、`CBenZmax` で指定。範囲外は端の色に丸める。
+- 散布図：`SEdotsize`、`CBscattemode`（■●□○）。等高線は描かない。
+- パネル：セルごとに一色。等高線とベクトルは描かない。行の先頭が画像の上。
+- 三角メッシュ：三角形ごとに重心座標で補間する。
+- ベクトル：基準長は `SEsize / 20`。`EDvector` はその百分率。最大の大きさ（`CBenVMax` なら `EDenVMax`）が基準長になる。方向は倍率の影響を受けず、成分に忠実に描く。間引きは `CBskipx/y`、`EDstepx/y`、`EDoffsetx/y`。矢印は `CBvectorhead`、`EDhead`（%）、`SEvectorheadangle`、`CBfix`（最大の矢印に揃える）、`CBpaint`（`SPvectorheadcolor` で塗る）。`CBcolorvector` なら大きさで色分けする。
+- 等高線：`contour` クレートで追跡し、データのあるセルの中だけを残す。`CBSpline` のときはセルを 4 分割して補間後の値を使い、三角メッシュは 1 ピクセルに約 1 点で格子に再サンプルする。`RBctmode1` は `SEtoko` 本を等分、`RBctmode2` は `EDdt` の整数倍。範囲は `CBentokomin/max`。色は `SPtokocolor`。
+- 円筒座標：列 1 がθ、列 2 が r。θの最小から最大を 0〜2π に対応づけ、周方向は閉じる。r の最小値が中心。ベクトルはθ、r 成分を変換して描く。
+
+## 俯瞰図
+
+- 正射影。`SEeta` で Z 軸まわりに回転し、`SEphi` を天頂角として倒す。高さは Z の全範囲が `SElandheight` 画素になる。
+- `CBsurface` がオンなら面を奥から順に描く。滑らかに見えるようセルを分割する（命令数の上限を設ける）。オフなら格子線を Z の色で描く。
+- 等高線、ベクトルは描かない。散布図、データ点、座標軸、グリッド、凡例は描く。
+
+## 座標軸、グリッド、凡例
+
+- 座標軸：原点が範囲内のときだけ描く。`SEaxislinewidth`、`SEaxisheadsize`（0 で矢印なし）、`CBaxsiscross`（十字）、`CBaxistitle`、`EDXtitle/Y/Z`。十字でないときは原点から正の向きだけ描く。
+- グリッド：`CBgridmesh`（全線）、`CBgridbox`（外枠）、`CBgridscale` と `SEgridlinelength`（目盛の長さ。負なら外向き）、`CBaxisscale`（数字）、`SEgridlinewidth`。間隔は `CBmemoryX/Y/Z`（自動、×10〜×0.1）。標準間隔は範囲に対する 1、2、5 系のきりのよい値。円筒座標では同心円と放射線になる。
+- 凡例：`CBlegend`、`SElegendw`、`SElegendh`（最小 3）。前景色の枠と最小値、最大値を描く。
+- ラベル：`CBLabel`。データファイルの `Labels` を描く。
+- フォントは `LBfont` の 4 行（ラベル、凡例、軸タイトル、軸目盛）。色は `SPFGcolor`、背景は `SPBGcolor`。
+
+## 出力
+
+- BMP：8bit パレット。色数が 256 を超えるときは Median Cut で減色する。RLE8 も書ける。
+- PNG：`image` クレート。
+- EMF、WMF：`Scene` をレコードに変換する。`Op::Image` は `StretchDIBits`。WMF は Placeable ヘッダ付き。
+- AVI：無圧縮 8bit。全フレーム共通のパレットを使う。サイズが異なるフレームは指定サイズに拡大縮小する。
+- クリップボード：`RBusebmp` なら CF_DIB、`RBusewmf` なら CF_ENHMETAFILE（Windows のみ）。
+
+## 色の表記
+
+Store の `TColor` は BGR（`0x00BBGGRR`）。`Settings` で `Rgb` に変換する。

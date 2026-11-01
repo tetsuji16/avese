@@ -1,19 +1,48 @@
 //! Main window: menu bar, control bar with five tool bands, scroll box, status bar and the actions.
-use crate::dialogs::{self, Dialogs, Shared};
+use crate::batch;
+use crate::dialogs::{self, BatchReq, Dialogs, Shared};
+use crate::engine::export::{self, bmp};
+use crate::engine::pipeline::{self, Loaded, Rendered};
+use crate::engine::settings::Settings;
 use crate::forms::{Forms, Node};
 use crate::ini::{self, Layout};
+use crate::jobs::{self, BatchKind, Built, Handle, RenderDone};
 use crate::platform_win32 as plat;
 use crate::state::Store;
-use crate::vcl::form::{Assets, Ev, Fnt, Renderer};
+use crate::vcl::form::{Assets, Fnt, Renderer};
 use crate::vcl::*;
 use crate::view::{Item, ViewState};
 use egui::{Context, Id, Key, Modifiers, Order, Pos2, Rect, Sense, Vec2};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+const HELP_HTML: &str = include_str!("../assets/help.html");
+/// A progress window appears only for jobs that take longer than this.
+const PROGRESS_DELAY: std::time::Duration = std::time::Duration::from_millis(400);
+
+enum Job {
+    Load(Handle<Built>),
+    Reparse(Handle<Loaded>),
+    Render(Handle<RenderDone>),
+    Batch(Handle<String>),
+}
+
+impl Job {
+    /// Shared state, start time and whether the progress window may be shown.
+    fn sh(&self) -> (&jobs::Sh, std::time::Instant, bool) {
+        match self {
+            Job::Load(h) => (&h.sh, h.started, true),
+            Job::Reparse(h) => (&h.sh, h.started, true),
+            Job::Render(h) => (&h.sh, h.started, false),
+            Job::Batch(h) => (&h.sh, h.started, true),
+        }
+    }
+}
 
 const MENU_H: f32 = 20.0;
 const BAR_H: f32 = 64.0;
 const STATUS_H: f32 = 22.0;
-const NODATA: &str = "AV似非 - nodata";
+const NODATA: &str = "avese - nodata";
 
 struct MItem {
     name: String,
@@ -89,9 +118,17 @@ pub struct App {
     hot: Option<usize>,
     drag: Option<usize>,
     started_hwnd: bool,
-    data: Option<Vec<u8>>,
+    bytes: Option<Arc<Vec<u8>>>,
+    data_path: Option<PathBuf>,
+    loaded: Option<Loaded>,
+    rendered: Option<Rendered>,
     canvas_tex: Option<egui::TextureHandle>,
     status_msg: String,
+    job_result: Option<Result<String, String>>,
+    /// X, Y, Z panels of the status bar for the pixel under the mouse
+    probe_cells: [String; 3],
+    job: Option<Job>,
+    pending_warnings: Vec<String>,
 }
 
 pub fn exe_dir() -> PathBuf {
@@ -143,9 +180,16 @@ impl App {
             hot: None,
             drag: None,
             started_hwnd: false,
-            data: None,
+            bytes: None,
+            data_path: None,
+            loaded: None,
+            rendered: None,
             canvas_tex: None,
             status_msg: String::new(),
+            job_result: None,
+            probe_cells: Default::default(),
+            job: None,
+            pending_warnings: vec![],
         }
     }
 
@@ -153,40 +197,14 @@ impl App {
         ViewState::from_store(&self.store)
     }
 
-    /// Render the held bytes with the current settings; errors go to the status bar.
-    fn render_data(&mut self, ctx: &Context) {
-        let Some(bytes) = self.data.as_ref() else { return };
-        let st = crate::engine::pipeline::RenderSettings::from_store(&self.store);
-        let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| crate::engine::pipeline::render_file(bytes, &st)))
-            .unwrap_or_else(|_| Err("描画中にエラーが発生しました".to_string()));
-        match res {
-            Ok(c) => {
-                let img = egui::ColorImage::from_rgba_premultiplied([c.width as usize, c.height as usize], &c.to_rgba_bytes());
-                self.canvas_tex = Some(ctx.load_texture("canvas", img, egui::TextureOptions::NEAREST));
-                self.status_msg.clear();
-            }
-            Err(e) => {
-                self.canvas_tex = None;
-                self.status_msg = e;
-            }
-        }
+    fn show_error(&self, text: &str) {
+        self.dlg.modal(|| dialogs::error("avese", text));
     }
 
     fn load_files(&mut self, ctx: &Context, files: Vec<PathBuf>) {
         match files.len() {
             0 => {}
-            1 => {
-                let n = files[0].file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-                match std::fs::read(&files[0]) {
-                    Ok(b) => {
-                        self.title = format!("AV似非 - {n}");
-                        self.store.set_enabled("TBRedraw", true);
-                        self.data = Some(b);
-                        self.render_data(ctx);
-                    }
-                    Err(e) => self.status_msg = format!("読み込めません: {e}"),
-                }
-            }
+            1 => self.start_load(ctx, files[0].clone()),
             _ => {
                 self.store.lists.insert("savelist".into(), files.iter().map(|p| p.display().to_string()).collect());
                 self.store.set_item_index("savelist", -1);
@@ -195,23 +213,237 @@ impl App {
         }
     }
 
+    /// Read the file and build its field on a worker; embedded settings are applied when it is done.
+    fn start_load(&mut self, ctx: &Context, path: PathBuf) {
+        if self.job.is_none() {
+            self.job = Some(Job::Load(jobs::load_job(ctx, path, self.store.clone())));
+        }
+    }
+
+    /// Draw again with the current settings; the data are parsed again only if a setting that affects
+    /// reading has changed, so settings embedded in the file are not applied a second time.
+    fn redraw(&mut self, ctx: &Context) {
+        if self.job.is_some() {
+            return;
+        }
+        let Some(bytes) = self.bytes.clone() else { return };
+        let s = Settings::from_store(&self.store);
+        if self.loaded.as_ref().is_some_and(|l| !l.is_stale(&s)) {
+            self.start_render(ctx);
+        } else {
+            self.loaded = None;
+            self.job = Some(Job::Reparse(jobs::reparse_job(ctx, bytes, self.data_path.clone(), s)));
+        }
+    }
+
+    /// Asks before drawing an image larger than SEmaxbmp, then draws on a worker.
+    fn start_render(&mut self, ctx: &Context) {
+        let Some(loaded) = self.loaded.take() else { return };
+        let s = Settings::from_store(&self.store);
+        let need = pipeline::required_bytes(&loaded, &s);
+        if jobs::over_limit(need, s.max_bmp_mb) {
+            let msg = format!("イメージのサイズが {} MB になり、設定された上限 {} MB を超えます。\n描画を続けますか？", need.div_ceil(1024 * 1024), s.max_bmp_mb);
+            if !self.dlg.modal(|| dialogs::confirm("avese", &msg)) {
+                self.loaded = Some(loaded);
+                self.canvas_tex = None;
+                self.rendered = None;
+                self.status_msg = "描画を中止しました".into();
+                return;
+            }
+        }
+        self.job = Some(Job::Render(jobs::render_job(ctx, loaded, s, self.store.list("LBlabel").to_vec())));
+    }
+
+    /// A field was built: show the ranges in the settings dialog, then draw.
+    fn built(&mut self, ctx: &Context, loaded: Loaded) {
+        jobs::readback(&mut self.store, &loaded.field);
+        self.pending_warnings = loaded.warnings.clone();
+        self.loaded = Some(loaded);
+        self.start_render(ctx);
+    }
+
+    fn rendered(&mut self, ctx: &Context, done: RenderDone) {
+        self.loaded = Some(done.loaded);
+        match done.result {
+            Ok(r) => {
+                let img = egui::ColorImage::from_rgba_premultiplied(r.size(), &r.rgba());
+                self.canvas_tex = Some(ctx.load_texture("canvas", img, egui::TextureOptions::NEAREST));
+                self.rendered = Some(r);
+                self.status_msg = self.pending_warnings.first().cloned().unwrap_or_default();
+                if !self.pending_warnings.is_empty() {
+                    let text = jobs::warnings_text(&std::mem::take(&mut self.pending_warnings));
+                    self.dlg.modal(|| dialogs::warn("avese", &text));
+                }
+            }
+            Err(e) => {
+                self.canvas_tex = None;
+                self.rendered = None;
+                self.status_msg = e.clone();
+                self.show_error(&e);
+            }
+        }
+    }
+
+    /// Collect the result of the running job, if it is done.
+    fn poll_job(&mut self, ctx: &Context) {
+        // reported one frame after the job ended, so the progress window is already closed
+        match self.job_result.take() {
+            Some(Ok(m)) => {
+                self.status_msg.clear();
+                self.dlg.modal(|| dialogs::notice("avese", &m));
+            }
+            Some(Err(e)) => self.job_failed(e),
+            None => {}
+        }
+        let Some(job) = self.job.take() else { return };
+        if std::mem::take(&mut self.dlg.mesh_cancel) {
+            job.sh().0.cancel();
+            // loading and parsing have nothing to keep; a batch ends at the next file
+            if matches!(job, Job::Load(_) | Job::Reparse(_)) {
+                self.status_msg = jobs::CANCELLED.into();
+                self.dlg.mesh = false;
+                return;
+            }
+        }
+        match job {
+            Job::Load(h) => match h.poll() {
+                None => self.job = Some(Job::Load(h)),
+                Some(Err(e)) => self.job_result = Some(Err(e)),
+                Some(Ok(b)) => {
+                    self.store = b.store;
+                    dialogs::apply_interlocks(&mut self.store);
+                    let n = b.loaded.path.as_ref().and_then(|p| p.file_name()).map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+                    self.title = format!("avese - {n}");
+                    self.store.set_enabled("TBRedraw", true);
+                    self.bytes = Some(b.bytes);
+                    self.data_path = b.loaded.path.clone();
+                    self.built(ctx, b.loaded);
+                }
+            },
+            Job::Reparse(h) => match h.poll() {
+                None => self.job = Some(Job::Reparse(h)),
+                Some(Err(e)) => self.job_result = Some(Err(e)),
+                Some(Ok(l)) => self.built(ctx, l),
+            },
+            Job::Render(h) => match h.poll() {
+                None => self.job = Some(Job::Render(h)),
+                Some(Err(e)) => self.job_result = Some(Err(e)),
+                Some(Ok(d)) => self.rendered(ctx, d),
+            },
+            Job::Batch(h) => match h.poll() {
+                None => self.job = Some(Job::Batch(h)),
+                Some(r) => self.job_result = Some(r),
+            },
+        }
+        if self.job_result.is_some() {
+            ctx.request_repaint();
+        }
+        // progress window and input lock for whatever is still running
+        self.dlg.busy = matches!(self.job, Some(Job::Batch(_)));
+        match &self.job {
+            Some(j) => {
+                let (sh, started, can_show) = j.sh();
+                let all = if matches!(j, Job::Batch(_)) { sh.all() } else { sh.task() };
+                self.store.set_position("ProgressBar2", (sh.task() * 100.0) as i32);
+                self.store.set_position("ProgressBar1", (all * 400.0) as i32);
+                self.dlg.mesh = can_show && !sh.cancelled() && started.elapsed() > PROGRESS_DELAY;
+                ctx.request_repaint_after(std::time::Duration::from_millis(50));
+            }
+            None => self.dlg.mesh = false,
+        }
+    }
+
+    fn job_failed(&mut self, e: String) {
+        self.status_msg = e.clone();
+        if e != jobs::CANCELLED {
+            self.show_error(&e);
+        }
+    }
+
+    fn start_batch(&mut self, ctx: &Context, req: BatchReq) {
+        let files = self.store.list("savelist").to_vec();
+        let kind = match req {
+            BatchReq::Bmp(dir) => {
+                let targets = batch::bmp_targets(&dir, &files);
+                let exist = targets.iter().filter(|t| t.exists()).count();
+                if exist > 0 && !self.dlg.modal(|| dialogs::confirm("avese", &format!("{exist} 個のファイルが既にあります。上書きしますか？"))) {
+                    return;
+                }
+                BatchKind::Bmp(targets)
+            }
+            BatchReq::Avi(path) => {
+                let fps = self.store.position("SEframerate");
+                if fps <= 0 {
+                    self.dlg.modal(|| dialogs::notice("avese", "フレームレートには 1 以上を指定してください。"));
+                    return;
+                }
+                let size = self.store.checked("CBAVIsize").then(|| (self.store.position("SEAVIwitdh"), self.store.position("SEAVIheight")));
+                BatchKind::Avi { path, fps: fps as f64, size }
+            }
+        };
+        self.job = Some(Job::Batch(jobs::batch_job(ctx, files, self.store.clone(), kind)));
+    }
+
+    fn save_image(&mut self) {
+        let Some(r) = self.rendered.as_ref() else { return self.no_image() };
+        let use_wmf = self.store.checked("RBusewmf");
+        let Some((path, fmt)) = self.dlg.modal(|| crate::save_dialog::pick(use_wmf)) else { return };
+        if let Err(e) = export::save_image(&path, r, fmt) {
+            self.show_error(&e);
+        }
+    }
+
+    fn copy_clipboard(&mut self) {
+        let Some(r) = self.rendered.as_ref() else { return self.no_image() };
+        let res = if self.store.checked("RBusewmf") {
+            crate::clipboard::copy_emf(&export::emf::encode_emf(&r.scene))
+        } else {
+            let [w, h] = r.size();
+            crate::clipboard::copy_bitmap(&bmp::quantize(r.pixmap.data(), w as u32, h as u32))
+        };
+        if let Err(e) = res {
+            self.show_error(&e);
+        }
+    }
+
+    fn no_image(&self) {
+        self.dlg.modal(|| dialogs::notice("avese", "イメージがありません。先にデータを読み込んでください。"));
+    }
+
+    fn close_data(&mut self) {
+        self.title = NODATA.into();
+        self.store.set_enabled("TBRedraw", false);
+        self.bytes = None;
+        self.data_path = None;
+        self.loaded = None;
+        self.rendered = None;
+        self.canvas_tex = None;
+        self.status_msg.clear();
+        self.pending_warnings.clear();
+        self.probe_cells = Default::default();
+    }
+
+    /// Our own help page, written to the temp folder and opened with the default browser.
     fn open_help(&self) {
-        let p = exe_dir().join("avese.htm");
-        if !p.exists() {
-            self.dlg.modal(|| dialogs::notice("AV似非", "ヘルプファイル avese.htm が見つかりません。"));
+        let p = std::env::temp_dir().join("avese-help.html");
+        if let Err(e) = std::fs::write(&p, HELP_HTML) {
+            self.show_error(&format!("ヘルプを書き出せません: {e}"));
             return;
         }
         #[cfg(windows)]
-        let _ = std::process::Command::new("cmd").args(["/C", "start", ""]).arg(&p).spawn();
+        let r = std::process::Command::new("cmd").args(["/C", "start", ""]).arg(&p).spawn();
         #[cfg(target_os = "macos")]
-        let _ = std::process::Command::new("open").arg(&p).spawn();
+        let r = std::process::Command::new("open").arg(&p).spawn();
         #[cfg(all(unix, not(target_os = "macos")))]
-        let _ = std::process::Command::new("xdg-open").arg(&p).spawn();
+        let r = std::process::Command::new("xdg-open").arg(&p).spawn();
+        if let Err(e) = r {
+            self.show_error(&format!("ブラウザを起動できません: {e}"));
+        }
     }
 
     fn save_ini(&self, p: &Path) {
         if let Err(e) = ini::save_file(p, &self.store, &self.layout) {
-            self.dlg.modal(|| dialogs::notice("AV似非", &format!("設定を保存できません: {e}")));
+            self.dlg.modal(|| dialogs::notice("avese", &format!("設定を保存できません: {e}")));
         }
     }
 
@@ -224,25 +456,19 @@ impl App {
             return;
         }
         match name {
-            "menload1" | "TBload1" | "menreload" | "TBReload" => {
+            "menload1" | "TBload1" => {
                 let f = self.dlg.modal(dialogs::pick_open_files);
                 self.load_files(ctx, f);
             }
+            "menreload" | "TBReload" => match self.data_path.clone() {
+                Some(p) => self.start_load(ctx, p),
+                None => self.dlg.modal(|| dialogs::notice("avese", "再読み込みするデータがありません。")),
+            },
             "menload2" => self.dlg.avi = true,
-            "mensave" | "TBsave" => {
-                if self.dlg.modal(dialogs::pick_save_image).is_some() {
-                    self.dlg.modal(|| dialogs::not_implemented("画像のセーブ"));
-                }
-            }
-            "menClipbrd" | "TBclip" => self.dlg.modal(|| dialogs::not_implemented("クリップボードへのコピー")),
-            "menclose" => {
-                self.title = NODATA.into();
-                self.store.set_enabled("TBRedraw", false);
-                self.data = None;
-                self.canvas_tex = None;
-                self.status_msg.clear();
-            }
-            "menredraw" | "TBRedraw" => self.render_data(ctx),
+            "mensave" | "TBsave" => self.save_image(),
+            "menClipbrd" | "TBclip" => self.copy_clipboard(),
+            "menclose" => self.close_data(),
+            "menredraw" | "TBRedraw" => self.redraw(ctx),
             "menconfig" | "TBConfig" => self.dlg.open_config(&self.store),
             "menconfigsave" => {
                 let p = self.ini_path.clone();
@@ -565,12 +791,8 @@ impl App {
                 }
             }
         }
-        let evs = r.finish();
-        for e in evs {
-            if let Ev::Change(n) = e {
-                let _ = n; // size/scale edits have no effect without a drawing engine
-            }
-        }
+        // size and scale edits are read when the image is drawn again
+        let _ = r.finish();
         if let Some((i, d, stop)) = drag_delta {
             let (ref mut top, ref mut left) = self.layout.bars[i];
             let w = tbs[i].int("Width");
@@ -587,6 +809,7 @@ impl App {
 
     // ---------------------------------------------------------------- status bar
     fn status_bar(&self, ui: &egui::Ui, r: Rect) {
+        let font = egui::FontId::proportional(12.0);
         let p = ui.painter();
         fill(p, r, FACE);
         // panels end at 100 / 200 / right edge; each later panel starts 2px after the previous boundary
@@ -596,6 +819,11 @@ impl App {
             sunken1(p, Rect::from_min_max(Pos2::new(left, r.min.y + 2.0), Pos2::new(right, r.max.y)));
             left = right + 2.0;
         }
+        let [x, y, z] = &self.probe_cells;
+        let text = |from: f32, to: f32, s: &str| p.with_clip_rect(Rect::from_min_max(Pos2::new(from + 2.0, r.min.y + 2.0), Pos2::new(to, r.max.y))).text(Pos2::new(from + 4.0, r.center().y + 1.0), egui::Align2::LEFT_CENTER, s, font.clone(), egui::Color32::BLACK);
+        text(r.min.x, r.min.x + 100.0, x);
+        text(r.min.x + 102.0, r.min.x + 200.0, y);
+        text(r.min.x + 202.0, r.max.x - 16.0, if z.is_empty() { &self.status_msg } else { z });
         // size grip: three diagonal strokes, each a white pixel followed by two gray ones
         fill(p, Rect::from_min_max(Pos2::new(r.max.x - 16.0, r.max.y - 16.0), r.max), FACE);
         let (lim, base) = (r.max.x - 2.0, r.max.y - 2.0);
@@ -624,18 +852,22 @@ impl App {
     }
 
     fn shortcuts(&mut self, ctx: &Context, acts: &mut Vec<String>) {
-        if ctx.egui_wants_keyboard_input() {
-            return;
-        }
-        acts.extend(shortcut_actions(ctx).into_iter().map(String::from));
+        // accelerators work whatever has focus (CBmode starts focused); only copying text stays with a text box
+        let in_text = ctx.memory(|m| m.focused()).is_some_and(|id| egui::TextEdit::load_state(ctx, id).is_some());
+        acts.extend(shortcut_actions(ctx, in_text).into_iter().map(String::from));
     }
 }
 
 /// Ctrl+letter accelerators from the DFM ShortCut values (0x4000 | letter).
-const SHORTCUTS: [(Key, &str); 6] = [(Key::L, "menload1"), (Key::S, "mensave"), (Key::C, "menClipbrd"), (Key::O, "menconfig"), (Key::R, "menredraw"), (Key::N, "menreload")];
+/// Ctrl+C (menClipbrd) is missing: egui-winit delivers it as Event::Copy, without a key event.
+const SHORTCUTS: [(Key, &str); 5] = [(Key::L, "menload1"), (Key::S, "mensave"), (Key::O, "menconfig"), (Key::R, "menredraw"), (Key::N, "menreload")];
 
-fn shortcut_actions(ctx: &Context) -> Vec<&'static str> {
-    SHORTCUTS.iter().filter(|(k, _)| ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, *k))).map(|(_, n)| *n).collect()
+fn shortcut_actions(ctx: &Context, in_text: bool) -> Vec<&'static str> {
+    let mut acts: Vec<&'static str> = SHORTCUTS.iter().filter(|(k, _)| ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, *k))).map(|(_, n)| *n).collect();
+    if !in_text && ctx.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Copy))) {
+        acts.push("menClipbrd");
+    }
+    acts
 }
 
 #[cfg(test)]
@@ -649,9 +881,29 @@ mod shortcut_tests {
             let mut raw = egui::RawInput::default();
             raw.events.push(egui::Event::Key { key: k, physical_key: Some(k), pressed: true, repeat: false, modifiers: Modifiers::COMMAND });
             let _ = ctx.begin_pass(raw);
-            assert_eq!(shortcut_actions(&ctx), vec![name]);
+            assert_eq!(shortcut_actions(&ctx, true), vec![name]);
             ctx.end_pass().textures_delta.clear();
         }
+    }
+
+    #[test]
+    fn copy_event_dispatches_to_clipboard() {
+        let ctx = Context::default();
+        let mut raw = egui::RawInput::default();
+        raw.events.push(egui::Event::Copy);
+        let _ = ctx.begin_pass(raw);
+        assert_eq!(shortcut_actions(&ctx, false), vec!["menClipbrd"]);
+        ctx.end_pass().textures_delta.clear();
+    }
+
+    #[test]
+    fn copy_event_stays_with_a_text_box() {
+        let ctx = Context::default();
+        let mut raw = egui::RawInput::default();
+        raw.events.push(egui::Event::Copy);
+        let _ = ctx.begin_pass(raw);
+        assert!(shortcut_actions(&ctx, true).is_empty());
+        ctx.end_pass().textures_delta.clear();
     }
 
     #[test]
@@ -660,7 +912,7 @@ mod shortcut_tests {
         let mut raw = egui::RawInput::default();
         raw.events.push(egui::Event::Key { key: Key::O, physical_key: Some(Key::O), pressed: true, repeat: false, modifiers: Modifiers::NONE });
         let _ = ctx.begin_pass(raw);
-        assert!(shortcut_actions(&ctx).is_empty());
+        assert!(shortcut_actions(&ctx, false).is_empty());
         ctx.end_pass().textures_delta.clear();
     }
 }
@@ -668,6 +920,10 @@ mod shortcut_tests {
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        self.poll_job(&ctx);
+        if let Some(req) = self.dlg.batch_req.take() {
+            self.start_batch(&ctx, req);
+        }
         if self.first {
             self.first = false;
             dialogs::apply_interlocks(&mut self.store);
@@ -679,7 +935,7 @@ impl eframe::App for App {
             self.started_hwnd = self.dlg.main_hwnd.is_some();
         }
         self.track_window(&ctx);
-        let locked = self.dlg.any();
+        let locked = self.dlg.any() || self.job.is_some();
         let full = ctx.content_rect();
         let p = ui.painter().clone();
         fill(&p, full, FACE);
@@ -697,23 +953,23 @@ impl eframe::App for App {
         // scroll box
         fill(&p, sbox, FACE);
         sunken(&p, sbox);
+        let mut cells: [String; 3] = Default::default();
         if let Some(tex) = &self.canvas_tex {
-            let f = |n: &str| self.store.text(n).trim().parse::<f32>().ok().filter(|v| *v > 0.0).unwrap_or(1.0);
-            let (mh, mv) = (f("EDh"), f("EDv"));
-            let sz = tex.size_vec2() * Vec2::new(mh, mv);
+            let sz = tex.size_vec2(); // EDh / EDv are applied when the scene is built
             let inner = sbox.shrink(2.0);
             ui.scope_builder(egui::UiBuilder::new().max_rect(inner), |ui| {
-                egui::ScrollArea::both().auto_shrink([false, false]).show(ui, |ui| {
-                    ui.add(egui::Image::new((tex.id(), sz)));
-                });
+                let out = egui::ScrollArea::both().auto_shrink([false, false]).show(ui, |ui| ui.add(egui::Image::new((tex.id(), sz))));
+                let img = out.inner.rect;
+                let pos = ctx.input(|i| i.pointer.hover_pos()).filter(|p| inner.contains(*p) && img.contains(*p));
+                if let (Some(pos), Some(r), Some(l)) = (pos, &self.rendered, &self.loaded) {
+                    let d = pos - img.min;
+                    cells = jobs::probe_cells(r.probe.at_field(d.x as f64, d.y as f64, &l.field), r.probe.frame().is_some_and(|f| f.cyl.is_some()));
+                }
             });
         }
+        self.probe_cells = cells;
         self.control_bar(ui, cbar, &mut acts, locked);
         self.status_bar(ui, sbar);
-        if !self.status_msg.is_empty() {
-            let tr = Rect::from_min_max(Pos2::new(sbar.min.x + 202.0, sbar.min.y + 2.0), Pos2::new(sbar.max.x - 16.0, sbar.max.y));
-            p.with_clip_rect(tr).text(Pos2::new(tr.min.x + 4.0, tr.center().y), egui::Align2::LEFT_CENTER, &self.status_msg, egui::FontId::proportional(12.0), egui::Color32::BLACK);
-        }
         if let Some(a) = self.menu_bar(ui, mbar, locked) {
             acts.push(a);
         }
@@ -741,8 +997,8 @@ impl eframe::App for App {
             let mut sh = Shared { forms: &self.forms, store: &mut self.store, assets: &self.assets, center };
             self.dlg.show(&ctx, &mut sh);
         }
-        if cfg_was_open && self.dlg.config.is_none() && self.data.is_some() {
-            self.render_data(&ctx);
+        if cfg_was_open && self.dlg.config.is_none() && std::mem::take(&mut self.dlg.config_ok) && self.bytes.is_some() {
+            self.redraw(&ctx);
         }
         if self.dlg.any() {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
