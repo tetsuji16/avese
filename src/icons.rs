@@ -12,8 +12,8 @@ fn standard_icon(idx: usize) -> Option<&'static str> {
         0 => ph::FOLDER_OPEN,
         1 => ph::FLOPPY_DISK,
         2 => ph::COPY,
-        3 => ph::PAINT_BRUSH,
-        14 => ph::ARROW_CLOCKWISE,
+        3 => ph::CHART_LINE_UP,
+        14 => ph::FILE_TEXT,
         4 => ph::GEAR,
         5 => ph::QUESTION,
         _ => return None,
@@ -22,22 +22,27 @@ fn standard_icon(idx: usize) -> Option<&'static str> {
 
 fn draw_standard(p: &Painter, idx: usize, r: Rect, enabled: bool) {
     let Some(glyph) = standard_icon(idx) else { return };
-    if !enabled {
-        p.text(r.center(), egui::Align2::CENTER_CENTER, glyph, egui::FontId::new(17.0, egui::FontFamily::Name("phosphor".into())), SHADOW);
-        return;
-    }
-    let color = match idx {
+    let color = if !enabled { SHADOW } else { match idx {
         0 => Color32::from_rgb(225, 174, 24), // warm yellow folder
         1 => Color32::from_rgb(48, 104, 190), // blue save disk
         2 => Color32::from_rgb(164, 117, 70), // paper/clipboard brown
-        3 => Color32::from_rgb(210, 62, 66), // redraw
-        14 => Color32::from_rgb(50, 112, 202), // reload
+        3 => Color32::from_rgb(35, 110, 190), // redraw the graph
+        14 => Color32::from_rgb(28, 130, 95), // reload the data file
         4 => Color32::from_rgb(89, 114, 146),
         5 => Color32::from_rgb(45, 126, 205), // blue help mark
         _ => BLACK,
-    };
+    }};
     let font = egui::FontId::new(17.0, egui::FontFamily::Name("phosphor".into()));
-    p.text(r.center(), egui::Align2::CENTER_CENTER, glyph, font, color);
+    if matches!(idx, 3 | 14) {
+        // Keep the target visible while the small circular arrow signals repetition.
+        p.text(r.center() - Vec2::new(2.0, 2.0), egui::Align2::CENTER_CENTER, glyph, font, color);
+        let badge = r.center() + Vec2::new(5.0, 5.0);
+        p.circle_filled(badge, 5.5, Color32::from_rgb(248, 248, 248));
+        p.text(badge, egui::Align2::CENTER_CENTER, egui_phosphor::regular::ARROW_CLOCKWISE,
+            egui::FontId::new(11.0, egui::FontFamily::Name("phosphor".into())), color);
+    } else {
+        p.text(r.center(), egui::Align2::CENTER_CENTER, glyph, font, color);
+    }
 }
 
 /// Fallback glyphs per ImageList index: (text, background).

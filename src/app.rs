@@ -1063,7 +1063,12 @@ impl App {
                 let icon_size = 22.0_f32.min(rr.height() - 4.0).min(rr.width() - 4.0);
                 let ir = Rect::from_center_size(rr.center(), Vec2::splat(icon_size));
                 crate::icons::draw_tb(&pp, &self.assets, k.int("ImageIndex").max(0) as usize, ir, en, false);
-                r.tip(id, k.hint(), resp.hovered());
+                let hint = match k.name.as_str() {
+                    "TBRedraw" => "再描画：現在のデータと設定で画像を描き直す",
+                    "TBReload" => "再読み込み：データファイルを読み直して描画する",
+                    _ => k.hint(),
+                };
+                r.tip(id, hint, resp.hovered());
                 if en && resp.clicked() {
                     acts.push(k.name.clone());
                 }
