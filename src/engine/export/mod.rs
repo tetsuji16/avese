@@ -6,7 +6,9 @@ pub mod wmf;
 
 use super::pipeline::Rendered;
 use super::scene::FontRef;
+use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ImageFormat {
@@ -51,16 +53,27 @@ fn encode_png(rgba: &[u8], w: u32, h: u32) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
-pub(crate) fn temp_sibling(path: &Path) -> PathBuf {
-    let mut name = path.file_name().map(|n| n.to_os_string()).unwrap_or_default();
-    name.push(".tmp");
-    path.with_file_name(name)
+/// Create a new sibling without overwriting another process's file or following a symlink.
+pub(crate) fn create_temp_sibling(path: &Path) -> std::io::Result<(PathBuf, std::fs::File)> {
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    loop {
+        let mut name = path.file_name().unwrap_or_default().to_os_string();
+        name.push(format!(".avese-{}-{}.tmp", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)));
+        let tmp = path.with_file_name(name);
+        match std::fs::OpenOptions::new().write(true).create_new(true).open(&tmp) {
+            Ok(file) => return Ok((tmp, file)),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
+        }
+    }
 }
 
 /// Writes to a temporary sibling and renames it over `path`, so a failure keeps the old file.
 pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    let tmp = temp_sibling(path);
-    let r = std::fs::write(&tmp, bytes).and_then(|_| std::fs::rename(&tmp, path));
+    let (tmp, mut file) = create_temp_sibling(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let r = file.write_all(bytes);
+    drop(file);
+    let r = r.and_then(|_| std::fs::rename(&tmp, path));
     r.map_err(|e| {
         let _ = std::fs::remove_file(&tmp);
         format!("{}: {e}", path.display())
@@ -249,6 +262,22 @@ pub(crate) mod tests {
         assert_eq!(ImageFormat::from_extension(Path::new("a.wmf")), Some(ImageFormat::Wmf));
         assert_eq!(ImageFormat::from_extension(Path::new("a.gif")), None);
         assert_eq!(ImageFormat::from_extension(Path::new("a")), None);
+    }
+
+    #[test]
+    fn export_preserves_unrelated_temporary_file() {
+        let dir = std::env::temp_dir().join(format!("avese-export-{}-{:?}", std::process::id(), std::thread::current().id()));
+        std::fs::create_dir(&dir).unwrap();
+        let path = dir.join("image.bmp");
+        let other = dir.join("image.bmp.tmp");
+        std::fs::write(&other, b"keep").unwrap();
+        write_atomic(&path, b"image").unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), b"image");
+        assert_eq!(std::fs::read(&other).unwrap(), b"keep");
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 2);
+        std::fs::remove_file(path).unwrap();
+        std::fs::remove_file(other).unwrap();
+        std::fs::remove_dir(dir).unwrap();
     }
 
     #[test]
