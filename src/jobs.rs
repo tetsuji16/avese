@@ -74,6 +74,9 @@ pub fn spawn<T: Send + 'static>(ctx: &egui::Context, f: impl FnOnce(&Sh) -> Resu
         let _ = tx.send(r);
         ctx2.request_repaint();
     });
+    // The job may outlive the input event that started it. Wake the UI now so
+    // it begins polling and can show progress before the worker finishes.
+    ctx.request_repaint();
     Handle { rx, sh, started: Instant::now() }
 }
 
