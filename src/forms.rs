@@ -53,6 +53,19 @@ impl Node {
             .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect())
             .unwrap_or_default()
     }
+    /// Provide horizontal space for the wider system UI font while retaining
+    /// existing vertical alignment and the sizes of interactive targets.
+    fn widen(&mut self) {
+        for key in ["Left", "Width", "ClientWidth"] {
+            // Keep bitmaps and graphical previews at their original aspect ratio.
+            if key == "Width" && matches!(self.class.as_str(), "TImage" | "TPaintBox") { continue; }
+            if let Some(value) = self.int_opt(key) {
+                self.props.insert(key.into(), serde_json::json!((value as f64 * 1.3).round() as i32));
+            }
+        }
+        for child in &mut self.kids { child.widen(); }
+    }
+
     pub fn rect(&self) -> (i32, i32, i32, i32) {
         (self.int("Left"), self.int("Top"), self.int("Width"), self.int("Height"))
     }
@@ -110,13 +123,15 @@ impl Forms {
         for k in config.kids.iter_mut().filter(|k| k.name == "OKBtn" || k.name == "CancelBtn") {
             k.props.insert("Top".into(), serde_json::json!(288));
         }
-        Forms {
+        let mut forms = Forms {
             form1: Node::parse(include_str!("../assets/forms/TFORM1.json")),
             config,
             avi: Node::parse(include_str!("../assets/forms/TDLGAVI.json")),
             input: Node::parse(include_str!("../assets/forms/TDLGINPUTSTR.json")),
             about: Node::parse(include_str!("../assets/forms/TABOUTBOX.json")),
             mesh: Node::parse(include_str!("../assets/forms/TMESHPROGRESS.json")),
-        }
+        };
+        for form in [&mut forms.config, &mut forms.avi, &mut forms.input, &mut forms.about, &mut forms.mesh] { form.widen(); }
+        forms
     }
 }
