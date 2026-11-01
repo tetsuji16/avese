@@ -195,6 +195,23 @@ fn poly(pts: Vec<(f32, f32)>, c: Rgb, wire: bool) -> Op {
     if wire { Op::Polygon { pts, fill: None, stroke: Some(c) } } else { Op::Polygon { pts, fill: Some(c), stroke: Some(c) } }
 }
 
+fn unit_grid_cells(v: &View, g: &GridField, i0: usize, i1: usize, j0: usize, j1: usize, items: &mut Items, progress: &mut impl FnMut(f32) -> bool, from: f32, to: f32) -> bool {
+    let total = (i1 - i0) * (j1 - j0);
+    let mut done = 0usize;
+    for j in j0..j1 {
+        for i in i0..i1 {
+            done += 1;
+            if done % 128 == 0 && !progress(from + (to-from) * done as f32 / total.max(1) as f32) { return false; }
+            let [Some(z0),Some(z1),Some(z2),Some(z3)] = [g.at(i,j),g.at(i+1,j),g.at(i+1,j+1),g.at(i,j+1)] else { continue };
+            let corners = [(i,j,z0),(i+1,j,z1),(i+1,j+1,z2),(i,j+1,z3)];
+            let p: Vec<_> = corners.iter().map(|&(x,y,z)| v.pt(g.xs[x],g.ys[y],z)).collect();
+            let depth = p.iter().map(|q| q.1).sum::<f64>() / 4.0;
+            items.push((depth, poly(p.iter().map(|q| q.0).collect(), v.ctx.color((z0+z1+z2+z3)/4.0), false)));
+        }
+    }
+    progress(to)
+}
+
 fn grid_surface(v: &View, g: &GridField, items: &mut Items, progress: &mut impl FnMut(f32) -> bool) -> bool {
     let s = v.ctx.s;
     let (nx, ny) = (g.xs.len(), g.ys.len());
@@ -210,6 +227,7 @@ fn grid_surface(v: &View, g: &GridField, items: &mut Items, progress: &mut impl 
         if let Some(completed) = reduced_grid_surface(v, g, items, progress) {
             return completed;
         }
+        return unit_grid_cells(v, g, 0, nx - 1, 0, ny - 1, items, progress, 0.08, 0.82);
     }
     let stride = ((full as f64 / MAX_POLYS as f64).sqrt().ceil() as usize).max(1);
     let idx = |n: usize| -> Vec<usize> {
@@ -313,6 +331,7 @@ fn reduced_grid_surface(v: &View, g: &GridField, items: &mut Items, progress: &m
         Ok(t) => t,
         Err(_) => return None,
     };
+    if triangles.len() > MAX_POLYS { return None; }
     let total = triangles.len();
     for (n, tri) in triangles.iter().enumerate() {
         if n % 128 == 0 && !progress(0.58 + 0.23 * n as f32 / total.max(1) as f32) { return Some(false); }
@@ -362,28 +381,23 @@ fn reduced_sparse_grid_surface(v: &View, g: &GridField, items: &mut Items, progr
         }
     }
     // Detailed cells around holes are safe but expensive. If they exceed the
-    // reserve, omit the affected coarse blocks rather than bridging over holes.
+    // reduced mesh budget, fall back to every original valid unit cell.
     let detail = detailed_cells <= MAX_POLYS / 4;
+    if !detail {
+        return unit_grid_cells(v, g, 0, nx - 1, 0, ny - 1, items, progress, 0.08, 0.82);
+    }
     let mut done = 0usize;
-    'tiles: for by in 0..bh {
+    for by in 0..bh {
         for bx in 0..bw {
-            if items.len() >= MAX_POLYS { break 'tiles; }
             let idx = by * bw + bx;
             done += 1;
             if done % 64 == 0 && !progress(0.08 + 0.72 * done as f32 / total.max(1) as f32) { return false; }
             let (i0, i1, j0, j1) = (is[bx], is[bx+1], js[by], js[by+1]);
             if !complete[idx] {
-                if !detail { continue; }
-                for j in j0..j1 {
-                    for i in i0..i1 {
-                        let z = [g.at(i,j),g.at(i+1,j),g.at(i+1,j+1),g.at(i,j+1)];
-                        let [Some(z0),Some(z1),Some(z2),Some(z3)] = z else { continue };
-                        let corners = [(i,j,z0),(i+1,j,z1),(i+1,j+1,z2),(i,j+1,z3)];
-                        let p: Vec<_> = corners.iter().map(|&(x,y,z)| v.pt(g.xs[x],g.ys[y],z)).collect();
-                        let depth = p.iter().map(|q| q.1).sum::<f64>() / 4.0;
-                        items.push((depth, poly(p.iter().map(|q| q.0).collect(), v.ctx.color((z0+z1+z2+z3)/4.0), false)));
-                    }
-                }
+                let from=0.08+0.72*done.saturating_sub(1) as f32/total.max(1) as f32;
+                let to=0.08+0.72*done as f32/total.max(1) as f32;
+                if !unit_grid_cells(v,g,i0,i1,j0,j1,items,progress,from,to) { return false; }
+                if items.len() > MAX_POLYS { items.clear(); return unit_grid_cells(v,g,0,nx-1,0,ny-1,items,progress,0.08,0.82); }
                 continue;
             }
 
@@ -424,11 +438,27 @@ fn reduced_sparse_grid_surface(v: &View, g: &GridField, items: &mut Items, progr
             vertices.sort_unstable();
             vertices.dedup();
             let points: Vec<_> = vertices.iter().map(|&(i,j)| (g.xs[i],g.ys[j])).collect();
-            // Geometry failure omits only this source tile; it is not a user
-            // cancellation. The caller continues drawing other valid tiles.
-            let Ok(tris) = crate::engine::mesh::triangulate_points(&points, |_| {}) else { continue };
+            // Geometry failure is not cancellation: fall back to original valid
+            // cells in this tile without reducing the source data.
+            let Ok(tris) = crate::engine::mesh::triangulate_points(&points, |_| {}) else {
+                let from=0.08+0.72*done.saturating_sub(1) as f32/total.max(1) as f32;
+                let to=0.08+0.72*done as f32/total.max(1) as f32;
+                if !unit_grid_cells(v,g,i0,i1,j0,j1,items,progress,from,to) { return false; }
+                if items.len() > MAX_POLYS { items.clear(); return unit_grid_cells(v,g,0,nx-1,0,ny-1,items,progress,0.08,0.82); }
+                continue
+            };
+            if tris.is_empty() {
+                let from=0.08+0.72*done.saturating_sub(1) as f32/total.max(1) as f32;
+                let to=0.08+0.72*done as f32/total.max(1) as f32;
+                if !unit_grid_cells(v,g,i0,i1,j0,j1,items,progress,from,to) { return false; }
+                if items.len() > MAX_POLYS { items.clear(); return unit_grid_cells(v,g,0,nx-1,0,ny-1,items,progress,0.08,0.82); }
+                continue
+            }
+            if items.len() + tris.len() > MAX_POLYS {
+                items.clear();
+                return unit_grid_cells(v,g,0,nx-1,0,ny-1,items,progress,0.08,0.82);
+            }
             for tri in tris {
-                if items.len() >= MAX_POLYS { break; }
                 let a=vertices[tri[0]]; let b=vertices[tri[1]]; let c=vertices[tri[2]];
                 let (za,zb,zc)=(g.at(a.0,a.1).unwrap(),g.at(b.0,b.1).unwrap(),g.at(c.0,c.1).unwrap());
                 let p=[v.pt(g.xs[a.0],g.ys[a.1],za),v.pt(g.xs[b.0],g.ys[b.1],zb),v.pt(g.xs[c.0],g.ys[c.1],zc)];
@@ -1014,5 +1044,26 @@ mod tests {
             inside
         };
         assert!(!items.iter().any(|(_,op)| matches!(op,Op::Polygon{pts,..} if contains(pts))), "missing cell was covered by a coarse triangle");
+    }
+
+    #[test]
+    fn very_sparse_grid_falls_back_to_every_valid_unit_cell() {
+        let f = grid(240, 240, |x, y| {
+            if (x as usize) % 8 == 0 && (y as usize) % 8 == 0 { None } else { Some(0.0) }
+        });
+        let s=land();
+        let ctx=Ctx::new(&f,&s);
+        let layout=Layout::new(&f,&s).unwrap();
+        let proj=layout.proj.unwrap().placed(layout.px,layout.py);
+        let (x0,x1,y0,y1)=f.extent().unwrap();
+        let view=View{ctx:&ctx,map:Map{x0,y0,xr:x1-x0,yr:y1-y0,wd:proj.wd,hd:proj.hd,cyl:None,flip:false,zlo:0.0,zr:1.0,hz:s.land_height.max(1) as f64},proj,bounds:(layout.w,layout.h)};
+        let Field::Grid(g)=&f else { unreachable!() };
+        let mut items=Vec::new();
+        let mut progress=|_|true;
+        assert!(reduced_sparse_grid_surface(&view,g,&mut items,&mut progress));
+        let expected=(0..239).flat_map(|j|(0..239).map(move |i|(i,j)))
+            .filter(|&(i,j)|[g.at(i,j),g.at(i+1,j),g.at(i+1,j+1),g.at(i,j+1)].iter().all(Option::is_some)).count();
+        assert!(expected > MAX_POLYS/4, "test must exercise the unit-cell fallback");
+        assert_eq!(items.len(),expected,"all complete original cells must be retained");
     }
 }
