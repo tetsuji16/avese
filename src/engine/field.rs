@@ -472,12 +472,9 @@ impl Field {
         }
     }
 
-    /// Parameters for cylindrical drawing (grid and mesh data only).
+    /// Parameters for cylindrical drawing; panel columns represent theta and rows represent radius.
     pub fn cylinder(&self) -> Option<Cylinder> {
-        let (th_min, th_max, r_min, r_max) = match self {
-            Field::Panel(_) => return None,
-            _ => self.extent()?,
-        };
+        let (th_min, th_max, r_min, r_max) = self.extent()?;
         Some(Cylinder { th_min, th_max, r_min, r_max })
     }
 }
@@ -631,7 +628,7 @@ mod tests {
         assert_eq!(f.sample(1.5, 0.5), Some(2.0));
         assert_eq!(f.sample(1.5, 1.5), None);
         assert_eq!(f.sample(2.0, 0.5), None);
-        assert!(f.cylinder().is_none());
+        assert_eq!(f.cylinder(), Some(Cylinder { th_min:0.0, th_max:2.0, r_min:0.0, r_max:2.0 }));
         assert!(build(&DataFile::default(), &settings(false)).is_err());
         assert!(build(&data::parse(b"1 1 1\n", &DataOptions::default()), &settings(false)).is_err());
     }
