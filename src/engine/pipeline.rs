@@ -188,6 +188,21 @@ mod tests {
     }
 
     #[test]
+    fn toolbar_dimensions_reach_rendered_image() {
+        let mut st = store();
+        let l = load(b"0 0 0\n2 0 1\n0 1 2\n2 1 3\n", &mut st, None, |_| {}).unwrap();
+        st.set_checked("CBlegend", false);
+        st.set_position("SEmar", 0);
+        st.set_position("SEsize", 40);
+        st.set_text("EDh", "2");
+        st.set_text("EDv", "3");
+        st.set_item_index("CBmode", 0);
+        assert_eq!(render(&l, &Settings::from_store(&st)).unwrap().size(), [80, 60]);
+        st.set_item_index("CBmode", 1);
+        assert_eq!(render(&l, &Settings::from_store(&st)).unwrap().size(), [160, 120]);
+    }
+
+    #[test]
     fn forced_mesh_reparse_survives_settings_changes() {
         let mut st = store();
         let bytes = text(3);
@@ -251,14 +266,14 @@ mod tests {
         st.set_checked("CBLoadConf", true);
         let ignored = load(bytes, &mut st, Some(&root), |_| {}).unwrap();
         assert!(ignored.irregular_data);
-        assert!(matches!(ignored.field, Field::Panel(_)));
+        assert!(matches!(&*ignored.field, Field::Panel(_)));
         assert!(st.checked("CBpanel"));
 
         // Choosing mesh explicitly switches to point-data mode and builds a triangle field.
         let mut mesh_settings = Settings::from_store(&st);
         mesh_settings.panel = false;
         let meshed = reparse_with_mesh(bytes, &mesh_settings, true, |_| {}).unwrap();
-        assert!(matches!(meshed.field, Field::Mesh(_)));
+        assert!(matches!(&*meshed.field, Field::Mesh(_)));
 
         let _ = std::fs::remove_dir_all(root);
     }
@@ -273,7 +288,7 @@ mod tests {
         st.set_checked("CBLoadConf", true);
         let loaded = load(&bytes, &mut st, Some(dir), |_| {}).unwrap();
         assert!(loaded.irregular_data, "sample4 should be classified before IncludeINI changes panel mode");
-        assert!(matches!(loaded.field, Field::Panel(_)), "ignore must retain sample4.ini's panel mode");
+        assert!(matches!(&*loaded.field, Field::Panel(_)), "ignore must retain sample4.ini's panel mode");
 
         // The affirmative action explicitly switches this input to point-data mesh mode.
         let mut mesh_settings = Settings::from_store(&st);
