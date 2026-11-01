@@ -256,7 +256,9 @@ fn grid_surface(v: &View, g: &GridField, items: &mut Items, progress: &mut impl 
 
 fn mesh_surface(v: &View, m: &MeshField, items: &mut Items, progress: &mut impl FnMut(f32) -> bool) -> bool {
     let reduced;
-    let (nodes, values, tris) = if m.tris.len() > MAX_POLYS {
+    // Spatial reduction can bridge missing-data holes. Use it only when every
+    // source vertex has a value; incomplete meshes retain all original triangles.
+    let (nodes, values, tris) = if m.tris.len() > MAX_POLYS && m.z.iter().all(Option::is_some) {
         let Some(r) = reduce_mesh(m, &mut |p| progress(0.08 + 0.05 * p)) else { return false };
         reduced = r;
         (&reduced.0[..], &reduced.1[..], &reduced.2[..])
@@ -675,6 +677,7 @@ mod tests {
         }
         df.mesh_auto = true;
         let (Field::Mesh(m), _) = crate::engine::field::build(&df, &land()).unwrap() else { panic!("expected mesh") };
+        let mut incomplete_source = m.clone();
         assert!(m.tris.len() > MAX_POLYS);
         let mut progress = |_| true;
         let reduced = reduce_mesh(&m, &mut progress).expect("reduction completes");
@@ -701,6 +704,15 @@ mod tests {
         let emf_started=std::time::Instant::now();
         let large_emf=crate::engine::export::emf::encode_emf(&b.scene);
         let large_emf_elapsed=emf_started.elapsed();
+
+        let mut incomplete = incomplete_source;
+        let missing = incomplete.z.len()/2;
+        incomplete.z[missing]=None;
+        let expected_valid = incomplete.tris.iter().filter(|t| t.iter().all(|&i| incomplete.z[i].is_some())).count();
+        assert!(expected_valid>MAX_POLYS);
+        let b=build_scene(&Field::Mesh(incomplete),&land(),&[]).unwrap();
+        assert_eq!(count_ops(&b.scene.ops,|o|matches!(o,Op::Polygon{..})),expected_valid,
+            "incomplete large meshes keep every valid source triangle rather than bridging holes or reducing");
 
         let mut triangle = DataFile::default();
         let side = 310usize;
