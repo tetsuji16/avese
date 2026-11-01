@@ -94,6 +94,8 @@ pub struct Dialogs {
     pub busy: bool,
     /// request from the batch dialog, taken by the app
     pub batch_req: Option<BatchReq>,
+    /// Completion message displayed inside the batch window after the root is restored.
+    pub batch_notice: Option<String>,
     picker: Option<Picker>,
     pub main_hwnd: Option<isize>,
     styled: Vec<&'static str>,
@@ -278,12 +280,24 @@ impl Dialogs {
         if self.avi {
             let form = sh.forms.avi.clone();
             let size = client_size_avi(&form);
+            let mut notice = self.batch_notice.take();
             let me: &Dialogs = self;
             let mut req = None;
             let c = viewport(ctx, "avi", T_AVI, size, Some(Vec2::new(292.0, 171.0)), true, sh.center, |ui| {
-                req = avi_body(ui, &form, sh.store, sh.assets, me);
-                !me.busy && escape_pressed(ui.ctx())
+                req = ui.add_enabled_ui(notice.is_none(), |ui| avi_body(ui, &form, sh.store, sh.assets, me)).inner;
+                if let Some(text) = notice.as_deref() {
+                    let mut close_notice = false;
+                    egui::Modal::new(egui::Id::new("batch-complete")).show(ui.ctx(), |ui| {
+                        ui.label(text);
+                        close_notice = ui.button("OK").clicked() || escape_pressed(ui.ctx());
+                    });
+                    if close_notice { notice = None; }
+                    false
+                } else {
+                    !me.busy && escape_pressed(ui.ctx())
+                }
             });
+            self.batch_notice = notice;
             if req.is_some() {
                 self.batch_req = req;
             }
