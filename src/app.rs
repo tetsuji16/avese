@@ -253,8 +253,6 @@ impl App {
             let msg = format!("イメージのサイズが {} MB になり、設定された上限 {} MB を超えます。\n描画を続けますか？", need.div_ceil(1024 * 1024), s.max_bmp_mb);
             if !self.dlg.modal(|| dialogs::confirm("avese", &msg)) {
                 self.loaded = Some(loaded);
-                self.canvas_tex = None;
-                self.rendered = None;
                 self.status_msg = "描画を中止しました".into();
                 return;
             }
