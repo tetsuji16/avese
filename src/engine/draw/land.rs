@@ -257,14 +257,15 @@ fn grid_surface(v: &View, g: &GridField, items: &mut Items, progress: &mut impl 
 fn mesh_surface(v: &View, m: &MeshField, items: &mut Items, progress: &mut impl FnMut(f32) -> bool) -> bool {
     let reduced;
     let (nodes, values, tris) = if m.tris.len() > MAX_POLYS {
-        let Some(r) = reduce_mesh(m, progress) else { return false };
+        let Some(r) = reduce_mesh(m, &mut |p| progress(0.08 + 0.05 * p)) else { return false };
         reduced = r;
         (&reduced.0[..], &reduced.1[..], &reduced.2[..])
     } else {
         (&m.nodes[..], &m.z[..], &m.tris[..])
     };
+    let draw_start = if m.tris.len() > MAX_POLYS { 0.13 } else { 0.08 };
     for (i, t) in tris.iter().enumerate() {
-        if i % 256 == 0 && !progress(0.08 + 0.72 * i as f32 / tris.len().max(1) as f32) { return false; }
+        if i % 256 == 0 && !progress(draw_start + 0.67 * i as f32 / tris.len().max(1) as f32) { return false; }
         let (Some(a), Some(b), Some(c)) = (values[t[0]], values[t[1]], values[t[2]]) else { continue };
         let p: Vec<((f32, f32), f64)> = [(t[0], a), (t[1], b), (t[2], c)].iter().map(|&(k, z)| v.pt(nodes[k].0, nodes[k].1, z)).collect();
         let depth = p.iter().map(|q| q.1).sum::<f64>() / 3.0;
@@ -280,11 +281,11 @@ fn reduce_mesh(m: &MeshField, progress: &mut impl FnMut(f32) -> bool) -> Option<
     use std::collections::HashMap;
     use delaunator::{Point, triangulate};
 
-    const NODE_BUDGET: usize = MAX_POLYS / 2 - 128;
+    const NODE_BUDGET: usize = MAX_POLYS / 3;
     if m.nodes.len() <= NODE_BUDGET { return Some((m.nodes.clone(), m.z.clone(), m.tris.clone())); }
     let mut edge_counts = HashMap::<(usize, usize), u8>::new();
     for (i, tri) in m.tris.iter().enumerate() {
-        if i % 8192 == 0 && !progress(0.01 * i as f32 / m.tris.len() as f32) { return None; }
+        if i % 8192 == 0 && !progress(0.4 * i as f32 / m.tris.len() as f32) { return None; }
         for (a, b) in [(tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])] {
             let key = if a < b { (a, b) } else { (b, a) };
             *edge_counts.entry(key).or_default() += 1;
@@ -325,7 +326,7 @@ fn reduce_mesh(m: &MeshField, progress: &mut impl FnMut(f32) -> bool) -> Option<
         let sy = y1-y0;
         let mut best = vec![None::<(f64,usize)>; side*side];
         for (i,&(x,y)) in m.nodes.iter().enumerate() {
-            if i % 8192 == 0 && !progress(0.01 + 0.025 * i as f32 / m.nodes.len() as f32) { return None; }
+            if i % 8192 == 0 && !progress(0.4 + 0.5 * i as f32 / m.nodes.len() as f32) { return None; }
             let cx = (((x-x0)/sx*side as f64).floor() as usize).min(side-1);
             let cy = (((y-y0)/sy*side as f64).floor() as usize).min(side-1);
             let center = (x0+(cx as f64+0.5)*sx/side as f64,y0+(cy as f64+0.5)*sy/side as f64);
@@ -340,14 +341,22 @@ fn reduce_mesh(m: &MeshField, progress: &mut impl FnMut(f32) -> bool) -> Option<
     let nodes = selected.iter().map(|&i| m.nodes[i]).collect::<Vec<_>>();
     let z = selected.iter().map(|&i| m.z[i]).collect::<Vec<_>>();
     let points = nodes.iter().map(|&(x,y)| Point{x,y}).collect::<Vec<_>>();
-    if !progress(0.04) { return None; }
+    if !progress(0.93) { return None; }
     let triangulation = triangulate(&points);
     let tris = triangulation.triangles.chunks_exact(3).filter_map(|t| {
         let tri = [t[0],t[1],t[2]];
-        let center = (0..3).map(|i| nodes[tri[i]]).fold((0.0,0.0), |p,q| (p.0+q.0/3.0,p.1+q.1/3.0));
-        m.sample(center.0,center.1).map(|_| tri)
+        let p = tri.map(|i| nodes[i]);
+        let samples = [
+            p[0], p[1], p[2],
+            ((p[0].0+p[1].0)*0.5,(p[0].1+p[1].1)*0.5),
+            ((p[1].0+p[2].0)*0.5,(p[1].1+p[2].1)*0.5),
+            ((p[2].0+p[0].0)*0.5,(p[2].1+p[0].1)*0.5),
+            ((p[0].0+p[1].0+p[2].0)/3.0,(p[0].1+p[1].1+p[2].1)/3.0),
+        ];
+        samples.iter().all(|&(x,y)| m.sample(x,y).is_some()).then_some(tri)
     }).collect::<Vec<_>>();
-    if tris.len() > MAX_POLYS { return None; }
+    debug_assert!(tris.len() <= MAX_POLYS);
+    if tris.is_empty() { return Some((nodes,z,tris)); }
     Some((nodes,z,tris))
 }
 
@@ -682,9 +691,16 @@ mod tests {
         for p in [(0.01,0.01),(348.99,0.01),(0.01,348.99),(348.99,348.99),(174.5,174.5),(100.2,201.7)] {
             assert!(covered(p), "retriangulated mesh leaves a hole at {p:?}");
         }
-        let b=build_scene(&Field::Mesh(m),&land(),&[]).unwrap();
+        let mut progress_values=Vec::new();
+        let started=std::time::Instant::now();
+        let b=super::super::build_scene_with_progress(&Field::Mesh(m),&land(),&[],|p| { progress_values.push(p); true }).unwrap();
+        let large_draw_elapsed=started.elapsed();
         let poly_count=count_ops(&b.scene.ops,|o|matches!(o,Op::Polygon{..}));
         assert!(poly_count <= MAX_POLYS);
+        assert!(progress_values.windows(2).all(|w| w[0] <= w[1]),"progress must be monotonic: {progress_values:?}");
+        let emf_started=std::time::Instant::now();
+        let large_emf=crate::engine::export::emf::encode_emf(&b.scene);
+        let large_emf_elapsed=emf_started.elapsed();
 
         let mut triangle = DataFile::default();
         let side = 310usize;
@@ -710,5 +726,22 @@ mod tests {
             });
             assert!(covered,"triangular hull has a gap at {p:?}");
         }
+
+        let mut under=DataFile::default();
+        let side=140usize;
+        for j in 0..side { for i in 0..side {
+            under.points.push(Point { x:Some(i as f64),y:Some(j as f64),z:Some((i+j) as f64),u:None,v:None });
+        }}
+        under.mesh_auto=true;
+        let (field,_) = crate::engine::field::build(&under,&land()).unwrap();
+        let start=std::time::Instant::now();
+        let under_scene=build_scene(&field,&land(),&[]).unwrap();
+        let under_draw_elapsed=start.elapsed();
+        let start=std::time::Instant::now();
+        let under_emf=crate::engine::export::emf::encode_emf(&under_scene.scene);
+        let under_emf_elapsed=start.elapsed();
+        eprintln!("oversized mesh benchmark: {} polygons, draw {:?}, EMF {} bytes in {:?}; below-limit {} polygons, draw {:?}, EMF {} bytes in {:?}",
+            poly_count,large_draw_elapsed,large_emf.len(),large_emf_elapsed,
+            count_ops(&under_scene.scene.ops,|o|matches!(o,Op::Polygon{..})),under_draw_elapsed,under_emf.len(),under_emf_elapsed);
     }
 }
