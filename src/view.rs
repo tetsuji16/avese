@@ -61,10 +61,10 @@ impl Default for ViewState {
 pub fn clears_when_on(item: Item) -> &'static [Item] {
     use Item::*;
     match item {
-        Land => &[Vector, Toko, Panel],
+        Land => &[Vector, Toko],
         Graph => &[Scatter, Panel],
         Scatter => &[Graph, Panel, Toko],
-        Panel => &[Graph, Scatter, Vector, Toko, Point, Land],
+        Panel => &[Graph, Scatter, Vector, Toko, Point],
         Vector => &[Panel, Land],
         Toko => &[Scatter, Panel, Land],
         Point => &[Panel],
@@ -213,7 +213,7 @@ mod tests {
         let mut v = all_on();
         v.land = false;
         v.click(Land);
-        assert!(v.land && !v.vector && !v.toko && !v.panel);
+        assert!(v.land && !v.vector && !v.toko && v.panel);
         assert!(v.graph && v.scatter && v.point);
         let mut w = all_on();
         w.click(Land); // turn off
@@ -264,7 +264,7 @@ mod tests {
     }
     #[test]
     fn panel_rule() {
-        check_on(Panel, &[Graph, Scatter, Vector, Toko, Point, Land], &[Axis, Grid, Legend, Label]);
+        check_on(Panel, &[Graph, Scatter, Vector, Toko, Point], &[Land, Axis, Grid, Legend, Label]);
     }
     #[test]
     fn vector_rule() {
@@ -308,8 +308,26 @@ mod tests {
         v.set(Panel, true);
         assert!(v.panel && !v.graph);
         v.set(Land, true);
-        assert!(v.land && !v.panel);
+        assert!(v.land && v.panel);
         v.set(Land, false);
         assert!(!v.land);
+    }
+
+    #[test]
+    fn panel_and_land_work_in_both_selection_orders() {
+        for order in [[Panel, Land], [Land, Panel]] {
+            let mut view = ViewState::default();
+            for item in order { view.set(item, true); }
+            assert!(view.panel && view.land);
+            let mut store = crate::engine::settings::Settings::default_store();
+            view.write_store(&mut store);
+            let loaded = crate::engine::pipeline::load(b"0 1\n2 3\n", &mut store, None, |_| {}).unwrap();
+            assert!(matches!(&*loaded.field, crate::engine::field::Field::Panel(_)));
+            let settings = crate::engine::settings::Settings::from_store(&store);
+            let rendered = crate::engine::pipeline::render(&loaded, &settings).unwrap();
+            assert!(!rendered.probe.is_flat());
+            let count = rendered.scene.ops.iter().filter(|op| matches!(op, crate::engine::scene::Op::Polygon { .. })).count();
+            assert!(count > 4, "the four panel tops should have visible side polygons");
+        }
     }
 }
