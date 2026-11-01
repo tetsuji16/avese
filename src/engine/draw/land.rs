@@ -199,6 +199,13 @@ fn grid_surface(v: &View, g: &GridField, items: &mut Items, progress: &mut impl 
     let s = v.ctx.s;
     let (nx, ny) = (g.xs.len(), g.ys.len());
     let full = (nx - 1) * (ny - 1);
+    // For dense, oversized grids, keep a sparse triangulated sample of the
+    // full surface. Each block contributes its actual extrema in addition to
+    // the coarse lattice vertices; one global triangulation keeps adjacent
+    // blocks connected and avoids the gaps created by dropping whole cells.
+    if full > MAX_POLYS && g.z.iter().all(Option::is_some) {
+        return reduced_grid_surface(v, g, items, progress);
+    }
     let stride = ((full as f64 / MAX_POLYS as f64).sqrt().ceil() as usize).max(1);
     let idx = |n: usize| -> Vec<usize> {
         let mut v: Vec<usize> = (0..n).step_by(stride).collect();
@@ -252,6 +259,70 @@ fn grid_surface(v: &View, g: &GridField, items: &mut Items, progress: &mut impl 
         }
     }
     true
+}
+
+fn reduced_grid_surface(v: &View, g: &GridField, items: &mut Items, progress: &mut impl FnMut(f32) -> bool) -> bool {
+    let s = v.ctx.s;
+    let (nx, ny) = (g.xs.len(), g.ys.len());
+    let full = (nx - 1) * (ny - 1);
+    // A block contributes at most two extrema. Keep a reserve for the coarse
+    // lattice vertices, including very narrow grids where only one axis can
+    // be decimated.
+    let target_blocks = (MAX_POLYS / 10).max(1);
+    let mut stride = ((full as f64 / target_blocks as f64).sqrt().ceil() as usize).max(1);
+    while (nx - 1).div_ceil(stride) * (ny - 1).div_ceil(stride) > target_blocks {
+        stride += 1;
+    }
+    let mut is: Vec<usize> = (0..nx).step_by(stride).collect();
+    let mut js: Vec<usize> = (0..ny).step_by(stride).collect();
+    if is.last() != Some(&(nx - 1)) { is.push(nx - 1); }
+    if js.last() != Some(&(ny - 1)) { js.push(ny - 1); }
+
+    let block_count = (is.len() - 1) * (js.len() - 1);
+    let mut retained = Vec::<(usize, usize)>::with_capacity(is.len() * js.len() + block_count * 2);
+    for &j in &js {
+        for &i in &is { retained.push((i, j)); }
+    }
+    for (bi, jw) in js.windows(2).enumerate() {
+        for (ai, iw) in is.windows(2).enumerate() {
+            let index = bi * (is.len() - 1) + ai;
+            if index % 128 == 0 && !progress(0.08 + 0.48 * index as f32 / block_count.max(1) as f32) { return false; }
+            let mut lo = (iw[0], jw[0], g.at(iw[0], jw[0]).unwrap());
+            let mut hi = lo;
+            for j in jw[0]..=jw[1] {
+                for i in iw[0]..=iw[1] {
+                    let z = g.at(i, j).unwrap();
+                    if z < lo.2 { lo = (i, j, z); }
+                    if z > hi.2 { hi = (i, j, z); }
+                }
+            }
+            retained.push((lo.0, lo.1));
+            retained.push((hi.0, hi.1));
+        }
+    }
+    retained.sort_unstable();
+    retained.dedup();
+    let points: Vec<(f64, f64)> = retained.iter().map(|&(i, j)| (g.xs[i], g.ys[j])).collect();
+    if !progress(0.57) { return false; }
+    let triangles = match crate::engine::mesh::triangulate_points(&points, |_| {}) {
+        Ok(t) => t,
+        Err(_) => return false,
+    };
+    let total = triangles.len();
+    for (n, tri) in triangles.iter().enumerate() {
+        if n % 128 == 0 && !progress(0.58 + 0.23 * n as f32 / total.max(1) as f32) { return false; }
+        let a = retained[tri[0]];
+        let b = retained[tri[1]];
+        let c = retained[tri[2]];
+        let (za, zb, zc) = (g.at(a.0, a.1).unwrap(), g.at(b.0, b.1).unwrap(), g.at(c.0, c.1).unwrap());
+        let pa = v.pt(g.xs[a.0], g.ys[a.1], za);
+        let pb = v.pt(g.xs[b.0], g.ys[b.1], zb);
+        let pc = v.pt(g.xs[c.0], g.ys[c.1], zc);
+        let pts = vec![pa.0, pb.0, pc.0];
+        let depth = (pa.1 + pb.1 + pc.1) / 3.0;
+        items.push((depth, poly(pts, v.ctx.color((za + zb + zc) / 3.0), !s.surface)));
+    }
+    progress(0.82)
 }
 
 fn mesh_surface(v: &View, m: &MeshField, items: &mut Items, progress: &mut impl FnMut(f32) -> bool) -> bool {
@@ -537,7 +608,7 @@ fn axes(v: &View, ops: &mut Vec<Op>) {
 mod tests {
     use super::super::testutil::*;
     use super::super::*;
-    use super::{reduce_mesh, MAX_POLYS};
+    use super::{reduce_mesh, reduced_grid_surface, Map, View, MAX_POLYS};
 
     fn land() -> Settings {
         let mut s = settings();
@@ -755,5 +826,44 @@ mod tests {
         eprintln!("oversized mesh benchmark: {} polygons, draw {:?}, EMF {} bytes in {:?}; below-limit {} polygons, draw {:?}, EMF {} bytes in {:?}",
             poly_count,large_draw_elapsed,large_emf.len(),large_emf_elapsed,
             count_ops(&under_scene.scene.ops,|o|matches!(o,Op::Polygon{..})),under_draw_elapsed,under_emf.len(),under_emf_elapsed);
+    }
+
+    #[test]
+    fn oversized_dense_grid_keeps_extrema_in_a_contiguous_triangular_surface() {
+        use std::time::Instant;
+        let peaks = [(173usize, 211usize, 1000.0), (321, 367, -1000.0)];
+        let f = grid(450, 450, |x, y| {
+            let (i, j) = (x as usize, y as usize);
+            Some(peaks.iter().find(|&&(px, py, _)| (px, py) == (i, j)).map_or(0.0, |p| p.2))
+        });
+        let s = land();
+        let ctx = Ctx::new(&f, &s);
+        let layout = Layout::new(&f, &s).unwrap();
+        let proj = layout.proj.unwrap().placed(layout.px, layout.py);
+        let (x0, x1, y0, y1) = f.extent().unwrap();
+        let zr = ctx.zr.unwrap();
+        let view = View {
+            ctx: &ctx,
+            map: Map { x0, y0, xr: x1 - x0, yr: y1 - y0, wd: proj.wd, hd: proj.hd, cyl: None, flip: false, zlo: zr.0, zr: (zr.1 - zr.0).max(1e-300), hz: s.land_height.max(1) as f64 },
+            proj,
+            bounds: (layout.w, layout.h),
+        };
+        let start = Instant::now();
+        let mut items = Vec::new();
+        let mut progress = |_| true;
+        assert!(reduced_grid_surface(&view, match &f { Field::Grid(g) => g, _ => unreachable!() }, &mut items, &mut progress));
+        let elapsed = start.elapsed();
+        assert!(items.len() <= MAX_POLYS, "{} ops exceeds {MAX_POLYS}", items.len());
+        for &(i, j, z) in &peaks {
+            let target = view.pt(i as f64, j as f64, z).0;
+            assert!(items.iter().any(|(_, op)| matches!(op, Op::Polygon { pts, .. } if pts.contains(&target))), "extremum at ({i}, {j}) was not retained");
+        }
+
+        let below = grid(200, 200, |_, _| Some(0.0));
+        let below_scene = build_scene(&below, &s, &[]).unwrap();
+        let below_emf = crate::engine::export::emf::encode_emf(&below_scene.scene).len();
+        let scene = build_scene(&f, &s, &[]).unwrap();
+        let emf = crate::engine::export::emf::encode_emf(&scene.scene).len();
+        eprintln!("land grid benchmark: 200x200 points, {} scene ops, {below_emf} B EMF; 450x450 points, {} scene ops, {emf} B EMF, surface generation {elapsed:?}", below_scene.scene.ops.len(), scene.scene.ops.len());
     }
 }
