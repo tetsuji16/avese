@@ -28,6 +28,19 @@ enum Job {
     Batch(Handle<String>),
 }
 
+struct AppPrevious {
+    store: Store,
+    title: String,
+    bytes: Option<Arc<Vec<u8>>>,
+    data_path: Option<PathBuf>,
+    loaded: Option<Loaded>,
+    rendered: Option<Rendered>,
+    canvas_tex: Option<egui::TextureHandle>,
+    status_msg: String,
+    pending_warnings: Vec<String>,
+    probe_cells: [String; 3],
+}
+
 impl Job {
     /// Shared state, start time and whether the progress window may be shown.
     fn sh(&self) -> (&jobs::Sh, std::time::Instant, bool) {
@@ -134,6 +147,7 @@ pub struct App {
     probe_cells: [String; 3],
     job: Option<Job>,
     pending_warnings: Vec<String>,
+    previous: Option<AppPrevious>,
 }
 
 pub fn exe_dir() -> PathBuf {
@@ -183,6 +197,7 @@ impl App {
             probe_cells: Default::default(),
             job: None,
             pending_warnings: vec![],
+            previous: None,
         }
     }
 
@@ -225,7 +240,6 @@ impl App {
             self.start_render(ctx);
         } else {
             let mesh_auto = self.loaded.as_ref().is_some_and(|l| l.data.mesh_auto);
-            self.loaded = None;
             self.job = Some(Job::Reparse(jobs::reparse_job_with_mesh(ctx, bytes, self.data_path.clone(), s, mesh_auto)));
         }
     }
@@ -233,7 +247,7 @@ impl App {
     fn create_mesh(&mut self, ctx: &Context) {
         if self.job.is_some() { return; }
         let Some(loaded) = self.loaded.take() else { return };
-        if loaded.data.mesh_auto || matches!(loaded.field, crate::engine::field::Field::Panel(_)) {
+        if loaded.data.mesh_auto || (matches!(loaded.field, crate::engine::field::Field::Panel(_)) && !loaded.irregular_data) {
             self.loaded = Some(loaded);
             return;
         }
@@ -242,6 +256,21 @@ impl App {
             return;
         };
         self.job = Some(Job::Mesh(jobs::mesh_job(ctx, loaded, bytes, self.data_path.clone(), Settings::from_store(&self.store))));
+    }
+
+    fn restore_previous(&mut self) {
+        if let Some(previous) = self.previous.take() {
+            self.store = previous.store;
+            self.title = previous.title;
+            self.bytes = previous.bytes;
+            self.data_path = previous.data_path;
+            self.loaded = previous.loaded;
+            self.rendered = previous.rendered;
+            self.canvas_tex = previous.canvas_tex;
+            self.status_msg = previous.status_msg;
+            self.pending_warnings = previous.pending_warnings;
+            self.probe_cells = previous.probe_cells;
+        }
     }
 
     /// Asks before drawing an image larger than SEmaxbmp, then draws on a worker.
@@ -263,6 +292,27 @@ impl App {
     /// A field was built: show the ranges in the settings dialog, then draw.
     fn built(&mut self, ctx: &Context, loaded: Loaded) {
         jobs::readback(&mut self.store, &loaded.field);
+        if loaded.irregular_data {
+            match self.dlg.modal(|| dialogs::irregular_grid("警告", "非構造格子データです\n三角メッシュを自動生成しますか？")) {
+                dialogs::IrregularChoice::Generate => {
+                    self.loaded = Some(loaded);
+                    self.create_mesh(ctx);
+                    return;
+                }
+                dialogs::IrregularChoice::Abort => {
+                    self.status_msg = "データ読み込みを中止しました".into();
+                    return;
+                }
+                dialogs::IrregularChoice::Ignore => {
+                    let mut loaded = loaded;
+                    loaded.warnings.retain(|w| !w.starts_with("データが格子状に並んでいません"));
+                    self.pending_warnings = loaded.warnings.clone();
+                    self.loaded = Some(loaded);
+                    self.start_render(ctx);
+                    return;
+                }
+            }
+        }
         self.pending_warnings = loaded.warnings.clone();
         self.loaded = Some(loaded);
         self.start_render(ctx);
@@ -330,14 +380,53 @@ impl App {
                 None => self.job = Some(Job::Load(h)),
                 Some(Err(e)) => self.job_result = Some(Err(e)),
                 Some(Ok(b)) => {
+                    let mut loaded = b.loaded;
+                    let irregular = loaded.irregular_data;
+                    let choice = if irregular {
+                        Some(self.dlg.modal(|| dialogs::irregular_grid("警告", "非構造格子データです\n三角メッシュを自動生成しますか？")))
+                    } else { None };
+                    if choice == Some(dialogs::IrregularChoice::Abort) {
+                        self.status_msg = "データ読み込みを中止しました".into();
+                        return;
+                    }
+                    if choice == Some(dialogs::IrregularChoice::Ignore) {
+                        loaded.warnings.retain(|w| !w.starts_with("データが格子状に並んでいません"));
+                    }
+                    if choice == Some(dialogs::IrregularChoice::Generate) {
+                        self.previous = Some(AppPrevious {
+                            store: self.store.clone(),
+                            title: self.title.clone(),
+                            bytes: self.bytes.clone(),
+                            data_path: self.data_path.clone(),
+                            loaded: self.loaded.take(),
+                            rendered: self.rendered.take(),
+                            canvas_tex: self.canvas_tex.take(),
+                            status_msg: self.status_msg.clone(),
+                            pending_warnings: self.pending_warnings.clone(),
+                            probe_cells: self.probe_cells.clone(),
+                        });
+                    }
                     self.store = b.store;
                     dialogs::apply_interlocks(&mut self.store);
-                    let n = b.loaded.path.as_ref().and_then(|p| p.file_name()).map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+                    let n = loaded.path.as_ref().and_then(|p| p.file_name()).map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
                     self.title = format!("avese - {n}");
                     self.store.set_enabled("TBRedraw", true);
                     self.bytes = Some(b.bytes);
-                    self.data_path = b.loaded.path.clone();
-                    self.built(ctx, b.loaded);
+                    self.data_path = loaded.path.clone();
+                    if choice == Some(dialogs::IrregularChoice::Generate) {
+                        // An explicit mesh choice takes precedence over IncludeINI panel mode.
+                        self.store.set_checked("CBpanel", false);
+                        jobs::readback(&mut self.store, &loaded.field);
+                        self.loaded = Some(loaded);
+                        self.create_mesh(ctx);
+                    } else if choice == Some(dialogs::IrregularChoice::Ignore) {
+                        jobs::readback(&mut self.store, &loaded.field);
+                        self.pending_warnings = loaded.warnings.clone();
+                        self.loaded = Some(loaded);
+                        self.start_render(ctx);
+                    } else {
+                        self.built(ctx, loaded);
+                    }
                 }
             },
             Job::Reparse(h) => match h.poll() {
@@ -356,13 +445,24 @@ impl App {
                 Some(Ok(done)) => {
                     let jobs::MeshDone { loaded, result } = done;
                     match result {
-                        Ok(()) => self.built(ctx, loaded),
+                        Ok(()) => {
+                            self.previous = None;
+                            self.built(ctx, loaded)
+                        }
                         Err(e) if e == jobs::CANCELLED => {
-                            self.loaded = Some(loaded);
+                            if self.previous.is_some() {
+                                self.restore_previous();
+                            } else {
+                                self.loaded = Some(loaded);
+                            }
                             self.status_msg = "メッシュ生成を中止しました".into();
                         }
                         Err(e) => {
-                            self.loaded = Some(loaded);
+                            if self.previous.is_some() {
+                                self.restore_previous();
+                            } else {
+                                self.loaded = Some(loaded);
+                            }
                             self.job_result = Some(Err(e));
                         }
                     }

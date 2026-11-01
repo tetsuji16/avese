@@ -337,6 +337,26 @@ mod tests {
     }
 
     #[test]
+    fn failed_mesh_job_returns_the_original_loaded_field() {
+        let original = grid();
+        let bytes = Arc::new(b"not a data file\n".to_vec());
+        let ctx = egui::Context::default();
+        let handle = mesh_job(&ctx, original, bytes, None, Settings::from_store(&Settings::default_store()));
+        let deadline = Instant::now() + std::time::Duration::from_secs(5);
+        loop {
+            if let Some(Ok(done)) = handle.poll() {
+                assert!(done.result.is_err());
+                assert!(!done.loaded.data.mesh_auto);
+                assert!(matches!(done.loaded.field, Field::Grid(_)));
+                assert_eq!(done.loaded.field.extent(), Some((0.0, 3.0, 0.0, 2.0)));
+                break;
+            }
+            assert!(Instant::now() < deadline, "mesh worker did not finish after failure");
+            std::thread::yield_now();
+        }
+    }
+
+    #[test]
     fn status_cells() {
         let hit = ProbeHit { x: 1.23456789, y: 0.0, z: Some(1234.5678) };
         assert_eq!(probe_cells(Some(hit), false), ["X = 1.2346", "Y = 0", "Z = 1234.6"]);
