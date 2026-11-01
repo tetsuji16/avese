@@ -96,10 +96,39 @@ pub fn load_job(ctx: &egui::Context, path: PathBuf, mut store: Store) -> Handle<
 
 /// Parse the held bytes again because a setting that changes how they are read has changed.
 pub fn reparse_job(ctx: &egui::Context, bytes: Arc<Vec<u8>>, path: Option<PathBuf>, s: Settings) -> Handle<Loaded> {
+    reparse_job_with_mesh(ctx, bytes, path, s, false)
+}
+
+pub fn reparse_job_with_mesh(ctx: &egui::Context, bytes: Arc<Vec<u8>>, path: Option<PathBuf>, s: Settings, mesh_auto: bool) -> Handle<Loaded> {
     spawn(ctx, move |sh| {
-        let mut l = pipeline::reparse(&bytes, &s, |p| sh.set_task(p))?;
+        let mut l = pipeline::reparse_with_mesh(&bytes, &s, mesh_auto, |p| sh.set_task(p))?;
         l.path = path;
         Ok(l)
+    })
+}
+
+pub struct MeshDone {
+    pub loaded: Loaded,
+    pub result: Result<(), String>,
+}
+
+/// Build a triangulated field from the current data on a worker thread.
+pub fn mesh_job(ctx: &egui::Context, mut loaded: Loaded, s: Settings) -> Handle<MeshDone> {
+    spawn(ctx, move |sh| {
+        let mut data = loaded.data.clone();
+        data.mesh_auto = true;
+        let result = crate::engine::field::build_with_progress(&data, &s, |p| sh.set_task(p))
+            .map(|(field, warnings)| {
+                loaded.data.mesh_auto = true;
+                loaded.field = field;
+                for warning in warnings {
+                    if !loaded.warnings.contains(&warning) { loaded.warnings.push(warning); }
+                }
+                loaded.opts = crate::engine::data::DataOptions::from_settings(&s);
+                loaded.spline = s.spline;
+            })
+            .map_err(|e| e.to_string());
+        Ok(MeshDone { loaded, result })
     })
 }
 

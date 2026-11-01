@@ -6,7 +6,7 @@ use crate::engine::pipeline::{self, Loaded, Rendered};
 use crate::engine::settings::Settings;
 use crate::forms::{Forms, Node};
 use crate::ini::{self, Layout};
-use crate::jobs::{self, BatchKind, Built, Handle, RenderDone};
+use crate::jobs::{self, BatchKind, Built, Handle, MeshDone, RenderDone};
 use crate::platform_win32 as plat;
 use crate::state::Store;
 use crate::vcl::form::{Assets, Fnt, Renderer};
@@ -24,6 +24,7 @@ enum Job {
     Load(Handle<Built>),
     Reparse(Handle<Loaded>),
     Render(Handle<RenderDone>),
+    Mesh(Handle<MeshDone>),
     Batch(Handle<String>),
 }
 
@@ -34,6 +35,7 @@ impl Job {
             Job::Load(h) => (&h.sh, h.started, true),
             Job::Reparse(h) => (&h.sh, h.started, true),
             Job::Render(h) => (&h.sh, h.started, true),
+            Job::Mesh(h) => (&h.sh, h.started, true),
             Job::Batch(h) => (&h.sh, h.started, true),
         }
     }
@@ -231,9 +233,20 @@ impl App {
         if self.loaded.as_ref().is_some_and(|l| !l.is_stale(&s)) {
             self.start_render(ctx);
         } else {
+            let mesh_auto = self.loaded.as_ref().is_some_and(|l| l.data.mesh_auto);
             self.loaded = None;
-            self.job = Some(Job::Reparse(jobs::reparse_job(ctx, bytes, self.data_path.clone(), s)));
+            self.job = Some(Job::Reparse(jobs::reparse_job_with_mesh(ctx, bytes, self.data_path.clone(), s, mesh_auto)));
         }
+    }
+
+    fn create_mesh(&mut self, ctx: &Context) {
+        if self.job.is_some() { return; }
+        let Some(loaded) = self.loaded.take() else { return };
+        if loaded.data.mesh_auto || matches!(loaded.field, crate::engine::field::Field::Panel(_)) {
+            self.loaded = Some(loaded);
+            return;
+        }
+        self.job = Some(Job::Mesh(jobs::mesh_job(ctx, loaded, Settings::from_store(&self.store))));
     }
 
     /// Asks before drawing an image larger than SEmaxbmp, then draws on a worker.
@@ -331,6 +344,24 @@ impl App {
                 None => self.job = Some(Job::Render(h)),
                 Some(Err(e)) => self.job_result = Some(Err(e)),
                 Some(Ok(d)) => self.rendered(ctx, d),
+            },
+            Job::Mesh(h) => match h.poll() {
+                None => self.job = Some(Job::Mesh(h)),
+                Some(Err(e)) => self.job_result = Some(Err(e)),
+                Some(Ok(done)) => {
+                    let jobs::MeshDone { loaded, result } = done;
+                    match result {
+                        Ok(()) => self.built(ctx, loaded),
+                        Err(e) if e == jobs::CANCELLED => {
+                            self.loaded = Some(loaded);
+                            self.status_msg = "メッシュ生成を中止しました".into();
+                        }
+                        Err(e) => {
+                            self.loaded = Some(loaded);
+                            self.job_result = Some(Err(e));
+                        }
+                    }
+                }
             },
             Job::Batch(h) => match h.poll() {
                 None => self.job = Some(Job::Batch(h)),
@@ -471,6 +502,7 @@ impl App {
             "menClipbrd" | "TBclip" => self.copy_clipboard(),
             "menclose" => self.close_data(),
             "menredraw" | "TBRedraw" => self.redraw(ctx),
+            "menmeshcreate" => self.create_mesh(ctx),
             "menconfig" | "TBConfig" => self.dlg.open_config(&self.store),
             "menconfigsave" => {
                 let p = self.ini_path.clone();
@@ -502,7 +534,11 @@ impl App {
 
     fn item_state(&self, vs: &ViewState, name: &str) -> (bool, bool) {
         // (enabled, checked)
-        let en = if name == "menredraw" { self.redraw_enabled() } else { true };
+        let en = match name {
+            "menredraw" => self.redraw_enabled(),
+            "menmeshcreate" => self.loaded.as_ref().is_some_and(|l| !l.data.mesh_auto && !matches!(l.field, crate::engine::field::Field::Panel(_))),
+            _ => true,
+        };
         let ck = item_of(name).map(|i| vs.get(i)).unwrap_or(false);
         (en, ck)
     }

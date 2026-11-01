@@ -48,8 +48,15 @@ impl Loaded {
 
 /// Parse and build the field with fixed settings (no embedded settings are applied).
 pub fn reparse(bytes: &[u8], s: &Settings, progress: impl FnMut(f32)) -> Result<Loaded, String> {
+    reparse_with_mesh(bytes, s, false, progress)
+}
+
+/// Parse held bytes and optionally build a mesh even when the source file did not
+/// contain the `Mesh AutoCreate` directive.
+pub fn reparse_with_mesh(bytes: &[u8], s: &Settings, mesh_auto: bool, progress: impl FnMut(f32)) -> Result<Loaded, String> {
     let opts = DataOptions::from_settings(s);
-    let df = data::parse(bytes, &opts);
+    let mut df = data::parse(bytes, &opts);
+    df.mesh_auto |= mesh_auto;
     build(df, s, opts, progress)
 }
 
@@ -134,6 +141,22 @@ mod tests {
         assert_eq!(required_bytes(&l, &s), 24 * 24);
         assert!(r.probe.at(12.0, 12.0).is_some());
         assert!(r.pixmap.data().chunks(4).all(|p| p[3] == 255));
+    }
+
+    #[test]
+    fn forced_mesh_reparse_survives_settings_changes() {
+        let mut st = store();
+        let bytes = text(3);
+        let s = small(&st);
+        let original = reparse(bytes.as_bytes(), &s, |_| {}).unwrap();
+        assert!(matches!(original.field, Field::Grid(_)));
+        let mesh = reparse_with_mesh(bytes.as_bytes(), &s, true, |_| {}).unwrap();
+        assert!(mesh.data.mesh_auto);
+        assert!(matches!(mesh.field, Field::Mesh(_)));
+        let mut changed = s;
+        changed.spline = !changed.spline;
+        let reparsed = reparse_with_mesh(bytes.as_bytes(), &changed, mesh.data.mesh_auto, |_| {}).unwrap();
+        assert!(matches!(reparsed.field, Field::Mesh(_)));
     }
 
     #[test]

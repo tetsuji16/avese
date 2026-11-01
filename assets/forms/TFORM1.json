@@ -1241,6 +1241,16 @@
 },
 {
 "class": "TMenuItem",
+"name": "menmeshcreate",
+"props": {
+"Caption": "三角メッシュを生成",
+"Hint": "現在の散布データから三角メッシュを生成します",
+"OnClick": { "ident": "menmeshcreateClick" }
+},
+"kids": []
+},
+{
+"class": "TMenuItem",
 "name": "N5",
 "props": {
 "Caption": "-"
