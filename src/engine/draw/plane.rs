@@ -60,22 +60,35 @@ pub(crate) fn dot_op(mode: u8, x: f32, y: f32, d: f32, c: Rgb) -> Op {
 
 /// Distribution (grid, mesh) or panel as one image; pixels without a value stay transparent.
 pub fn image(ctx: &Ctx, frame: &Frame, ops: &mut Vec<Op>) {
+    let _ = image_with_progress(ctx, frame, ops, |_| true);
+}
+
+/// Build the plot image while checking for cancellation between scanlines.
+pub fn image_with_progress(ctx: &Ctx, frame: &Frame, ops: &mut Vec<Op>, mut progress: impl FnMut(f32) -> bool) -> bool {
     if ctx.zr.is_none() {
-        return;
+        return true;
     }
     let (w, h) = (frame.w as usize, frame.h as usize);
     let mut rgba = vec![0u8; w * h * 4];
     match ctx.field {
-        Field::Mesh(m) => mesh_image(ctx, frame, m, &mut rgba),
+        Field::Mesh(m) => if !mesh_image_with_progress(ctx, frame, m, &mut rgba, &mut progress) { return false; },
         _ => {
-            let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1).min(16);
+            use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+            if !progress(0.0) { return false; }
+            let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1).min(16).min(h.max(1));
             let rows_per = h.div_ceil(threads).max(1);
-            std::thread::scope(|sc| {
-                for (ci, chunk) in rgba.chunks_mut(rows_per * w * 4).enumerate() {
+            let completed = AtomicUsize::new(0);
+            let cancelled = AtomicBool::new(false);
+            std::thread::scope(|scope| {
+                let mut workers = Vec::new();
+                for (chunk_index, chunk) in rgba.chunks_mut(rows_per * w * 4).enumerate() {
+                    let completed = &completed;
+                    let cancelled = &cancelled;
                     let frame = *frame;
-                    sc.spawn(move || {
-                        for (r, row) in chunk.chunks_mut(w * 4).enumerate() {
-                            let j = ci * rows_per + r;
+                    workers.push(scope.spawn(move || {
+                        for (row_index, row) in chunk.chunks_mut(w * 4).enumerate() {
+                            if row_index % 8 == 0 && cancelled.load(Ordering::Relaxed) { break; }
+                            let j = chunk_index * rows_per + row_index;
                             for i in 0..w {
                                 let p = frame.from_px_raw(frame.ox + i as f64 + 0.5, frame.oy + j as f64 + 0.5);
                                 if let Some(z) = p.and_then(|(x, y)| ctx.field.sample(x, y)) {
@@ -83,18 +96,39 @@ pub fn image(ctx: &Ctx, frame: &Frame, ops: &mut Vec<Op>) {
                                     row[i * 4..i * 4 + 4].copy_from_slice(&[c.0, c.1, c.2, 255]);
                                 }
                             }
+                            completed.fetch_add(1, Ordering::Relaxed);
                         }
-                    });
+                    }));
+                }
+                let mut reported = 0usize;
+                loop {
+                    let now = completed.load(Ordering::Relaxed);
+                    // A panicked worker cannot finish its rows; leave the loop so
+                    // thread::scope can propagate the panic to the job handler.
+                    if now >= h || cancelled.load(Ordering::Relaxed) || workers.iter().all(|w| w.is_finished()) { break; }
+                    if now.saturating_sub(reported) >= 8 {
+                        reported = now;
+                        if !progress(now as f32 / h.max(1) as f32) {
+                            cancelled.store(true, Ordering::Relaxed);
+                            break;
+                        }
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(1));
                 }
             });
+            if cancelled.load(Ordering::Relaxed) { return false; }
         }
     }
+    if !progress(1.0) { return false; }
     ops.push(Op::Image { x: frame.ox as i32, y: frame.oy as i32, w: w as u32, h: h as u32, rgba });
+    true
 }
 
-fn mesh_image(ctx: &Ctx, frame: &Frame, m: &MeshField, rgba: &mut [u8]) {
+fn mesh_image_with_progress(ctx: &Ctx, frame: &Frame, m: &MeshField, rgba: &mut [u8], progress: &mut impl FnMut(f32) -> bool) -> bool {
     let (w, h) = (frame.w as i64, frame.h as i64);
-    for tri in &m.tris {
+    let mut rows_checked = 0usize;
+    for (ti, tri) in m.tris.iter().enumerate() {
+        if ti % 32 == 0 && !progress(ti as f32 / m.tris.len().max(1) as f32) { return false; }
         let (Some(z0), Some(z1), Some(z2)) = (m.z[tri[0]], m.z[tri[1]], m.z[tri[2]]) else { continue };
         let p: Vec<(f64, f64)> = tri
             .iter()
@@ -112,6 +146,8 @@ fn mesh_image(ctx: &Ctx, frame: &Frame, m: &MeshField, rgba: &mut [u8]) {
         let (x0, x1) = ((lo(|q| q.0) - 0.5).floor().max(0.0) as i64, (hi(|q| q.0) + 0.5).ceil().min(w as f64) as i64);
         let (y0, y1) = ((lo(|q| q.1) - 0.5).floor().max(0.0) as i64, (hi(|q| q.1) + 0.5).ceil().min(h as f64) as i64);
         for j in y0..y1 {
+            rows_checked += 1;
+            if rows_checked % 8 == 0 && !progress(ti as f32 / m.tris.len().max(1) as f32) { return false; }
             for i in x0..x1 {
                 let (x, y) = (i as f64 + 0.5, j as f64 + 0.5);
                 let w0 = ((p[1].1 - p[2].1) * (x - p[2].0) + (p[2].0 - p[1].0) * (y - p[2].1)) / det;
@@ -125,6 +161,7 @@ fn mesh_image(ctx: &Ctx, frame: &Frame, m: &MeshField, rgba: &mut [u8]) {
             }
         }
     }
+    progress(1.0)
 }
 
 pub fn scatter(ctx: &Ctx, frame: &Frame, ops: &mut Vec<Op>) {
@@ -165,42 +202,81 @@ pub fn contour_levels(ctx: &Ctx) -> Vec<f64> {
 
 /// Node values of a grid; spline data is refined so that the lines follow the interpolated surface.
 fn grid_samples(g: &GridField) -> (Vec<f64>, Vec<f64>, Vec<Option<f64>>) {
+    grid_samples_with_progress(g, |_| true).expect("infallible grid sampling")
+}
+
+fn grid_samples_with_progress(g: &GridField, mut progress: impl FnMut(f32) -> bool) -> Option<(Vec<f64>, Vec<f64>, Vec<Option<f64>>)> {
     if !g.has_spline() {
-        return (g.xs.clone(), g.ys.clone(), g.z.clone());
+        let mut z = Vec::with_capacity(g.z.len());
+        for (i, chunk) in g.z.chunks(4096).enumerate() {
+            if i % 16 == 0 && !progress(i as f32 * 4096.0 / g.z.len().max(1) as f32) { return None; }
+            z.extend_from_slice(chunk);
+        }
+        return Some((g.xs.clone(), g.ys.clone(), z));
     }
     let refine = |axis: &[f64]| -> Vec<f64> {
         let inner = axis.windows(2).flat_map(|w| (0..SPLINE_REFINE).map(move |i| w[0] + (w[1] - w[0]) * i as f64 / SPLINE_REFINE as f64));
         inner.chain(axis.last().copied()).collect()
     };
     let (xs, ys) = (refine(&g.xs), refine(&g.ys));
-    let z = ys.iter().flat_map(|&y| xs.iter().map(move |&x| g.sample(x, y))).collect();
-    (xs, ys, z)
+    let mut z = Vec::with_capacity(xs.len() * ys.len());
+    for (j, &y) in ys.iter().enumerate() {
+        if j % 8 == 0 && !progress(j as f32 / ys.len().max(1) as f32) { return None; }
+        z.extend(xs.iter().map(|&x| g.sample(x, y)));
+    }
+    if !progress(1.0) { return None; }
+    Some((xs, ys, z))
 }
 
 /// A mesh resampled on a regular grid of about one sample per pixel.
 fn mesh_samples(m: &MeshField, field: &Field, frame: &Frame) -> Option<(Vec<f64>, Vec<f64>, Vec<Option<f64>>)> {
+    mesh_samples_with_progress(m, field, frame, |_| true)
+}
+
+fn mesh_samples_with_progress(m: &MeshField, field: &Field, frame: &Frame, mut progress: impl FnMut(f32) -> bool) -> Option<(Vec<f64>, Vec<f64>, Vec<Option<f64>>)> {
     let (x0, x1, y0, y1) = field.extent()?;
     let axis = |a: f64, b: f64, px: f64| -> Vec<f64> {
         let n = (px.round() as usize).clamp(2, MAX_MESH_SAMPLES);
         (0..n).map(|i| a + (b - a) * i as f64 / (n - 1) as f64).collect()
     };
     let (xs, ys) = (axis(x0, x1, frame.w), axis(y0, y1, frame.h));
-    let z = ys.iter().flat_map(|&y| xs.iter().map(move |&x| m.sample(x, y))).collect();
+    let mut z = Vec::with_capacity(xs.len() * ys.len());
+    for (j, &y) in ys.iter().enumerate() {
+        if j % 8 == 0 && !progress(j as f32 / ys.len().max(1) as f32) { return None; }
+        z.extend(xs.iter().map(|&x| m.sample(x, y)));
+    }
+    if !progress(1.0) { return None; }
     Some((xs, ys, z))
 }
 
 /// Traces the levels with the `contour` crate and keeps the parts inside cells whose four corners have data.
 /// The crate closes its rings around the grid and treats a hole as a low value; those parts are not contour lines.
 fn isolines(xs: &[f64], ys: &[f64], z: &[Option<f64>], levels: &[f64]) -> Vec<Vec<Pt>> {
+    isolines_with_progress(xs, ys, z, levels, |_| true).unwrap_or_default()
+}
+
+fn isolines_with_progress(xs: &[f64], ys: &[f64], z: &[Option<f64>], levels: &[f64], mut progress: impl FnMut(f32) -> bool) -> Option<Vec<Vec<Pt>>> {
     let (nx, ny) = (xs.len(), ys.len());
     if nx < 2 || ny < 2 {
-        return vec![];
+        return Some(vec![]);
     }
     let known = || z.iter().flatten().chain(levels).copied();
     let (lo, hi) = (known().fold(f64::INFINITY, f64::min), known().fold(f64::NEG_INFINITY, f64::max));
     let below = lo - (hi - lo).max(1.0);
     let values: Vec<f64> = z.iter().map(|v| v.unwrap_or(below)).collect();
-    let Ok(lines) = ContourBuilder::new(nx, ny, true).lines(&values, levels) else { return vec![] };
+    isolines_prepared(xs, ys, z, &values, levels, progress)
+}
+
+fn isolines_prepared(
+    xs: &[f64],
+    ys: &[f64],
+    z: &[Option<f64>],
+    values: &[f64],
+    levels: &[f64],
+    mut progress: impl FnMut(f32) -> bool,
+) -> Option<Vec<Vec<Pt>>> {
+    let (nx, ny) = (xs.len(), ys.len());
+    let Ok(lines) = ContourBuilder::new(nx, ny, true).lines(&values, levels) else { return Some(vec![]) };
     let inside = |a: Coord<f64>, b: Coord<f64>| {
         // the crate places node i at i + 0.5
         let (u, v) = ((a.x + b.x) / 2.0 - 0.5, (a.y + b.y) / 2.0 - 0.5);
@@ -216,11 +292,15 @@ fn isolines(xs: &[f64], ys: &[f64], z: &[Option<f64>], levels: &[f64]) -> Vec<Ve
         axis[i] + (axis[i + 1] - axis[i]) * (u - i as f64)
     };
     let mut out = Vec::new();
+    let total = lines.iter().map(|line| line.geometry().0.iter().map(|r| r.0.len().saturating_sub(1)).sum::<usize>()).sum::<usize>();
+    let mut done = 0usize;
     for line in &lines {
         for ring in &line.geometry().0 {
             let mut parts: Vec<Vec<Pt>> = Vec::new();
             let mut open = false;
             for w in ring.0.windows(2) {
+                done += 1;
+                if done % 1024 == 0 && !progress(done as f32 / total.max(1) as f32) { return None; }
                 let keep = inside(w[0], w[1]);
                 if keep {
                     let p = (at(xs, w[1].x), at(ys, w[1].y));
@@ -241,35 +321,56 @@ fn isolines(xs: &[f64], ys: &[f64], z: &[Option<f64>], levels: &[f64]) -> Vec<Ve
             out.append(&mut parts);
         }
     }
-    out
+    if !progress(1.0) { return None; }
+    Some(out)
 }
 
-pub fn contours(ctx: &Ctx, frame: &Frame, ops: &mut Vec<Op>) {
+fn contour_values(z: &[Option<f64>], levels: &[f64], mut progress: impl FnMut(f32) -> bool) -> Option<Vec<f64>> {
+    let (lo, hi) = z.iter().flatten().chain(levels).copied().fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), v| (lo.min(v), hi.max(v)));
+    let below = lo - (hi - lo).max(1.0);
+    let mut values = Vec::with_capacity(z.len());
+    for (i, chunk) in z.chunks(4096).enumerate() {
+        if i % 16 == 0 && !progress(i as f32 * 4096.0 / z.len().max(1) as f32) { return None; }
+        values.extend(chunk.iter().map(|v| v.unwrap_or(below)));
+    }
+    if !progress(1.0) { return None; }
+    Some(values)
+}
+
+pub fn contours_with_progress(ctx: &Ctx, frame: &Frame, ops: &mut Vec<Op>, mut progress: impl FnMut(f32) -> bool) -> bool {
     let levels = contour_levels(ctx);
     if levels.is_empty() {
-        return;
+        return true;
     }
     let samples = match ctx.field {
-        Field::Grid(g) => Some(grid_samples(g)),
-        Field::Mesh(m) => mesh_samples(m, ctx.field, frame),
-        Field::Panel(_) => return,
+        Field::Grid(g) => grid_samples_with_progress(g, |p| progress(p * 0.3)),
+        Field::Mesh(m) => mesh_samples_with_progress(m, ctx.field, frame, |p| progress(p * 0.3)),
+        Field::Panel(_) => return true,
     };
-    let Some((xs, ys, z)) = samples else { return };
-    for line in isolines(&xs, &ys, &z, &levels) {
+    let Some((xs, ys, z)) = samples else { return false };
+    let Some(values) = contour_values(&z, &levels, |p| progress(0.3 + p * 0.1)) else { return false };
+    for (i, level) in levels.iter().enumerate() {
+        if !progress(0.4 + 0.6 * i as f32 / levels.len() as f32) { return false; }
+        let Some(lines) = isolines_prepared(&xs, &ys, &z, &values, &[*level], |p| progress(0.4 + 0.6 * (i as f32 + p) / levels.len() as f32)) else { return false };
+        for line in lines {
         let pts: Vec<(f32, f32)> = line.iter().map(|&(x, y)| frame.to_px(x, y)).collect();
         ops.push(Op::Polyline { pts, color: ctx.s.toko_color, width: 1.0 });
+        }
     }
+    progress(1.0)
 }
 
 // ---- vectors ----
 
-pub fn vectors(ctx: &Ctx, frame: &Frame, ops: &mut Vec<Op>) {
+pub fn vectors_with_progress(ctx: &Ctx, frame: &Frame, ops: &mut Vec<Op>, mut progress: impl FnMut(f32) -> bool) -> bool {
     let s = ctx.s;
-    let Some(max) = (if s.vmax_on { Some(s.vmax) } else { ctx.field.max_vector() }).filter(|m| *m > 0.0) else { return };
+    let Some(max) = (if s.vmax_on { Some(s.vmax) } else { ctx.field.max_vector() }).filter(|m| *m > 0.0) else { return true };
     let base = s.size as f64 / 20.0 * s.vector_len / 100.0;
     let keep = |idx: usize, on: bool, step: u32, off: u32| !on || (idx >= off as usize && (idx - off as usize) % step.max(1) as usize == 0);
     let is_grid = matches!(ctx.field, Field::Grid(_));
-    for n in nodes(ctx.field) {
+    let total = nodes(ctx.field).count();
+    for (i, n) in nodes(ctx.field).enumerate() {
+        if i % 256 == 0 && !progress(i as f32 / total.max(1) as f32) { return false; }
         if n.u.is_none() && n.v.is_none() {
             continue;
         }
@@ -317,6 +418,7 @@ pub fn vectors(ctx: &Ctx, frame: &Frame, ops: &mut Vec<Op>) {
             }
         }
     }
+    progress(1.0)
 }
 
 #[cfg(test)]
@@ -351,6 +453,73 @@ mod tests {
         assert_eq!(alpha(50, 50), 0); // centre of the hole
         assert_eq!(alpha(5, 5), 255);
         assert_eq!(alpha(95, 95), 255);
+    }
+
+    #[test]
+    fn image_scanline_generation_can_be_cancelled_without_emitting_partial_image() {
+        let f = grid(3, 3, |x, y| Some(x + y));
+        let mut s = settings();
+        s.size = 2048;
+        let ctx = Ctx::new(&f, &s);
+        let frame = Layout::new(&f, &s).unwrap().frame(&f, &s).unwrap();
+        let mut ops = Vec::new();
+        let mut checks = 0;
+        let completed = plane::image_with_progress(&ctx, &frame, &mut ops, |_| {
+            checks += 1;
+            checks < 2
+        });
+        assert!(!completed);
+        assert!(ops.is_empty());
+        assert_eq!(checks, 2, "the second progress update should cancel during scanline work");
+    }
+
+    #[test]
+    fn vector_generation_checks_cancellation_during_node_loop() {
+        let f = grid_uv(30, 30, |x, y| (x + 1.0, y + 1.0));
+        let mut s = settings();
+        s.vector = true;
+        let ctx = Ctx::new(&f, &s);
+        let frame = Layout::new(&f, &s).unwrap().frame(&f, &s).unwrap();
+        let mut ops = Vec::new();
+        let mut checks = 0;
+        let completed = super::vectors_with_progress(&ctx, &frame, &mut ops, |_| {
+            checks += 1;
+            checks < 2
+        });
+        assert!(!completed);
+        assert!(checks >= 2);
+        assert!(!ops.is_empty());
+        assert!(ops.len() < 900); // the loop stopped before processing all 900 nodes
+    }
+
+    #[test]
+    fn contour_segment_traversal_checks_cancellation() {
+        let (xs, ys) = ((0..2).map(|i| i as f64).collect::<Vec<_>>(), (0..2048).map(|i| i as f64).collect::<Vec<_>>());
+        let z = ys.iter().flat_map(|_| [Some(0.0), Some(1.0)]).collect::<Vec<_>>();
+        let mut checks = 0;
+        let out = super::isolines_with_progress(&xs, &ys, &z, &[0.5], |_| {
+            checks += 1;
+            false
+        });
+        assert!(out.is_none());
+        assert_eq!(checks, 1);
+    }
+
+    #[test]
+    fn contour_and_vector_progress_is_monotonic() {
+        let f = grid_uv(12, 12, |x, y| (1.0, x - y));
+        let mut s = settings();
+        s.toko = true;
+        s.toko_by_count = true;
+        s.toko_count = 4;
+        s.vector = true;
+        let mut last = 0.0;
+        build_scene_with_progress(&f, &s, &[], |p| {
+            assert!(p >= last, "progress regressed from {last} to {p}");
+            last = p;
+            true
+        }).unwrap();
+        assert_eq!(last, 1.0);
     }
 
     #[test]

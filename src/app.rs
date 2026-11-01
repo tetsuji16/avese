@@ -33,7 +33,7 @@ impl Job {
         match self {
             Job::Load(h) => (&h.sh, h.started, true),
             Job::Reparse(h) => (&h.sh, h.started, true),
-            Job::Render(h) => (&h.sh, h.started, false),
+            Job::Render(h) => (&h.sh, h.started, true),
             Job::Batch(h) => (&h.sh, h.started, true),
         }
     }
@@ -245,8 +245,6 @@ impl App {
             let msg = format!("イメージのサイズが {} MB になり、設定された上限 {} MB を超えます。\n描画を続けますか？", need.div_ceil(1024 * 1024), s.max_bmp_mb);
             if !self.dlg.modal(|| dialogs::confirm("avese", &msg)) {
                 self.loaded = Some(loaded);
-                self.canvas_tex = None;
-                self.rendered = None;
                 self.status_msg = "描画を中止しました".into();
                 return;
             }
@@ -276,6 +274,10 @@ impl App {
                 }
             }
             Err(e) => {
+                if e == jobs::CANCELLED {
+                    self.status_msg = "描画を中止しました".into();
+                    return;
+                }
                 self.canvas_tex = None;
                 self.rendered = None;
                 self.status_msg = e.clone();
@@ -298,7 +300,7 @@ impl App {
         let Some(job) = self.job.take() else { return };
         if std::mem::take(&mut self.dlg.mesh_cancel) {
             job.sh().0.cancel();
-            // loading and parsing have nothing to keep; a batch ends at the next file
+            // loading and parsing have nothing to keep
             if matches!(job, Job::Load(_) | Job::Reparse(_)) {
                 self.status_msg = jobs::CANCELLED.into();
                 self.dlg.mesh = false;
@@ -943,6 +945,31 @@ mod shortcut_tests {
         assert!(shortcut_actions(&ctx, false).is_empty());
         ctx.end_pass().textures_delta.clear();
     }
+
+    #[test]
+    fn cancelled_redraw_keeps_previous_canvas_and_allows_redraw() {
+        let ctx = Context::default();
+        let forms = Forms::load();
+        let store = Settings::default_store();
+        let mut app = App::new(&ctx, forms, store.clone(), Layout::default(), vec![]);
+        let bytes = b"0 0 0\n1 0 1\n0 1 1\n1 1 2\n";
+        let mut source = store;
+        let loaded = pipeline::load(bytes, &mut source, None, |_| {}).unwrap();
+        let mut settings = Settings::from_store(&source);
+        settings.size = 20;
+        let previous = pipeline::render(&loaded, &settings).unwrap();
+        app.rendered(&ctx, RenderDone { loaded, result: Ok(previous) });
+        let original_tex = app.canvas_tex.as_ref().unwrap().id();
+        let original_pixels = app.rendered.as_ref().unwrap().rgba();
+        let loaded = app.loaded.take().unwrap();
+        app.rendered(&ctx, RenderDone { loaded, result: Err(jobs::CANCELLED.into()) });
+        assert_eq!(app.status_msg, "描画を中止しました");
+        assert_eq!(app.canvas_tex.as_ref().unwrap().id(), original_tex);
+        assert_eq!(app.rendered.as_ref().unwrap().rgba(), original_pixels);
+        let rerendered = pipeline::render(app.loaded.as_ref().unwrap(), &settings).unwrap();
+        assert_eq!(rerendered.rgba(), original_pixels);
+    }
+
 }
 
 impl eframe::App for App {

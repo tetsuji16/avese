@@ -93,8 +93,20 @@ pub fn write_avi(
     w: u32,
     h: u32,
     fps: f64,
-    mut frame: impl FnMut(usize) -> Result<(Vec<u8>, u32, u32), String>,
+    frame: impl FnMut(usize) -> Result<(Vec<u8>, u32, u32), String>,
     mut progress: impl FnMut(f32),
+) -> Result<(), String> {
+    write_avi_cancellable(path, n_frames, w, h, fps, frame, |p| { progress(p); Ok(()) })
+}
+
+pub fn write_avi_cancellable(
+    path: &Path,
+    n_frames: usize,
+    w: u32,
+    h: u32,
+    fps: f64,
+    mut frame: impl FnMut(usize) -> Result<(Vec<u8>, u32, u32), String>,
+    mut progress: impl FnMut(f32) -> Result<(), String>,
 ) -> Result<(), String> {
     if n_frames == 0 || w == 0 || h == 0 {
         return Err("AVI にするフレームがありません".into());
@@ -112,8 +124,12 @@ pub fn write_avi(
 
     let mut g = Gather::new();
     for i in 0..n_frames {
-        g.add(&fit(frame(i)?, w, h)?);
-        progress(i as f32 / n_frames as f32 * 0.5);
+        let rgba = fit(frame(i)?, w, h)?;
+        let total = rgba.len().max(1);
+        for (chunk_index, chunk) in rgba.chunks(4 * 65_536).enumerate() {
+            progress((i as f32 + (chunk_index * 4 * 65_536) as f32 / total as f32) / n_frames as f32 * 0.5)?;
+            g.add(chunk);
+        }
     }
     let mut palette = g.palette();
     if palette.is_empty() {
@@ -182,13 +198,16 @@ pub fn write_avi(
             o.write_all(b"00db").map_err(|e| e.to_string())?;
             o.write_all(&(fsz as u32).to_le_bytes()).map_err(|e| e.to_string())?;
             for j in (0..h as usize).rev() {
+                if (h as usize - 1 - j) % 16 == 0 {
+                    progress(0.5 + (i as f32 + (h as usize - 1 - j) as f32 / h as f32) / n_frames as f32 * 0.5)?;
+                }
                 let src = &rgba[j * w as usize * 4..(j + 1) * w as usize * 4];
                 for (d, p) in row.iter_mut().zip(src.chunks_exact(4)) {
                     *d = mapper.index([p[0], p[1], p[2]]);
                 }
                 o.write_all(&row).map_err(|e| e.to_string())?;
             }
-            progress(0.5 + (i + 1) as f32 / n_frames as f32 * 0.5);
+            progress(0.5 + (i + 1) as f32 / n_frames as f32 * 0.5)?;
         }
 
         let mut idx = Vec::with_capacity(8 + 16 * n_frames);
@@ -202,6 +221,7 @@ pub fn write_avi(
         }
         o.write_all(&idx).map_err(|e| e.to_string())?;
         o.flush().map_err(|e| e.to_string())?;
+        progress(1.0)?;
         Ok(())
     })();
     let r = r.and_then(|_| std::fs::rename(&tmp, path).map_err(|e| e.to_string()));
@@ -319,6 +339,19 @@ mod tests {
         let e = write_avi(&p, 1, 2, 2, 5.0, |_| Err("render failed".into()), |_| {}).unwrap_err();
         assert_eq!(e, "render failed");
         assert!(!p.exists() && !temp_sibling(&p).exists());
+    }
+
+    #[test]
+    fn cancel_during_frame_write_keeps_existing_file_and_removes_temporary_file() {
+        let path = std::env::temp_dir().join(format!("avese-cancel-{}-{:?}.avi", std::process::id(), std::thread::current().id()));
+        std::fs::write(&path, b"existing").unwrap();
+        let result = write_avi_cancellable(&path, 1, 64, 64, 10.0,
+            |_| Ok(solid(64, 64, |x, y| [x as u8, y as u8, 0])),
+            |p| if p > 0.5 { Err("cancelled".into()) } else { Ok(()) });
+        assert!(result.unwrap_err().contains("cancelled"));
+        assert_eq!(std::fs::read(&path).unwrap(), b"existing");
+        assert!(!temp_sibling(&path).exists());
+        std::fs::remove_file(path).unwrap();
     }
 
     #[test]
