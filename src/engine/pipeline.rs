@@ -18,6 +18,8 @@ pub struct Loaded {
     /// settings the field was built from; see `is_stale`
     pub opts: DataOptions,
     pub spline: bool,
+    /// Irregular point data detected before an included file can change the parse mode.
+    pub irregular_data: bool,
 }
 
 pub struct Rendered {
@@ -65,7 +67,8 @@ pub fn reparse_with_mesh(bytes: &[u8], s: &Settings, mesh_auto: bool, progress: 
 
 fn build(df: DataFile, s: &Settings, opts: DataOptions, progress: impl FnMut(f32)) -> Result<Loaded, String> {
     let (field, warnings) = field::build_with_progress(&df, s, progress)?;
-    Ok(Loaded { data: df, field: Arc::new(field), warnings, path: None, opts, spline: s.spline })
+    let irregular_data = s.data_check && matches!(&field, Field::Grid(g) if !g.is_regular());
+    Ok(Loaded { data: df, field: Arc::new(field), warnings, path: None, opts, spline: s.spline, irregular_data })
 }
 
 /// Read a data file: parse, apply embedded settings and IncludeINI to `store`, build the field.
@@ -74,6 +77,9 @@ pub fn load(bytes: &[u8], store: &mut Store, base_dir: Option<&Path>, progress: 
     let s0 = Settings::from_store(store);
     let opts0 = DataOptions::from_settings(&s0);
     let mut df = data::parse(bytes, &opts0);
+    // IncludeINI may switch CBpanel on. Keep the pre-include point-data check so
+    // irregular input still gets the original three-choice prompt.
+    let irregular_before_embedded = field::has_irregular_grid(&df, &s0);
     let mut warnings = data::apply_embedded(store, &df, base_dir);
     let s = Settings::from_store(store);
     let opts = DataOptions::from_settings(&s);
@@ -81,6 +87,7 @@ pub fn load(bytes: &[u8], store: &mut Store, base_dir: Option<&Path>, progress: 
         df = data::parse(bytes, &opts);
     }
     let mut l = build(df, &s, opts, progress)?;
+    l.irregular_data |= irregular_before_embedded;
     warnings.append(&mut l.warnings);
     l.warnings = warnings;
     Ok(l)
@@ -228,6 +235,53 @@ mod tests {
         st.set_checked("CBDataCheck", true);
         let l = load(b"0 0 1\n1 0 2\n2 0 3\n0 1 4\n1 1 5\n", &mut st, None, |_| {}).unwrap();
         assert!(l.warnings.iter().any(|w| w.contains("格子状")));
+        assert!(l.irregular_data);
+    }
+
+    #[test]
+    fn irregular_points_are_detected_before_included_panel_settings() {
+        let root = std::env::temp_dir().join(format!("avese-issue1-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("sample4.ini"), "[AVESE.EXE]\nCBpanel=1\nCBDataCheck=1\n").unwrap();
+        let bytes = b"IncludeINI sample4.ini\n0 0 1\n1 0 2\n2 0 3\n0 1 4\n1 1 5\n";
+
+        // Ignore keeps the included panel mode. The raw point data still records the warning.
+        let mut st = store();
+        st.set_checked("CBDataCheck", true);
+        st.set_checked("CBLoadConf", true);
+        let ignored = load(bytes, &mut st, Some(&root), |_| {}).unwrap();
+        assert!(ignored.irregular_data);
+        assert!(matches!(ignored.field, Field::Panel(_)));
+        assert!(st.checked("CBpanel"));
+
+        // Choosing mesh explicitly switches to point-data mode and builds a triangle field.
+        let mut mesh_settings = Settings::from_store(&st);
+        mesh_settings.panel = false;
+        let meshed = reparse_with_mesh(bytes, &mesh_settings, true, |_| {}).unwrap();
+        assert!(matches!(meshed.field, Field::Mesh(_)));
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn original_sample4_three_way_data_paths_when_fixture_is_available() {
+        let Ok(original_dir) = std::env::var("AVESE_ORIGINAL_DIR") else { return; };
+        let dir = Path::new(&original_dir);
+        let bytes = std::fs::read(dir.join("sample4.txt")).unwrap();
+        let mut st = store();
+        st.set_checked("CBDataCheck", true);
+        st.set_checked("CBLoadConf", true);
+        let loaded = load(&bytes, &mut st, Some(dir), |_| {}).unwrap();
+        assert!(loaded.irregular_data, "sample4 should be classified before IncludeINI changes panel mode");
+        assert!(matches!(loaded.field, Field::Panel(_)), "ignore must retain sample4.ini's panel mode");
+
+        // The affirmative action explicitly switches this input to point-data mesh mode.
+        let mut mesh_settings = Settings::from_store(&st);
+        mesh_settings.panel = false;
+        // sample4's first two columns contain repeated (0, 0) coordinates, so
+        // triangulation correctly fails and the caller must retain `loaded`.
+        assert!(reparse_with_mesh(&bytes, &mesh_settings, true, |_| {}).is_err());
+        // Abort is covered by the choice mapping test; the load path returns before replacing app state.
     }
 
     #[test]

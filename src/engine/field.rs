@@ -5,6 +5,27 @@ use crate::engine::settings::Settings;
 
 const MAX_GRID_CELLS: usize = 50_000_000;
 
+/// Classify raw point data for the non-structured grid warning without building a field.
+/// This is also used before IncludeINI can change the input to panel mode.
+pub fn has_irregular_grid(df: &DataFile, settings: &Settings) -> bool {
+    if !settings.data_check || settings.panel || df.panel.is_some() || df.mesh_auto { return false; }
+    let pts: Vec<_> = df.points.iter().filter(|p| p.x.is_some() && p.y.is_some()).collect();
+    if pts.is_empty() { return false; }
+    let xs = cluster(pts.iter().filter_map(|p| p.x).collect());
+    let ys = cluster(pts.iter().filter_map(|p| p.y).collect());
+    let (nx, ny) = (xs.len(), ys.len());
+    if nx < 2 || ny < 2 { return true; }
+    let Some(cells) = nx.checked_mul(ny).filter(|&c| c <= MAX_GRID_CELLS) else { return true; };
+    let mut filled = vec![false; cells];
+    let mut covered = 0;
+    for p in &pts {
+        let (Some(x), Some(y)) = (p.x, p.y) else { continue; };
+        let k = nearest(&ys, y) * nx + nearest(&xs, x);
+        if !filled[k] { filled[k] = true; covered += 1; }
+    }
+    covered != cells || pts.len() != cells
+}
+
 #[derive(Clone, Debug)]
 pub enum Field {
     Grid(GridField),
