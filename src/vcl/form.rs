@@ -616,6 +616,9 @@ impl<'a> Renderer<'a> {
         let focused = ctx.memory(|m| m.has_focus(id));
         let mut idx = self.store.item_index(&n.name);
         let mut changed = false;
+        let ih = (n.int_opt("ItemHeight").unwrap_or(12) + 1).max(13) as f32;
+        let count = items.len().min(n.int_opt("DropDownCount").unwrap_or(8).max(1) as usize);
+        let lr = Rect::from_min_size(Pos2::new(r.min.x, r.max.y - 1.0), Vec2::new(r.width(), count as f32 * ih + 4.0));
         if focused && en && !open {
             if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::ArrowDown)) && (idx + 1) < items.len() as i32 {
                 idx += 1;
@@ -629,7 +632,10 @@ impl<'a> Renderer<'a> {
                 open = true;
             }
         }
-        if !focused {
+        // Clicking a foreground list item can move focus away from the combo
+        // before the release arrives. Keep the list alive for that click.
+        let pointer_in_list = open && ctx.input(|i| i.pointer.interact_pos().is_some_and(|pos| lr.contains(pos)));
+        if !focused && !pointer_in_list {
             open = false;
         }
         // look
@@ -660,9 +666,6 @@ impl<'a> Renderer<'a> {
             if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape)) {
                 open = false;
             }
-            let ih = (n.int_opt("ItemHeight").unwrap_or(12) + 1).max(13) as f32;
-            let count = items.len().min(n.int_opt("DropDownCount").unwrap_or(8).max(1) as usize);
-            let lr = Rect::from_min_size(Pos2::new(r.min.x, r.max.y - 1.0), Vec2::new(r.width(), count as f32 * ih + 4.0));
             let mut picked: Option<usize> = None;
             let hot_id = open_id.with("hot");
             egui::Area::new(open_id.with("area")).order(egui::Order::Foreground).fixed_pos(lr.min).constrain(false).show(&ctx, |ui| {
