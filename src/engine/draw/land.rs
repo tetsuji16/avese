@@ -625,22 +625,24 @@ fn panel_surface(v: &View, items: &mut Items, progress: &mut impl FnMut(f32) -> 
             done += 1;
             if done % 128 == 0 && !progress(0.08 + 0.72 * done as f32 / total.max(1) as f32) { return false; }
             let Some(z) = p.z[r * p.cols + c] else { continue };
-            let (x, y, e) = (c as f64, r as f64, stride as f64);
-            let q: Vec<((f32, f32), f64)> = [(x, y), (x + e, y), (x + e, y + e), (x, y + e)].iter().map(|&(a, b)| v.pt(a, b, z)).collect();
+            let (x, y) = (c as f64, r as f64);
+            let (x1, y1) = ((c + stride).min(p.cols) as f64, (r + stride).min(p.rows) as f64);
+            let q: Vec<((f32, f32), f64)> = [(x, y), (x1, y), (x1, y1), (x, y1)].iter().map(|&(a, b)| v.pt(a, b, z)).collect();
             let depth = q.iter().map(|q| q.1).sum::<f64>() / 4.0;
             items.push((depth, poly(q.iter().map(|q| q.0).collect(), v.ctx.color(z), !v.ctx.s.surface)));
             // Draw a riser where the adjacent tile is lower or absent. The
             // higher tile owns shared walls, so each height transition is emitted once.
             let faces = [
-                (r > 0, c, r.saturating_sub(stride), [(x,y),(x+e,y)]),
-                (c + stride < p.cols, c + stride, r, [(x+e,y),(x+e,y+e)]),
-                (r + stride < p.rows, c, r + stride, [(x+e,y+e),(x,y+e)]),
-                (c > 0, c.saturating_sub(stride), r, [(x,y+e),(x,y)]),
+                (r > 0, c, r.saturating_sub(stride), [(x,y),(x1,y)]),
+                (c + stride < p.cols, c + stride, r, [(x1,y),(x1,y1)]),
+                (r + stride < p.rows, c, r + stride, [(x1,y1),(x,y1)]),
+                (c > 0, c.saturating_sub(stride), r, [(x,y1),(x,y)]),
             ];
             for (has_neighbor, nc, nr, edge) in faces {
                 let neighbor = if has_neighbor { p.z.get(nr * p.cols + nc).copied().flatten() } else { None };
                 if neighbor.is_some_and(|nz| nz >= z) { continue; }
                 let low = neighbor.unwrap_or(v.map.zlo).min(z);
+                if low == z { continue; }
                 let (a,b) = (edge[0], edge[1]);
                 let pts = [(a.0,a.1,z),(b.0,b.1,z),(b.0,b.1,low),(a.0,a.1,low)];
                 let pr: Vec<_> = pts.iter().map(|&(xx,yy,zz)| v.pt(xx,yy,zz)).collect();
@@ -914,6 +916,24 @@ mod tests {
         let (m, _) = crate::engine::field::build(&df, &s).unwrap();
         let b = build_scene(&m, &s, &[]).unwrap();
         assert_eq!(count_ops(&b.scene.ops, |o| matches!(o, Op::Polygon { .. })), 2);
+    }
+
+    #[test]
+    fn reduced_panel_last_tile_stops_at_data_boundary() {
+        use crate::engine::data::PanelData;
+        let (rows, cols) = (251, 251);
+        let f = Field::Panel(PanelData { rows, cols, z: vec![Some(1.0); rows * cols] });
+        let s = land();
+        let ctx = Ctx::new(&f, &s);
+        let layout = Layout::new(&f, &s).unwrap();
+        let proj = layout.proj.unwrap().placed(layout.px, layout.py);
+        let view = View { ctx: &ctx, map: Map { x0:0.0, y0:0.0, xr:cols as f64, yr:rows as f64, wd:proj.wd, hd:proj.hd, cyl:None, flip:true, zlo:1.0, zr:1.0, hz:s.land_height as f64 }, proj, bounds:(layout.w,layout.h) };
+        let mut items = Vec::new();
+        assert!(super::panel_surface(&view, &mut items, &mut |_| true));
+        let expected: Vec<_> = [(249.0,249.0),(251.0,249.0),(251.0,251.0),(249.0,251.0)].into_iter().map(|(x,y)| view.pt(x,y,1.0).0).collect();
+        let Op::Polygon { pts, .. } = &items.last().unwrap().1 else { panic!("expected last tile") };
+        assert_eq!(pts, &expected, "the final tile must not extend to 252");
+        assert_eq!(items.len(), 84 * 84, "flat boundary walls have zero height and should not be emitted");
     }
 
     #[test]
