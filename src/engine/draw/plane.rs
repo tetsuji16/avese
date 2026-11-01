@@ -326,11 +326,15 @@ fn isolines_prepared(
 }
 
 fn contour_values(z: &[Option<f64>], levels: &[f64], mut progress: impl FnMut(f32) -> bool) -> Option<Vec<f64>> {
-    let (lo, hi) = z.iter().flatten().chain(levels).copied().fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), v| (lo.min(v), hi.max(v)));
+    let (mut lo, mut hi) = levels.iter().copied().fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), v| (lo.min(v), hi.max(v)));
+    for (i, chunk) in z.chunks(4096).enumerate() {
+        if i % 16 == 0 && !progress(0.5 * (i * 4096) as f32 / z.len().max(1) as f32) { return None; }
+        for v in chunk.iter().flatten() { lo = lo.min(*v); hi = hi.max(*v); }
+    }
     let below = lo - (hi - lo).max(1.0);
     let mut values = Vec::with_capacity(z.len());
     for (i, chunk) in z.chunks(4096).enumerate() {
-        if i % 16 == 0 && !progress(i as f32 * 4096.0 / z.len().max(1) as f32) { return None; }
+        if i % 16 == 0 && !progress(0.5 + 0.5 * (i * 4096) as f32 / z.len().max(1) as f32) { return None; }
         values.extend(chunk.iter().map(|v| v.unwrap_or(below)));
     }
     if !progress(1.0) { return None; }
@@ -503,6 +507,15 @@ mod tests {
         });
         assert!(out.is_none());
         assert_eq!(checks, 1);
+    }
+
+    #[test]
+    fn contour_range_scan_checks_cancellation_before_value_allocation() {
+        let z = vec![Some(1.0); 200_000];
+        let mut calls = 0;
+        let values = super::contour_values(&z, &[0.5], |p| { calls += 1; p < 0.1 });
+        assert!(values.is_none());
+        assert!(calls >= 2);
     }
 
     #[test]
