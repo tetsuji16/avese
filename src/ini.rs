@@ -301,8 +301,9 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires original samples; set AVESE_ORIGINAL_DIR"]
     fn original_sample_ini_round_trip() {
-        let Ok(bytes) = std::fs::read("original avese/sample4.ini") else { return };
+        let bytes = std::fs::read(crate::original_fixture_dir().join("sample4.ini")).expect("original sample4.ini not found");
         let mut original = store();
         let mut layout = Layout::default();
         apply_text(&decode(&bytes), &mut original, &mut layout);
@@ -311,6 +312,13 @@ mod tests {
         assert!(original.checked("CBDataCheck"));
         assert_eq!(original.position("SEmaxbmp"), 4);
         let text = to_text(&original, &layout);
+        for line in decode(&bytes).lines() {
+            let Some((key, value)) = line.split_once('=') else { continue };
+            let key = key.trim();
+            if let Some(canonical) = KEYS.iter().find(|k| k.eq_ignore_ascii_case(key)) {
+                assert_eq!(get_value(canonical, &original, &layout), value.trim_end_matches('\r'), "original key {key} changed");
+            }
+        }
         let mut restored = store();
         let mut restored_layout = Layout::default();
         apply_text(&decode(&encode(&text)), &mut restored, &mut restored_layout);

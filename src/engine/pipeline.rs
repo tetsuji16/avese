@@ -269,16 +269,14 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires original samples; set AVESE_ORIGINAL_DIR"]
     fn original_samples_render() {
-        let dir = Path::new("original avese");
-        if !dir.exists() {
-            return;
-        }
+        let dir = crate::original_fixture_dir();
         for n in 1..=6 {
             let p = dir.join(format!("sample{n}.txt"));
             let bytes = std::fs::read(&p).unwrap();
             let mut st = store();
-            let l = load(&bytes, &mut st, Some(dir), |_| {}).unwrap_or_else(|e| panic!("sample{n}: {e}"));
+            let l = load(&bytes, &mut st, Some(&dir), |_| {}).unwrap_or_else(|e| panic!("sample{n}: {e}"));
             let r = render(&l, &Settings::from_store(&st)).unwrap_or_else(|e| panic!("sample{n}: {e}"));
             assert!(r.pixmap.width() > 10, "sample{n}");
         }

@@ -476,7 +476,6 @@ impl Field {
 mod tests {
     use super::*;
     use crate::engine::data::{self, DataOptions, Point};
-    use std::path::Path;
 
     fn pt(x: f64, y: f64, z: Option<f64>) -> Point {
         Point { x: Some(x), y: Some(y), u: None, v: None, z }
@@ -629,12 +628,13 @@ mod tests {
     }
 
     fn sample_file(name: &str) -> Option<Vec<u8>> {
-        std::fs::read(Path::new("original avese").join(name)).ok()
+        std::fs::read(crate::original_fixture_dir().join(name)).ok()
     }
 
     #[test]
+    #[ignore = "requires original samples; set AVESE_ORIGINAL_DIR"]
     fn original_samples() {
-        let Some(s2) = sample_file("sample2.txt") else { return };
+        let s2 = sample_file("sample2.txt").expect("original sample2.txt not found");
         let o = DataOptions::default();
         let (f, w) = build(&data::parse(&s2, &o), &settings(false)).unwrap();
         assert!(f.is_regular() && w.is_empty());

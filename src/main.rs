@@ -19,6 +19,11 @@ mod state;
 mod vcl;
 mod view;
 
+#[cfg(test)]
+fn original_fixture_dir() -> std::path::PathBuf {
+    std::env::var_os("AVESE_ORIGINAL_DIR").map(std::path::PathBuf::from).unwrap_or_else(|| "original avese".into())
+}
+
 fn main() -> eframe::Result {
     if let Some(code) = cli::run(std::env::args().skip(1).collect()) {
         std::process::exit(code);
