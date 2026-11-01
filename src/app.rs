@@ -1105,18 +1105,22 @@ impl eframe::App for App {
         if let Some(tex) = &self.canvas_tex {
             let sz = tex.size_vec2(); // EDh / EDv are applied when the scene is built
             let inner = sbox.shrink(2.0);
-            ui.scope_builder(egui::UiBuilder::new().max_rect(inner), |ui| {
-                let out = egui::ScrollArea::both().auto_shrink([false, false]).show(ui, |ui| ui.add(egui::Image::new((tex.id(), sz))));
-                let img = out.inner.rect;
-                let pos = ctx.input(|i| i.pointer.hover_pos()).filter(|p| inner.contains(*p) && img.contains(*p));
-                if let (Some(pos), Some(r)) = (pos, &self.rendered) {
-                    let d = pos - img.min;
-                    cells = jobs::probe_cells(r.probe.at_field(d.x as f64, d.y as f64, &r.field), r.probe.frame().is_some_and(|f| f.cyl.is_some()));
-                }
+            ui.add_enabled_ui(!locked, |ui| {
+                ui.scope_builder(egui::UiBuilder::new().max_rect(inner), |ui| {
+                    let out = egui::ScrollArea::both().auto_shrink([false, false]).show(ui, |ui| ui.add(egui::Image::new((tex.id(), sz))));
+                    let img = out.inner.rect;
+                    let pos = ctx.input(|i| i.pointer.hover_pos()).filter(|p| inner.contains(*p) && img.contains(*p));
+                    if !locked {
+                        if let (Some(pos), Some(r)) = (pos, &self.rendered) {
+                            let d = pos - img.min;
+                            cells = jobs::probe_cells(r.probe.at_field(d.x as f64, d.y as f64, &r.field), r.probe.frame().is_some_and(|f| f.cyl.is_some()));
+                        }
+                    }
+                });
             });
         }
         self.probe_cells = cells;
-        self.control_bar(ui, cbar, &mut acts, locked);
+        ui.add_enabled_ui(!locked, |ui| self.control_bar(ui, cbar, &mut acts, locked));
         self.status_bar(ui, sbar);
         if let Some(a) = self.menu_bar(ui, mbar, locked) {
             acts.push(a);
@@ -1171,7 +1175,9 @@ impl eframe::App for App {
         if self.dlg.any() {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }
-        let _ = ctx.input(|i| i.viewport().close_requested());
+        if locked && ctx.input(|i| i.viewport().close_requested()) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+        }
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {

@@ -222,7 +222,12 @@ impl Dialogs {
             if want_input {
                 self.input = true;
             }
-            match (act, close) {
+            if close && (nested_input_open || self.picker.is_some()) {
+                ctx.send_viewport_cmd_to(ViewportId::from_hash_of("config"), egui::ViewportCommand::CancelClose);
+            }
+            // A nested label or picker owns this dialog until it is dismissed,
+            // including on platforms without native owner-window disabling.
+            match (act, close && !nested_input_open && self.picker.is_none()) {
                 (Some(true), _) => {
                     self.config = None;
                     self.config_ok = true;
@@ -284,7 +289,7 @@ impl Dialogs {
             let me: &Dialogs = self;
             let mut req = None;
             let c = viewport(ctx, "avi", T_AVI, size, Some(Vec2::new(292.0, 171.0)), true, sh.center, |ui| {
-                req = ui.add_enabled_ui(notice.is_none(), |ui| avi_body(ui, &form, sh.store, sh.assets, me)).inner;
+                req = ui.add_enabled_ui(notice.is_none() && !me.busy, |ui| avi_body(ui, &form, sh.store, sh.assets, me)).inner;
                 if let Some(text) = notice.as_deref() {
                     let mut close_notice = false;
                     egui::Modal::new(egui::Id::new("batch-complete")).show(ui.ctx(), |ui| {
@@ -298,6 +303,9 @@ impl Dialogs {
                 }
             });
             self.batch_notice = notice;
+            if c && self.busy {
+                ctx.send_viewport_cmd_to(ViewportId::from_hash_of("avi"), egui::ViewportCommand::CancelClose);
+            }
             if req.is_some() {
                 self.batch_req = req;
             }
