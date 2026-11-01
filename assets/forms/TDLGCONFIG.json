@@ -2721,7 +2721,7 @@
 "Top": 174,
 "Width": 173,
 "Height": 11,
-"Caption": "※ラベルは設定として保存されません",
+"Caption": "※ラベルは設定とともに保存されます",
 "Font.Charset": {
 "ident": "SHIFTJIS_CHARSET"
 },
@@ -2747,10 +2747,10 @@
 "Height": 19,
 "Hint": "リストからの削除",
 "Caption": "削除(&D)",
-"Enabled": false,
+"Enabled": true,
 "ParentShowHint": false,
 "ShowHint": true,
-"Visible": false
+"Visible": true
 },
 "kids": []
 },
@@ -2764,10 +2764,10 @@
 "Height": 19,
 "Hint": "リストへの追加",
 "Caption": "追加(&A)",
-"Enabled": false,
+"Enabled": true,
 "ParentShowHint": false,
 "ShowHint": true,
-"Visible": false
+"Visible": true
 },
 "kids": []
 },
