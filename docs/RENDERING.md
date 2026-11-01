@@ -116,3 +116,5 @@ pub enum Op {
 ## 色の表記
 
 Store の `TColor` は BGR（`0x00BBGGRR`）。`Settings` で `Rgb` に変換する。
+
+文字描画の差異と改善方針は [TEXT_RENDERING.md](TEXT_RENDERING.md) を参照。
