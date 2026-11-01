@@ -1138,10 +1138,14 @@ impl eframe::App for App {
         if self.batch_hide_pending {
             if self.job.is_none() {
                 self.batch_hide_pending = false;
-            } else if self.dlg.mesh && plat::find(Some(dialogs::T_MESH)).is_some() {
+            } else if let Some(progress_hwnd) = self.dlg.mesh.then(|| plat::find(Some(dialogs::T_MESH))).flatten() {
                 self.batch_progress_frames = self.batch_progress_frames.saturating_add(1);
                 if self.batch_progress_frames >= 2 {
                     self.batch_hide_pending = false;
+                    // Windows hides owned windows together with their owner.
+                    // Detach the progress window before hiding the root so the
+                    // user retains access to the cancellation control.
+                    plat::detach_owner(progress_hwnd);
                     self.batch_root_hidden = true;
                     ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
                 }
