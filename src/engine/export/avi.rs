@@ -1,6 +1,6 @@
 //! Uncompressed 8 bit AVI with one palette shared by all frames.
 use super::bmp::{Mapper, palette_from_histogram};
-use super::{push_u16, push_u32, temp_sibling};
+use super::{create_temp_sibling, push_u16, push_u32};
 use std::collections::HashSet;
 use std::io::{BufWriter, Write};
 use std::path::Path;
@@ -136,9 +136,8 @@ pub fn write_avi_cancellable(
         palette.push([0, 0, 0]);
     }
 
-    let tmp = temp_sibling(path);
+    let (tmp, file) = create_temp_sibling(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let r = (|| -> Result<(), String> {
-        let file = std::fs::File::create(&tmp).map_err(|e| e.to_string())?;
         let mut o = BufWriter::new(file);
         let mut head = Vec::with_capacity(1300);
         head.extend_from_slice(b"RIFF");
@@ -265,7 +264,6 @@ mod tests {
         write_avi(&path, 3, 5, 4, 2.0, |k| Ok(if k == 1 { solid(10, 8, |_, _| colour(1)) } else { solid(5, 4, |_, _| colour(k)) }), |p| prog.push(p)).unwrap();
         let b = std::fs::read(&path).unwrap();
         std::fs::remove_file(&path).unwrap();
-        assert!(!temp_sibling(&path).exists());
         assert!(prog.windows(2).all(|w| w[0] <= w[1]) && *prog.last().unwrap() == 1.0);
         assert_eq!(&b[0..4], b"RIFF");
         assert_eq!(u32_at(&b, 4) as usize + 8, b.len());
@@ -339,20 +337,27 @@ mod tests {
         assert!(e.contains("2GB"), "{e}");
         let e = write_avi(&p, 1, 2, 2, 5.0, |_| Err("render failed".into()), |_| {}).unwrap_err();
         assert_eq!(e, "render failed");
-        assert!(!p.exists() && !temp_sibling(&p).exists());
+        assert!(!p.exists());
     }
 
     #[test]
     fn cancel_during_frame_write_keeps_existing_file_and_removes_temporary_file() {
-        let path = std::env::temp_dir().join(format!("avese-cancel-{}-{:?}.avi", std::process::id(), std::thread::current().id()));
+        let dir = std::env::temp_dir().join(format!("avese-cancel-{}-{:?}", std::process::id(), std::thread::current().id()));
+        std::fs::create_dir(&dir).unwrap();
+        let path = dir.join("output.avi");
+        let existing_tmp = dir.join("output.avi.tmp");
+        std::fs::write(&existing_tmp, b"unrelated file").unwrap();
         std::fs::write(&path, b"existing").unwrap();
         let result = write_avi_cancellable(&path, 1, 64, 64, 10.0,
             |_| Ok(solid(64, 64, |x, y| [x as u8, y as u8, 0])),
             |p| if p > 0.5 { Err("cancelled".into()) } else { Ok(()) });
         assert!(result.unwrap_err().contains("cancelled"));
         assert_eq!(std::fs::read(&path).unwrap(), b"existing");
-        assert!(!temp_sibling(&path).exists());
+        assert_eq!(std::fs::read(&existing_tmp).unwrap(), b"unrelated file");
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 2, "no temporary export file should remain");
         std::fs::remove_file(path).unwrap();
+        std::fs::remove_file(existing_tmp).unwrap();
+        std::fs::remove_dir(dir).unwrap();
     }
 
     #[test]
