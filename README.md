@@ -54,7 +54,7 @@ python -I tools/extract_assets.py
 python -I tools/export_forms.py
 ```
 
-ツールバーの一般操作には Phosphor Icons、グラフ操作には AI で生成した独自画像を使い、2D・3D は文字で表示します。アプリのロゴには生成した独自画像を使います。`assets/forms/` のフォーム JSON は、原作の DFM から取り出したラベルや座標などのレイアウトで、画像などのバイナリは含みません。
+ツールバーの一般操作には Phosphor Icons、グラフ操作には AI で生成した独自画像や描画した記号を使い、2D・3D は文字で表示します。アプリのロゴには生成した独自画像を使います。`assets/forms/` のフォーム JSON は、原作の DFM から取り出したラベルや座標などのレイアウトで、画像などのバイナリは含みません。
 
 ## ライセンス
 
