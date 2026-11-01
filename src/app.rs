@@ -315,7 +315,15 @@ impl App {
         match self.job_result.take() {
             Some(Ok(m)) => {
                 self.status_msg.clear();
-                self.dlg.modal(|| dialogs::notice("avese", &m));
+                if self.dlg.avi {
+                    self.dlg.batch_notice = Some(m);
+                } else {
+                    self.dlg.modal(|| dialogs::notice("avese", &m));
+                }
+            }
+            Some(Err(e)) if self.dlg.avi => {
+                self.status_msg = e.clone();
+                if e != jobs::CANCELLED { self.dlg.batch_notice = Some(e); }
             }
             Some(Err(e)) => self.job_failed(e),
             None => {}
