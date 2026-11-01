@@ -159,10 +159,6 @@ pub fn text_size(p: &Painter, s: &str, font: &FontId) -> Vec2 {
     p.layout_no_wrap(parse_caption(s).0, font.clone(), BLACK).size()
 }
 
-pub fn plain_text(p: &Painter, pos: Pos2, s: &str, font: FontId, color: Color32) -> Rect {
-    p.text(pos, Align2::LEFT_TOP, s, font, color)
-}
-
 pub fn arrow(p: &Painter, center: Pos2, dir: char, c: Color32) {
     // 7x4 style triangles built from rows of 1px rects
     let (rows, horiz) = match dir {

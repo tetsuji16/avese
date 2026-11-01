@@ -113,11 +113,17 @@ mod tests {
         assert_eq!(&d[0..4], &40u32.to_le_bytes());
     }
 
+    /// The OS clipboard is a single exclusive resource, so these two tests must not
+    /// overlap: opening it twice at once makes the loser's `EmptyClipboard` fail.
+    #[cfg(windows)]
+    static CLIPBOARD: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     /// Alters the real clipboard; run by hand with `cargo test -- --ignored clipboard_`.
     #[cfg(windows)]
     #[test]
     #[ignore]
     fn clipboard_dib() {
+        let _serial = CLIPBOARD.lock().unwrap_or_else(|e| e.into_inner());
         let img = Indexed { w: 4, h: 2, palette: vec![[255, 0, 0], [0, 0, 255]], pixels: vec![0, 0, 1, 1, 1, 1, 0, 0] };
         copy_bitmap(&img).unwrap();
     }
@@ -127,6 +133,7 @@ mod tests {
     #[test]
     #[ignore]
     fn clipboard_emf() {
+        let _serial = CLIPBOARD.lock().unwrap_or_else(|e| e.into_inner());
         let s = crate::engine::scene::Scene { width: 40, height: 30, bg: crate::engine::scene::Rgb(0, 128, 0), ops: vec![] };
         copy_emf(&crate::engine::export::emf::encode_emf(&s)).unwrap();
     }

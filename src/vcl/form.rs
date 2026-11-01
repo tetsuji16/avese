@@ -61,6 +61,8 @@ pub struct Renderer<'a> {
     scope: Id,
     hover: Option<(Id, String)>,
     tabs: Vec<(Vec<i32>, Id)>,
+    /// Controls that can take the focus, in draw order (disabled ones are left out).
+    focusable: Vec<(Vec<i32>, Id)>,
     buttons: Vec<(Id, String)>,
     alt: bool,
     cur_path: Vec<i32>,
@@ -95,7 +97,7 @@ impl<'a> Renderer<'a> {
             }
         }
         let alt = ctx.input(|i| i.modifiers.alt);
-        Renderer { ui, store, events: vec![], popup_open: false, assets, scope, hover: None, tabs: vec![], buttons: vec![], alt, cur_path: vec![], group: vec![] }
+        Renderer { ui, store, events: vec![], popup_open: false, assets, scope, hover: None, tabs: vec![], focusable: vec![], buttons: vec![], alt, cur_path: vec![], group: vec![] }
     }
 
     /// Store the tab order, show tooltips; returns the events.
@@ -177,10 +179,6 @@ impl<'a> Renderer<'a> {
         }
     }
 
-    fn txt(&self, c: bool, f: &Fnt) -> Color32 {
-        if c { col(f.color) } else { GRAYTEXT }
-    }
-
     fn accel_hit(&self, caption: &str) -> bool {
         if !self.alt {
             return false;
@@ -204,6 +202,11 @@ impl<'a> Renderer<'a> {
         let p = self.p();
         let en = self.is_enabled(n);
         let id = self.scope.with(&n.name);
+        // A disabled control cannot take the focus, so page focus skips it, as Delphi does.
+        // A read-only edit is not interactive here, so it cannot take the focus either.
+        if en && !self.store.readonly(&n.name) && matches!(n.class.as_str(), "TEdit" | "TSpinEdit" | "TCheckBox" | "TRadioButton" | "TComboBox" | "TTrackBar" | "TListBox" | "TButton" | "TSpeedButton") {
+            self.focusable.push((self.cur_path.clone(), id));
+        }
         match n.class.as_str() {
             "TLabel" => {
                 if !n.flag("Transparent", true) {
@@ -454,6 +457,7 @@ impl<'a> Renderer<'a> {
 
     fn edit(&mut self, n: &Node, r: Rect, id: Id, f: &Fnt, en: bool, _spin: bool) {
         let p = self.p();
+        let ctx = self.ui.ctx().clone();
         let ro = self.store.readonly(&n.name);
         let borderless = n.ident("BorderStyle") == "bsNone";
         let bg = if ro { n.color("Color").map(col).unwrap_or(FACE) } else { HILITE };
@@ -480,6 +484,17 @@ impl<'a> Renderer<'a> {
             .interactive(en && !ro);
         let resp = self.ui.put(inner, te);
         self.tabs.push((self.cur_path.clone(), id));
+        // a page switch focuses the first tab stop and selects the whole text, as the original does
+        let sel_key = id.with("select_all");
+        if resp.has_focus() && ctx.data(|d| d.get_temp::<bool>(sel_key)).unwrap_or(false) {
+            ctx.data_mut(|d| d.remove_temp::<bool>(sel_key));
+            if let Some(mut st) = egui::TextEdit::load_state(&ctx, id) {
+                let len = s.chars().count();
+                let range = egui::text::CCursorRange::two(egui::text::CCursor::new(0), egui::text::CCursor::new(len));
+                st.cursor.set_char_range(Some(range));
+                st.store(&ctx, id);
+            }
+        }
         if ro {
             // read-only: draw text ourselves (egui disables focus for non-interactive edits)
         }
@@ -909,18 +924,11 @@ impl<'a> Renderer<'a> {
         self.set_hover(n, id, &resp);
     }
 
-    /// Wire-frame box preview (PBangle). Pixel geometry is measured from the original at eta=30, phi=30;
-    /// other angles use a plausible projection (the original formula is not recoverable from one reference).
+    /// Wire-frame box preview (PBangle), an oblique projection like the bird's-eye view.
     fn angle_box(&mut self, r: Rect) {
         let p = self.p().with_clip_rect(r);
-        let eta = self.store.position("SEeta").clamp(-45, 45) as f32;
-        let phi = self.store.position("SEphi").clamp(0, 85) as f32;
-        let (e, ph) = (eta.to_radians(), phi.to_radians());
-        let sx = e.cos() / 30f32.to_radians().cos();
-        let sy = (0.35 + 0.65 * ph.sin()) / (0.35 + 0.65 * 0.5);
-        let sz = ph.cos().max(0.1) / 30f32.to_radians().cos();
-        let (w, ydx, ydy, h) = ((59.0 * sx).round() as i32, (68.0 * e.sin()).round() as i32, (49.0 * sy).round() as i32, (39.0 * sz).round() as i32);
-        let org = (r.min.x as i32 + 3, r.min.y as i32 + 97); // top-left pixel of the 2x2 axis corner
+        let (w, ydx, ydy, h, shift) = angle_box_metrics(self.store.position("SEeta"), self.store.position("SEphi"));
+        let org = (r.min.x as i32 + 3 + shift, r.min.y as i32 + 97); // top-left pixel of the 2x2 axis corner
         let dot = |x: i32, y: i32| fill(&p, Rect::from_min_size(Pos2::new(x as f32, y as f32), Vec2::splat(1.0)), BLACK);
         let line = |a: (i32, i32), b: (i32, i32), thick: bool| {
             let (mut x, mut y) = a;
@@ -982,13 +990,19 @@ impl<'a> Renderer<'a> {
         let (zy, zx) = (fy - 18, ox + 1);
         blit(zx, zy, &[(0, -1, 1), (1, -2, 1), (2, -2, 2), (3, -3, 3), (4, -3, 0), (4, 2, 3)]);
         blit(xend - 9, oy + 1, &[(-3, 5, 6), (-2, 5, 8), (1, 6, 9), (2, 5, 8), (3, 5, 6)]);
-        blit(bx, by, &[(-8, 4, 6), (-7, 2, 6), (-6, 2, 6), (-5, 3, 6), (-4, 3, 6), (-3, 2, 3), (-3, 5, 6), (-2, 0, 3), (-1, 0, 2), (0, 0, 1)]);
+        // the depth axis leans the other way for a negative eta: mirror its head and label
+        let head = [(-8, 4, 6), (-7, 2, 6), (-6, 2, 6), (-5, 3, 6), (-4, 3, 6), (-3, 2, 3), (-3, 5, 6), (-2, 0, 3), (-1, 0, 2), (0, 0, 1)];
+        if ydx < 0 {
+            blit(bx, by, &head.map(|(dy, a, b)| (dy, -b, -a)));
+        } else {
+            blit(bx, by, &head);
+        }
         // letter labels: white box with a pixel glyph
         let white = |x: i32, y: i32, ww: i32, hh: i32| fill(&p, Rect::from_min_size(Pos2::new(x as f32, y as f32), Vec2::new(ww as f32, hh as f32)), Color32::WHITE);
         let (lzx, lzy) = (zx - 3, zy - 13);
         white(lzx, lzy, 6, 11);
         blit(lzx, lzy, &[(1, 0, 4), (2, 4, 4), (3, 3, 3), (4, 2, 2), (5, 1, 1), (6, 0, 0), (7, 0, 4)]);
-        let (lyx, lyy) = (bx + 3, by - 21);
+        let (lyx, lyy) = (if ydx < 0 { bx - 9 } else { bx + 3 }, by - 21);
         white(lyx, lyy, 7, 11);
         blit(lyx, lyy, &[(1, 0, 0), (1, 6, 6), (2, 1, 1), (2, 5, 5), (3, 2, 2), (3, 4, 4), (4, 3, 3), (5, 3, 3), (6, 3, 3), (7, 3, 3)]);
         let (lxx, lxy) = (xend + 2, oy - 3);
@@ -1028,19 +1042,9 @@ impl<'a> Renderer<'a> {
         let th = n.int_opt("TabHeight").unwrap_or(18) as f32;
         let sheets: Vec<&Node> = n.kids.iter().filter(|k| k.class == "TTabSheet").collect();
         let font = f.id();
-        // rows: greedy fill. Natural width is fitted to the original screenshots (comctl32 tab metrics):
-        // 2 kanji -> 52px, 3 kanji -> 58px, so wrapping and row membership match.
-        let nat: Vec<f32> = sheets.iter().map(|s| 40.0 + 0.5 * text_size(&p, s.str("Caption"), &font).x).collect();
-        let mut rows: Vec<Vec<usize>> = vec![vec![]];
-        let mut used = 0.0;
-        for (i, w) in nat.iter().enumerate() {
-            if used + w > r.width() && !rows.last().unwrap().is_empty() {
-                rows.push(vec![]);
-                used = 0.0;
-            }
-            rows.last_mut().unwrap().push(i);
-            used += w;
-        }
+        let nat: Vec<f32> = sheets.iter().map(|s| tab_width(s.str("Caption"), text_size(&p, s.str("Caption"), &font).x)).collect();
+        // dialogs are widened but the tabs are not, so wrap against the original width
+        let rows = tab_rows(&nat, r.width() / crate::forms::DIALOG_WIDEN);
         let mut cur = self.store.item_index(&n.name).clamp(0, sheets.len() as i32 - 1) as usize;
         // the row of the selected tab moves to the bottom
         let sel_row = rows.iter().position(|rw| rw.contains(&cur)).unwrap_or(0);
@@ -1104,6 +1108,7 @@ impl<'a> Renderer<'a> {
         }
         let _ = ctx;
         // active sheet
+        let mark = self.focusable.len();
         if let Some(s) = sheets.get(cur) {
             let org = Pos2::new(r.min.x + 4.0, body_top + 4.0);
             path.push(0);
@@ -1114,7 +1119,62 @@ impl<'a> Renderer<'a> {
             self.group = old;
             path.pop();
         }
+        // The original puts the focus on the page's first tab stop when the dialog opens and
+        // when another tab is shown, with the text of an edit fully selected.
+        // A break in the pass count means the dialog was closed and is open again. Its viewport may
+        // have been dropped meanwhile, which restarts the count, so a lower number is a break too.
+        let seen = self.scope.with((n.name.as_str(), "page_shown"));
+        let pass = ctx.cumulative_pass_nr();
+        let previous: Option<(usize, u64)> = ctx.data(|d| d.get_temp(seen));
+        ctx.data_mut(|d| d.insert_temp(seen, (cur, pass)));
+        if previous.is_none_or(|(page, last)| page != cur || pass != last + 1) {
+            if let Some(first) = self.focusable[mark..].iter().min_by(|a, b| a.0.cmp(&b.0)).map(|t| t.1) {
+                ctx.memory_mut(|m| m.request_focus(first));
+                ctx.data_mut(|d| d.insert_temp(first.with("select_all"), true));
+            }
+        }
     }
+}
+
+/// Tab width in the original dialog, measured from its screenshots (comctl32 pads and justifies
+/// them per row). Anything else falls back to the same padding over the measured text.
+fn tab_width(caption: &str, text: f32) -> f32 {
+    match caption {
+        "俯瞰図" => 63.0, "分布図" => 64.0, "ベクトル" => 69.0, "等高線" | "座標系" => 63.0, "グリッド" => 64.0,
+        "凡例" => 52.0, "ラベル" => 56.0, "入出力" => 59.0, "表示" => 53.0, "フォント" => 61.0, "特殊" => 53.0, "暫定" => 52.0,
+        _ => 40.0 + 0.5 * text,
+    }
+}
+
+/// Greedy fill of tabs into rows of at most `limit` pixels.
+fn tab_rows(widths: &[f32], limit: f32) -> Vec<Vec<usize>> {
+    let mut rows: Vec<Vec<usize>> = vec![vec![]];
+    let mut used = 0.0;
+    for (i, w) in widths.iter().enumerate() {
+        if used + w > limit && !rows.last().unwrap().is_empty() {
+            rows.push(vec![]);
+            used = 0.0;
+        }
+        rows.last_mut().unwrap().push(i);
+        used += w;
+    }
+    rows
+}
+
+/// Box of the PBangle preview: (front width, back offset x, back offset y, height, shift of the
+/// origin to the right).
+///
+/// Measured from the original: the front face never changes; eta only shears the back face
+/// sideways, by about 58 tan(eta), and phi only moves it up, by about 57 cos(phi). A negative eta
+/// leans the box to the left, and the origin moves right to make room. The original draws within
+/// one pixel of these numbers.
+fn angle_box_metrics(eta: i32, phi: i32) -> (i32, i32, i32, i32, i32) {
+    let e = eta.clamp(-45, 45);
+    let tan = (e.unsigned_abs() as f64).to_radians().tan();
+    let over = (58.0 * tan - 1e-9).ceil().max(0.0) as i32;
+    let (dx, shift) = if e < 0 { (-(over - 2).max(0), (67.0 * tan + 1e-9) as i32) } else { (over, 0) };
+    let dy = (57.0 * (phi.clamp(0, 85) as f64).to_radians().cos()) as i32;
+    (59, dx, dy, 39, shift)
 }
 
 fn find_flag(n: &Node, flag: &str) -> Option<String> {
@@ -1127,6 +1187,146 @@ fn find_flag(n: &Node, flag: &str) -> Option<String> {
 #[cfg(test)]
 mod modal_tests {
     use super::*;
+
+    #[test]
+    fn angle_box_follows_the_measured_oblique_projection() {
+        // eta shears sideways whatever phi is; the front face stays the same size
+        for (eta, dx) in [(0, 0), (1, 2), (10, 11), (20, 22), (30, 34), (40, 49), (45, 58)] {
+            assert_eq!(angle_box_metrics(eta, 30), (59, dx, 49, 39, 0), "eta={eta}");
+            assert_eq!(angle_box_metrics(eta, 80).1, dx, "eta={eta}");
+        }
+        // phi raises the back face, independently of eta; the original differs by 1 at 60 and 70
+        for (phi, dy) in [(0, 57), (10, 56), (20, 53), (30, 49), (40, 43), (50, 36), (75, 14), (85, 4)] {
+            assert_eq!(angle_box_metrics(30, phi).2, dy, "phi={phi}");
+            assert_eq!(angle_box_metrics(-30, phi).2, dy, "phi={phi}");
+        }
+        // a negative eta leans left and moves the origin to the right
+        for (eta, dx, shift) in [(-1, 0, 1), (-20, -20, 24), (-45, -56, 67)] {
+            let m = angle_box_metrics(eta, 30);
+            assert_eq!((m.1, m.4), (dx, shift), "eta={eta}");
+        }
+        // out of range values are clamped, as in the original
+        assert_eq!(angle_box_metrics(60, 10), angle_box_metrics(45, 10));
+        assert_eq!(angle_box_metrics(-90, 120), angle_box_metrics(-45, 85));
+    }
+
+    #[test]
+    fn settings_tabs_wrap_into_the_original_two_rows() {
+        let forms = crate::forms::Forms::load();
+        let pc = forms.config.find("TPCconfig").unwrap();
+        let nat: Vec<f32> = pc.kids.iter().filter(|k| k.class == "TTabSheet").map(|s| tab_width(s.str("Caption"), 1000.0)).collect();
+        let rows = tab_rows(&nat, pc.int("Width") as f32 / crate::forms::DIALOG_WIDEN);
+        assert_eq!(rows.iter().map(Vec::len).collect::<Vec<_>>(), [6, 7]);
+    }
+
+    #[test]
+    fn page_switch_focuses_the_first_tab_stop_of_the_shown_page() {
+        let ctx = egui::Context::default();
+        let mut store = Store::default();
+        let assets = Assets::default();
+        // SEsecond is drawn first but has the higher TabOrder, so it must not take the focus.
+        let node = Node::parse(
+            r#"{"class":"TPageControl","name":"TPCtest","props":{"Width":391,"Height":276,"TabHeight":18},"kids":[
+                {"class":"TTabSheet","name":"TSfirst","props":{"Caption":"A"},"kids":[
+                    {"class":"TSpinEdit","name":"SEsecond","props":{"MinValue":0,"MaxValue":10,"TabOrder":1},"kids":[]},
+                    {"class":"TSpinEdit","name":"SEfirst","props":{"MinValue":0,"MaxValue":10,"TabOrder":0},"kids":[]}]},
+                {"class":"TTabSheet","name":"TSother","props":{"Caption":"B"},"kids":[
+                    {"class":"TSpinEdit","name":"SEother","props":{"MinValue":0,"MaxValue":10,"TabOrder":0},"kids":[]}]}]}"#,
+        );
+        let frame = |store: &mut Store| -> Id {
+            let mut raw = egui::RawInput::default();
+            raw.screen_rect = Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(400.0, 300.0)));
+            let mut scope = Id::NULL;
+            let out = ctx.run_ui(raw, |ui| {
+                scope = ui.scope_id();
+                let org = ui.max_rect().min;
+                let mut r = Renderer::new(ui, store, &assets);
+                let mut path = vec![];
+                r.draw_node(&node, org, &Fnt::form_default(), &mut path);
+                r.finish();
+            });
+            out.drop_without_applying_deltas();
+            scope
+        };
+        // opening the dialog: the focus lands on the lowest TabOrder of the first page
+        frame(&mut store);
+        let scope = frame(&mut store);
+        assert_eq!(ctx.memory(|m| m.focused()), Some(scope.with("SEfirst")));
+        // another tab shows the focus on its own first control
+        store.set_item_index("TPCtest", 1);
+        frame(&mut store);
+        let scope = frame(&mut store);
+        assert_eq!(ctx.memory(|m| m.focused()), Some(scope.with("SEother")));
+        // and back again
+        store.set_item_index("TPCtest", 0);
+        frame(&mut store);
+        let scope = frame(&mut store);
+        assert_eq!(ctx.memory(|m| m.focused()), Some(scope.with("SEfirst")));
+        // focus moves away, the dialog closes for a while and opens again on the same page
+        ctx.memory_mut(|m| m.surrender_focus(scope.with("SEfirst")));
+        for _ in 0..3 {
+            ctx.run_ui(egui::RawInput::default(), |_| {}).drop_without_applying_deltas();
+        }
+        frame(&mut store);
+        let scope = frame(&mut store);
+        assert_eq!(ctx.memory(|m| m.focused()), Some(scope.with("SEfirst")));
+    }
+
+    #[test]
+    fn page_focus_skips_a_disabled_first_control() {
+        let ctx = egui::Context::default();
+        let mut store = Store::default();
+        let assets = Assets::default();
+        let node = Node::parse(
+            r#"{"class":"TPageControl","name":"TPCoff","props":{"Width":391,"Height":276,"TabHeight":18},"kids":[
+                {"class":"TTabSheet","name":"TSoff","props":{"Caption":"A"},"kids":[
+                    {"class":"TSpinEdit","name":"SEdisabled","props":{"MinValue":0,"MaxValue":10,"TabOrder":0,"Enabled":false},"kids":[]},
+                    {"class":"TSpinEdit","name":"SEenabled","props":{"MinValue":0,"MaxValue":10,"TabOrder":1},"kids":[]}]}]}"#,
+        );
+        let mut scope = Id::NULL;
+        for _ in 0..2 {
+            let mut raw = egui::RawInput::default();
+            raw.screen_rect = Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(400.0, 300.0)));
+            let out = ctx.run_ui(raw, |ui| {
+                scope = ui.scope_id();
+                let org = ui.max_rect().min;
+                let mut r = Renderer::new(ui, &mut store, &assets);
+                let mut path = vec![];
+                r.draw_node(&node, org, &Fnt::form_default(), &mut path);
+                r.finish();
+            });
+            out.drop_without_applying_deltas();
+        }
+        assert_eq!(ctx.memory(|m| m.focused()), Some(scope.with("SEenabled")));
+    }
+
+    /// The real settings form: every one of the 13 tabs must focus something when shown.
+    #[test]
+    fn every_settings_tab_focuses_a_control() {
+        let forms = crate::forms::Forms::load();
+        let ctx = egui::Context::default();
+        let mut store = Store::from_forms(&[&forms.config]);
+        let assets = Assets::default();
+        let pages = forms.config.find("TPCconfig").map(|n| n.kids.iter().filter(|k| k.class == "TTabSheet").count()).unwrap_or(0);
+        assert_eq!(pages, 13);
+        for page in 0..pages {
+            store.set_item_index("TPCconfig", page as i32);
+            let mut focused = None;
+            for _ in 0..2 {
+                let mut raw = egui::RawInput::default();
+                raw.screen_rect = Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(400.0, 300.0)));
+                let out = ctx.run_ui(raw, |ui| {
+                    let org = ui.max_rect().min;
+                    let mut r = Renderer::new(ui, &mut store, &assets);
+                    r.draw_children(&forms.config, org, &Fnt::form_default().with(&forms.config));
+                    r.finish();
+                });
+                out.drop_without_applying_deltas();
+                focused = ctx.memory(|m| m.focused());
+            }
+            assert!(focused.is_some(), "settings page {page} focused nothing");
+        }
+    }
 
     #[test]
     fn disabled_parent_controls_do_not_take_tab_or_accept_input() {

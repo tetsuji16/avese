@@ -300,6 +300,63 @@ mod tests {
         assert_eq!(restored.list("LBlabel"), labels);
     }
 
+    /// Every value-bearing control of the settings form reaches the ini, and every key
+    /// survives a save and reload. This is the "change a value, OK, reopen" check for all
+    /// 13 tabs without driving the dialog.
+    #[test]
+    fn every_settings_control_is_saved_and_round_trips() {
+        fn collect(n: &crate::forms::Node, out: &mut Vec<String>) {
+            if matches!(n.class.as_str(), "TSpinEdit" | "TEdit" | "TCheckBox" | "TRadioButton" | "TComboBox" | "TTrackBar" | "TListBox") {
+                out.push(n.name.clone());
+            }
+            for k in &n.kids {
+                collect(k, out);
+            }
+        }
+        let forms = Forms::load();
+        let mut names = Vec::new();
+        collect(&forms.config, &mut names);
+        assert!(names.len() > 80, "settings form controls: {}", names.len());
+        for name in &names {
+            // TBeta/TBphi mirror SEeta/SEphi one to one; the spins are what gets saved
+            if name == "TBeta" || name == "TBphi" {
+                continue;
+            }
+            let saved = KEYS.iter().any(|k| *k == name.as_str() || k.starts_with(&format!("{name}font")));
+            assert!(saved, "{name} is not written to the ini");
+        }
+
+        let mut original = store();
+        let mut lay = Layout::default();
+        original.lists.insert("LBlabel".into(), vec!["1, 2 label".into(), "3, 4 other".into()]);
+        for (i, key) in KEYS.iter().enumerate() {
+            let v = if key.starts_with("CB") || key.starts_with("RB") {
+                if i % 2 == 0 { "1".to_string() } else { "0".to_string() }
+            } else if key.starts_with("SP") {
+                (0x0001_0203u32 + i as u32).to_string()
+            } else if *key == "LBlabel" || *key == "LBfont" {
+                "1".to_string()
+            } else if key.starts_with("LBfont") {
+                if key.ends_with("fontname") { "ＭＳ ゴシック".to_string() } else { (i + 1).to_string() }
+            } else if key.starts_with("SE") {
+                (i + 11).to_string()
+            } else {
+                format!("t{i}")
+            };
+            set_value(key, &v, &mut original, &mut lay);
+        }
+
+        let text = to_text(&original, &lay);
+        let mut restored = store();
+        let mut restored_lay = Layout::default();
+        apply_text(&decode(&encode(&text)), &mut restored, &mut restored_lay);
+        assert_eq!(to_text(&restored, &restored_lay), text, "ini text changed after reload");
+        assert_eq!(restored_lay, lay, "window layout changed after reload");
+        for key in KEYS {
+            assert_eq!(get_value(key, &restored, &restored_lay), get_value(key, &original, &lay), "{key}");
+        }
+    }
+
     #[test]
     #[ignore = "requires original samples; set AVESE_ORIGINAL_DIR"]
     fn original_sample_ini_round_trip() {

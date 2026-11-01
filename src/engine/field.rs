@@ -314,7 +314,8 @@ impl GridField {
         let (i, tx) = Self::locate(&self.xs, x)?;
         let (j, ty) = Self::locate(&self.ys, y)?;
         let k = j * nx + i;
-        let (z00, z10, z01, z11) = (self.z[k]?, self.z[k + 1]?, self.z[k + nx]?, self.z[k + nx + 1]?);
+        // None when a corner of the cell is missing, with or without the spline.
+        let linear = self.sample_linear(x, y)?;
         if let Some(sp) = &self.spline {
             if sp.row_ok[j] && sp.row_ok[j + 1] {
                 let hx = self.xs[i + 1] - self.xs[i];
@@ -333,6 +334,17 @@ impl GridField {
                 return Some(c * s0 + d * s1 + ((c * c * c - c) * q0 + (d * d * d - d) * q1) * hy * hy / 6.0);
             }
         }
+        Some(linear)
+    }
+
+    /// The bilinear height of the cell at (x, y), which is what the bird's-eye surface shows even
+    /// with spline interpolation on.
+    pub fn sample_linear(&self, x: f64, y: f64) -> Option<f64> {
+        let nx = self.xs.len();
+        let (i, tx) = Self::locate(&self.xs, x)?;
+        let (j, ty) = Self::locate(&self.ys, y)?;
+        let k = j * nx + i;
+        let (z00, z10, z01, z11) = (self.z[k]?, self.z[k + 1]?, self.z[k + nx]?, self.z[k + nx + 1]?);
         let bottom = z00 * (1.0 - tx) + z10 * tx;
         let top = z01 * (1.0 - tx) + z11 * tx;
         Some(bottom * (1.0 - ty) + top * ty)
@@ -574,6 +586,14 @@ mod tests {
         assert_eq!(w.len(), 1);
         let st = Settings { data_check: false, ..settings(false) };
         assert!(build(&df, &st).unwrap().1.is_empty());
+    }
+
+    #[test]
+    fn linear_sample_ignores_the_spline() {
+        let (Field::Grid(g), _) = build(&grid_df(5, |x, y| x * x + y), &settings(true)).unwrap() else { panic!("expected grid") };
+        assert!((g.sample(0.5, 0.0).unwrap() - 0.5).abs() > 0.01, "the spline bends between the nodes");
+        assert_eq!(g.sample_linear(0.5, 0.0), Some(0.5));
+        assert_eq!(g.sample_linear(1.0, 2.0), Some(3.0));
     }
 
     #[test]
