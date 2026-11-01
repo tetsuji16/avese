@@ -224,7 +224,10 @@ fn grid_surface(v: &View, g: &GridField, items: &mut Items, progress: &mut impl 
     let base_items = items.len();
     let (nx, ny) = (g.xs.len(), g.ys.len());
     let full = (nx - 1) * (ny - 1);
-    if full > MAX_POLYS && s.surface && !g.z.iter().all(Option::is_some) {
+    if full > MAX_POLYS && !g.z.iter().all(Option::is_some) {
+        if !s.surface {
+            return unit_grid_cells(v, g, 0, nx - 1, 0, ny - 1, items, progress, 0.08, 0.82, true);
+        }
         return reduced_sparse_grid_surface(v, g, items, progress);
     }
     // For dense, oversized grids, keep a sparse triangulated sample of the
@@ -778,7 +781,7 @@ fn axes(v: &View, ops: &mut Vec<Op>) {
 mod tests {
     use super::super::testutil::*;
     use super::super::*;
-    use super::{reduce_mesh, reduced_grid_surface, reduced_sparse_grid_surface, unit_grid_cells, Map, View, MAX_POLYS};
+    use super::{grid_surface, reduce_mesh, reduced_grid_surface, reduced_sparse_grid_surface, unit_grid_cells, Map, View, MAX_POLYS};
 
     fn land() -> Settings {
         let mut s = settings();
@@ -1112,5 +1115,36 @@ mod tests {
         assert!(unit_grid_cells(&view,g,0,3,0,3,&mut items,&mut progress,0.57,0.82,true));
         assert_eq!(items.iter().filter(|(_,op)|matches!(op,Op::Polyline{..})).count(),36);
         assert_eq!(items.iter().filter(|(_,op)|matches!(op,Op::Polygon{..})).count(),0);
+    }
+
+    #[test]
+    fn oversized_sparse_wire_grid_keeps_extrema_without_filling_holes() {
+        let peak=(150usize,150usize);
+        let f=grid(247,247,|x,y| {
+            let (i,j)=(x as usize,y as usize);
+            if (i,j)==(20,20) { None } else if (i,j)==peak { Some(1000.0) } else { Some(0.0) }
+        });
+        let mut s=land(); s.surface=false;
+        let ctx=Ctx::new(&f,&s);
+        let layout=Layout::new(&f,&s).unwrap();
+        let proj=layout.proj.unwrap().placed(layout.px,layout.py);
+        let (x0,x1,y0,y1)=f.extent().unwrap();
+        let zr=ctx.zr.unwrap();
+        let view=View{ctx:&ctx,map:Map{x0,y0,xr:x1-x0,yr:y1-y0,wd:proj.wd,hd:proj.hd,cyl:None,flip:false,zlo:zr.0,zr:(zr.1-zr.0).max(1e-300),hz:s.land_height.max(1) as f64},proj,bounds:(layout.w,layout.h)};
+        let Field::Grid(g)=&f else{unreachable!()};
+        let mut items=Vec::new(); let mut progress=|_|true;
+        assert!(grid_surface(&view,g,&mut items,&mut progress));
+        assert_eq!(items.iter().filter(|(_,op)|matches!(op,Op::Polygon{..})).count(),0);
+        let lines:Vec<_>=items.iter().filter_map(|(_,op)|if let Op::Polyline{pts,..}=op{Some(pts)}else{None}).collect();
+        assert!(!lines.is_empty());
+        let target=view.pt(peak.0 as f64,peak.1 as f64,1000.0).0;
+        assert!(lines.iter().any(|line|line.contains(&target)),"wire mode dropped a local extreme");
+        let hole=view.pt(20.5,20.5,0.0).0;
+        let crosses_hole=|line:&[(f32,f32)]| {
+            let (a,b)=(line[0],line[1]);
+            let cross=(hole.0-a.0)*(b.1-a.1)-(hole.1-a.1)*(b.0-a.0);
+            cross.abs()<0.001 && hole.0>=a.0.min(b.0)-0.001 && hole.0<=a.0.max(b.0)+0.001 && hole.1>=a.1.min(b.1)-0.001 && hole.1<=a.1.max(b.1)+0.001
+        };
+        assert!(!lines.iter().any(|line|crosses_hole(line)),"wire edges crossed the center of a missing cell");
     }
 }
