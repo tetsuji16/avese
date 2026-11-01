@@ -246,7 +246,11 @@ impl App {
             self.loaded = Some(loaded);
             return;
         }
-        self.job = Some(Job::Mesh(jobs::mesh_job(ctx, loaded, Settings::from_store(&self.store))));
+        let Some(bytes) = self.bytes.clone() else {
+            self.loaded = Some(loaded);
+            return;
+        };
+        self.job = Some(Job::Mesh(jobs::mesh_job(ctx, loaded, bytes, self.data_path.clone(), Settings::from_store(&self.store))));
     }
 
     /// Asks before drawing an image larger than SEmaxbmp, then draws on a worker.
@@ -536,11 +540,7 @@ impl App {
 
     fn item_state(&self, vs: &ViewState, name: &str) -> (bool, bool) {
         // (enabled, checked)
-        let en = match name {
-            "menredraw" => self.redraw_enabled(),
-            "menmeshcreate" => self.loaded.as_ref().is_some_and(|l| !l.data.mesh_auto && !matches!(l.field, crate::engine::field::Field::Panel(_))),
-            _ => true,
-        };
+        let en = menu_item_enabled(name, self.redraw_enabled(), self.loaded.as_ref());
         let ck = item_of(name).map(|i| vs.get(i)).unwrap_or(false);
         (en, ck)
     }
@@ -670,7 +670,6 @@ impl App {
                 }
             }
         }
-        let store_redraw = self.redraw_enabled();
         let assets = &self.assets;
         egui::Area::new(Id::new("menupopup")).order(Order::Foreground).fixed_pos(pos).constrain(false).show(ctx, |ui| {
             let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
@@ -687,7 +686,7 @@ impl App {
                     hline(&pp, r.min.x + 1.0, r.max.x - 1.0, r.min.y + 5.0, HILITE);
                     continue;
                 }
-                let en = if k.name == "menredraw" { store_redraw } else { true };
+                let en = self.item_state(&vs, &k.name).0;
                 let ck = item_of(&k.name).map(|it| vs.get(it)).unwrap_or(false);
                 let resp = ui.interact(r, Id::new(("menuitem", i, j)), Sense::click());
                 if resp.hovered() && ctx.input(|inp| inp.pointer.delta() != Vec2::ZERO) {
@@ -898,6 +897,14 @@ impl App {
     }
 }
 
+fn menu_item_enabled(name: &str, redraw_enabled: bool, loaded: Option<&Loaded>) -> bool {
+    match name {
+        "menredraw" => redraw_enabled,
+        "menmeshcreate" => loaded.is_some_and(|l| !l.data.mesh_auto && !matches!(l.field, crate::engine::field::Field::Panel(_))),
+        _ => true,
+    }
+}
+
 /// Ctrl+letter accelerators from the DFM ShortCut values (0x4000 | letter).
 /// Ctrl+C (menClipbrd) is missing: egui-winit delivers it as Event::Copy, without a key event.
 const SHORTCUTS: [(Key, &str); 5] = [(Key::L, "menload1"), (Key::S, "mensave"), (Key::O, "menconfig"), (Key::R, "menredraw"), (Key::N, "menreload")];
@@ -954,6 +961,18 @@ mod shortcut_tests {
         let _ = ctx.begin_pass(raw);
         assert!(shortcut_actions(&ctx, false).is_empty());
         ctx.end_pass().textures_delta.clear();
+    }
+
+    #[test]
+    fn mesh_menu_is_disabled_without_data_or_after_mesh_generation() {
+        let mut store = Settings::default_store();
+        let bytes = b"0 0 0\n1 0 1\n0 1 1\n1 1 2\n";
+        let loaded = pipeline::load(bytes, &mut store, None, |_| {}).unwrap();
+        assert!(!menu_item_enabled("menmeshcreate", true, None));
+        assert!(menu_item_enabled("menmeshcreate", true, Some(&loaded)));
+        let mesh = pipeline::reparse_with_mesh(bytes, &Settings::from_store(&store), true, |_| {}).unwrap();
+        assert!(!menu_item_enabled("menmeshcreate", true, Some(&mesh)));
+        assert!(!menu_item_enabled("menredraw", false, Some(&loaded)));
     }
 }
 
