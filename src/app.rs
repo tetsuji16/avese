@@ -28,6 +28,24 @@ enum Job {
     Batch(Handle<String>),
 }
 
+enum PendingIrregular {
+    Load(Built),
+    Reparse { loaded: Loaded, store: Store },
+}
+
+const IRREGULAR_BUTTONS: [&str; 3] = ["はい(Y)", "中止(A)", "無視(I)"];
+
+fn irregular_shortcut(key: Key) -> Option<dialogs::IrregularChoice> {
+    match key {
+        Key::Y => Some(dialogs::IrregularChoice::Generate),
+        Key::A => Some(dialogs::IrregularChoice::Abort),
+        Key::I => Some(dialogs::IrregularChoice::Ignore),
+        _ => None,
+    }
+}
+
+fn irregular_close_choice() -> dialogs::IrregularChoice { dialogs::IrregularChoice::Abort }
+
 struct AppPrevious {
     store: Store,
     title: String,
@@ -148,6 +166,7 @@ pub struct App {
     job: Option<Job>,
     pending_warnings: Vec<String>,
     previous: Option<AppPrevious>,
+    pending_irregular: Option<PendingIrregular>,
 }
 
 pub fn exe_dir() -> PathBuf {
@@ -198,6 +217,7 @@ impl App {
             job: None,
             pending_warnings: vec![],
             previous: None,
+            pending_irregular: None,
         }
     }
 
@@ -291,31 +311,129 @@ impl App {
 
     /// A field was built: show the ranges in the settings dialog, then draw.
     fn built(&mut self, ctx: &Context, loaded: Loaded) {
-        jobs::readback(&mut self.store, &loaded.field);
         if loaded.irregular_data {
-            match self.dlg.modal(|| dialogs::irregular_grid("警告", "非構造格子データです\n三角メッシュを自動生成しますか？")) {
-                dialogs::IrregularChoice::Generate => {
-                    self.loaded = Some(loaded);
-                    self.create_mesh(ctx);
-                    return;
-                }
-                dialogs::IrregularChoice::Abort => {
+            self.pending_irregular = Some(PendingIrregular::Reparse { loaded, store: self.store.clone() });
+            return;
+        }
+        jobs::readback(&mut self.store, &loaded.field);
+        self.pending_warnings = loaded.warnings.clone();
+        self.loaded = Some(loaded);
+        self.start_render(ctx);
+    }
+
+    fn choose_irregular(&mut self, ctx: &Context, choice: dialogs::IrregularChoice) {
+        let Some(pending) = self.pending_irregular.take() else { return };
+        match pending {
+            PendingIrregular::Load(mut b) => {
+                if choice == dialogs::IrregularChoice::Abort {
                     self.status_msg = "データ読み込みを中止しました".into();
                     return;
                 }
+                if choice == dialogs::IrregularChoice::Ignore {
+                    b.loaded.warnings.retain(|w| !w.starts_with("データが格子状に並んでいません"));
+                }
+                if choice == dialogs::IrregularChoice::Generate {
+                    self.previous = Some(AppPrevious {
+                        store: self.store.clone(), title: self.title.clone(), bytes: self.bytes.clone(),
+                        data_path: self.data_path.clone(), loaded: self.loaded.take(), rendered: self.rendered.take(),
+                        canvas_tex: self.canvas_tex.take(), status_msg: self.status_msg.clone(),
+                        pending_warnings: self.pending_warnings.clone(), probe_cells: self.probe_cells.clone(),
+                    });
+                }
+                self.finish_load(ctx, b, Some(choice));
+            }
+            PendingIrregular::Reparse { mut loaded, store } => match choice {
+                dialogs::IrregularChoice::Abort => {
+                    self.store = store;
+                    self.status_msg = "データ読み込みを中止しました".into();
+                }
+                dialogs::IrregularChoice::Generate => {
+                    jobs::readback(&mut self.store, &loaded.field);
+                    self.loaded = Some(loaded);
+                    self.create_mesh(ctx);
+                }
                 dialogs::IrregularChoice::Ignore => {
-                    let mut loaded = loaded;
+                    jobs::readback(&mut self.store, &loaded.field);
                     loaded.warnings.retain(|w| !w.starts_with("データが格子状に並んでいません"));
                     self.pending_warnings = loaded.warnings.clone();
                     self.loaded = Some(loaded);
                     self.start_render(ctx);
-                    return;
                 }
-            }
+            },
         }
-        self.pending_warnings = loaded.warnings.clone();
-        self.loaded = Some(loaded);
-        self.start_render(ctx);
+    }
+
+    fn finish_load(&mut self, ctx: &Context, b: Built, choice: Option<dialogs::IrregularChoice>) {
+        let mut loaded = b.loaded;
+        self.store = b.store;
+        dialogs::apply_interlocks(&mut self.store);
+        let n = loaded.path.as_ref().and_then(|p| p.file_name()).map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+        self.title = format!("avese - {n}");
+        self.store.set_enabled("TBRedraw", true);
+        self.bytes = Some(b.bytes);
+        self.data_path = loaded.path.clone();
+        if choice == Some(dialogs::IrregularChoice::Generate) {
+            self.store.set_checked("CBpanel", false);
+            jobs::readback(&mut self.store, &loaded.field);
+            self.loaded = Some(loaded);
+            self.create_mesh(ctx);
+        } else if choice == Some(dialogs::IrregularChoice::Ignore) {
+            jobs::readback(&mut self.store, &loaded.field);
+            self.pending_warnings = loaded.warnings.clone();
+            self.loaded = Some(loaded);
+            self.start_render(ctx);
+        } else {
+            self.built(ctx, loaded);
+        }
+    }
+
+    fn show_irregular_modal(&mut self, ctx: &Context) {
+        if self.pending_irregular.is_none() { return; }
+        let mut choice = None;
+        let modal = egui::Modal::new(Id::new("irregular-grid-choice")).show(ctx, |ui| {
+            ui.set_min_width(350.0);
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new(egui_phosphor::regular::WARNING)
+                    .font(egui::FontId::new(24.0, egui::FontFamily::Name("phosphor".into())))
+                    .color(egui::Color32::from_rgb(210, 150, 0)));
+                ui.heading("警告");
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.small_button("×").on_hover_text("中止").clicked() {
+                        choice = Some(irregular_close_choice());
+                    }
+                });
+            });
+            ui.separator();
+            ui.label("非構造格子データです\n三角メッシュを自動生成しますか？\n（時間がかかる場合があります）");
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                if ui.button(IRREGULAR_BUTTONS[0]).clicked() { choice = Some(dialogs::IrregularChoice::Generate); }
+                if ui.button(IRREGULAR_BUTTONS[1]).clicked() { choice = Some(dialogs::IrregularChoice::Abort); }
+                if ui.button(IRREGULAR_BUTTONS[2]).clicked() { choice = Some(dialogs::IrregularChoice::Ignore); }
+            });
+        });
+        if choice.is_none() {
+            choice = ctx.input_mut(|i| {
+                [Key::Y, Key::A, Key::I].into_iter().find_map(|key| {
+                    (i.consume_key(Modifiers::ALT, key) || i.consume_key(Modifiers::NONE, key))
+                        .then(|| irregular_shortcut(key)).flatten()
+                })
+            });
+        }
+        let close_requested = ctx.input(|i| i.viewport().close_requested());
+        if close_requested {
+            // The dialog is embedded in the root viewport. Turn its title-bar X
+            // into a safe abort instead of letting it close the whole app.
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            choice = Some(irregular_close_choice());
+        }
+        let escape = ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape));
+        if choice.is_none() && (escape || modal.should_close()) {
+            choice = Some(irregular_close_choice());
+        }
+        if let Some(choice) = choice {
+            self.choose_irregular(ctx, choice);
+        }
     }
 
     fn rendered(&mut self, ctx: &Context, done: RenderDone) {
@@ -380,52 +498,10 @@ impl App {
                 None => self.job = Some(Job::Load(h)),
                 Some(Err(e)) => self.job_result = Some(Err(e)),
                 Some(Ok(b)) => {
-                    let mut loaded = b.loaded;
-                    let irregular = loaded.irregular_data;
-                    let choice = if irregular {
-                        Some(self.dlg.modal(|| dialogs::irregular_grid("警告", "非構造格子データです\n三角メッシュを自動生成しますか？")))
-                    } else { None };
-                    if choice == Some(dialogs::IrregularChoice::Abort) {
-                        self.status_msg = "データ読み込みを中止しました".into();
-                        return;
-                    }
-                    if choice == Some(dialogs::IrregularChoice::Ignore) {
-                        loaded.warnings.retain(|w| !w.starts_with("データが格子状に並んでいません"));
-                    }
-                    if choice == Some(dialogs::IrregularChoice::Generate) {
-                        self.previous = Some(AppPrevious {
-                            store: self.store.clone(),
-                            title: self.title.clone(),
-                            bytes: self.bytes.clone(),
-                            data_path: self.data_path.clone(),
-                            loaded: self.loaded.take(),
-                            rendered: self.rendered.take(),
-                            canvas_tex: self.canvas_tex.take(),
-                            status_msg: self.status_msg.clone(),
-                            pending_warnings: self.pending_warnings.clone(),
-                            probe_cells: self.probe_cells.clone(),
-                        });
-                    }
-                    self.store = b.store;
-                    dialogs::apply_interlocks(&mut self.store);
-                    let n = loaded.path.as_ref().and_then(|p| p.file_name()).map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-                    self.title = format!("avese - {n}");
-                    self.store.set_enabled("TBRedraw", true);
-                    self.bytes = Some(b.bytes);
-                    self.data_path = loaded.path.clone();
-                    if choice == Some(dialogs::IrregularChoice::Generate) {
-                        // An explicit mesh choice takes precedence over IncludeINI panel mode.
-                        self.store.set_checked("CBpanel", false);
-                        jobs::readback(&mut self.store, &loaded.field);
-                        self.loaded = Some(loaded);
-                        self.create_mesh(ctx);
-                    } else if choice == Some(dialogs::IrregularChoice::Ignore) {
-                        jobs::readback(&mut self.store, &loaded.field);
-                        self.pending_warnings = loaded.warnings.clone();
-                        self.loaded = Some(loaded);
-                        self.start_render(ctx);
+                    if b.loaded.irregular_data {
+                        self.pending_irregular = Some(PendingIrregular::Load(b));
                     } else {
-                        self.built(ctx, loaded);
+                        self.finish_load(ctx, b, None);
                     }
                 }
             },
@@ -1039,6 +1115,16 @@ mod shortcut_tests {
     use super::*;
 
     #[test]
+    fn irregular_choices_match_original_labels_and_accelerators() {
+        assert_eq!(IRREGULAR_BUTTONS, ["はい(Y)", "中止(A)", "無視(I)"]);
+        assert_eq!(irregular_shortcut(Key::Y), Some(dialogs::IrregularChoice::Generate));
+        assert_eq!(irregular_shortcut(Key::A), Some(dialogs::IrregularChoice::Abort));
+        assert_eq!(irregular_shortcut(Key::I), Some(dialogs::IrregularChoice::Ignore));
+        assert_eq!(irregular_shortcut(Key::Escape), None);
+        assert_eq!(irregular_close_choice(), dialogs::IrregularChoice::Abort);
+    }
+
+    #[test]
     fn ctrl_letters_dispatch_to_menu_actions() {
         for (k, name) in SHORTCUTS {
             let ctx = Context::default();
@@ -1135,7 +1221,7 @@ impl eframe::App for App {
             self.started_hwnd = self.dlg.main_hwnd.is_some();
         }
         self.track_window(&ctx);
-        let locked = self.dlg.any() || self.job.is_some();
+        let locked = self.dlg.any() || self.job.is_some() || self.pending_irregular.is_some();
         let full = ctx.content_rect();
         let p = ui.painter().clone();
         fill(&p, full, FACE);
@@ -1197,6 +1283,7 @@ impl eframe::App for App {
             let mut sh = Shared { forms: &self.forms, store: &mut self.store, assets: &self.assets, center };
             self.dlg.show(&ctx, &mut sh);
         }
+        self.show_irregular_modal(&ctx);
         // Let the progress viewport be created and rendered for a full frame
         // before hiding its native owner. Hiding the owner in start_batch can
         // prevent Windows from ever showing the newly requested child window.
