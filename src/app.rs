@@ -130,7 +130,7 @@ fn add_exit_item(menu: &mut [MItem]) {
         return;
     }
     file.kids.push(MItem { name: "N10".into(), sep: true, cap: "-".into(), sc: String::new(), img: None, kids: Vec::new() });
-    file.kids.push(MItem { name: "menexit".into(), sep: false, cap: "アプリを閉じる(&Q)".into(), sc: "Alt+F4".into(), img: None, kids: Vec::new() });
+    file.kids.push(MItem { name: "menexit".into(), sep: false, cap: crate::i18n::text("アプリを閉じる(&Q)"), sc: "Alt+F4".into(), img: None, kids: Vec::new() });
 }
 
 /// View item behind a menu entry or tool button name.
