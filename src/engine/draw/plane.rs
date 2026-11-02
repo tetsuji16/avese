@@ -78,7 +78,11 @@ pub fn image_with_progress(ctx: &Ctx, frame: &Frame, ops: &mut Vec<Op>, mut prog
     let (w, h) = (frame.w as usize, frame.h as usize);
     let mut rgba = vec![0u8; w * h * 4];
     match ctx.field {
-        Field::Mesh(m) => if !mesh_image_with_progress(ctx, frame, m, &mut rgba, &mut progress) { return false; },
+        // A polar transform bends triangle edges and joins both ends of the
+        // angle range. Rasterising transformed vertices as straight triangles
+        // therefore loses or distorts cylindrical mesh data. Sample in the
+        // original (theta, r) coordinates instead.
+        Field::Mesh(m) if frame.cyl.is_none() => if !mesh_image_with_progress(ctx, frame, m, &mut rgba, &mut progress) { return false; },
         _ => {
             use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
             if !progress(0.0) { return false; }
@@ -893,5 +897,26 @@ mod tests {
         let b = build_scene(&f, &settings(), &[]).unwrap();
         let Op::Image { rgba, .. } = &b.scene.ops[0] else { panic!() };
         assert!(rgba.chunks(4).all(|p| p[3] == 255));
+    }
+
+    #[test]
+    fn cylindrical_mesh_covers_the_disk_across_the_angle_seam() {
+        let mut df = DataFile::default();
+        for (theta, r) in [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)] {
+            df.points.push(Point { x: Some(theta), y: Some(r), z: Some(theta + r), u: None, v: None });
+        }
+        df.mesh_auto = true;
+        let mut s = settings();
+        s.cylindrical = true;
+        s.cartesian = false;
+        let (field, _) = crate::engine::field::build(&df, &s).unwrap();
+        let b = build_scene(&field, &s, &[]).unwrap();
+        let Op::Image { w, h, rgba, .. } = &b.scene.ops[0] else { panic!("missing plot image") };
+        assert_eq!((*w, *h), (100, 100));
+        let alpha = |x: usize, y: usize| rgba[(y * 100 + x) * 4 + 3];
+        for (x, y) in [(75, 50), (50, 25), (25, 50), (50, 75)] {
+            assert_eq!(alpha(x, y), 255, "missing polar quadrant at {x}, {y}");
+        }
+        assert_eq!(alpha(0, 0), 0, "outside the disk must remain transparent");
     }
 }
