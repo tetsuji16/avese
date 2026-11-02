@@ -25,8 +25,8 @@ About には原作クレジットに加えて小さく「非公式 Rust 再実�
 
 ## フォーム要約（詳細は JSON）
 - Form1 "AV似非 - nodata" クライアント 552x354、MS Pゴシック -12、StatusBar1 h22、ControlBar1 alTop h64 RowSize30、ScrollBox1 alClient + Image1。ツールバーは JSON 参照。
-- Dlgconfig 「設定」 401x320; PageControl 5,5,391x276、マルチライン、TabHeight 18、初期 TSlegend。OK 240,290 74x24、ｷｬﾝｾﾙ 319,290。タブ行: 俯瞰図 分布図 ベクトル 等高線 座標系 グリッド / 凡例 ラベル 入出力 表示 フォント 特殊 暫定。選択タブの行が下に移動する。
-- dlgAVI 連続処理 326x396（最小 300x200）Panel1 alBottom h100、savelist client。dlginputstr ラベルの追加 384x71。AboutBox ﾊﾞｰｼﾞｮﾝ情報 292x229。MeshProgress 三角メッシュ自動生成 280x81。
+- Dlgconfig 「設定」 401x320; PageControl 5,5,391x276、マルチライン、TabHeight 18、初期 TSlegend。OK 240,290 74x24、キャンセル 319,290。タブ行: 俯瞰図 分布図 ベクトル 等高線 座標系 グリッド / 凡例 ラベル 入出力 表示 フォント 特殊 暫定。選択タブの行が下に移動する。
+- dlgAVI 連続処理 326x396（最小 300x200）Panel1 alBottom h100、savelist client。dlginputstr ラベルの追加 384x71。AboutBox バージョン情報 292x229。MeshProgress 三角メッシュ自動生成 280x81。
 - ファイルフィルタ: 開く "AV似非データファイル(*.txt;*.dat)|テキストファイル(*.txt)|データファイル(*.dat)|すべてのファイル(*.*)" 複数選択; 保存 "ビットマップファイル(*.bmp)|RLE 圧縮 ビットマップファイル(*.bmp)|ウィンドウズメタファイル(*.wmf)|エンハンストメタファイル(*.emf)|PNGファイル(*.png)" 既定名 default; 設定 "設定ファイル(*.ini)" 既定名 avese 拡張子 ini; AVI "AVI-Files (*.avi)" 既定名 default。
 
 ## 連動ルール（メニュー/ツールバー。単体テスト必須）

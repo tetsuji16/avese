@@ -12,7 +12,7 @@ use egui::{Context, Pos2, Vec2, ViewportBuilder, ViewportId};
 pub const T_CONFIG: &str = "設定";
 pub const T_AVI: &str = "連続処理";
 pub const T_INPUT: &str = "ラベルの追加";
-pub const T_ABOUT: &str = "ﾊﾞｰｼﾞｮﾝ情報";
+pub const T_ABOUT: &str = "バージョン情報";
 // the original's caption is 三角メッシュ自動生成, but this window serves loading and batch jobs too
 pub const T_MESH: &str = "処理中";
 
