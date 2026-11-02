@@ -10,7 +10,7 @@
 "BorderStyle": {
 "ident": "bsDialog"
 },
-"Caption": "ﾊﾞｰｼﾞｮﾝ情報",
+"Caption": "バージョン情報",
 "ClientHeight": 229,
 "ClientWidth": 292,
 "Color": {
