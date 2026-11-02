@@ -19,7 +19,6 @@ use std::sync::Arc;
 const HELP_HTML: &str = include_str!("../assets/help.html");
 /// A progress window appears only for jobs that take longer than this.
 const PROGRESS_DELAY: std::time::Duration = std::time::Duration::from_millis(400);
-const START_FILES_DELAY: std::time::Duration = std::time::Duration::from_millis(100);
 
 enum Job {
     Load(Handle<Built>),
@@ -168,7 +167,7 @@ pub struct App {
     title: String,
     ini_path: PathBuf,
     first: bool,
-    first_frame: std::time::Instant,
+    startup_viewport_presented: bool,
     start_files: Vec<PathBuf>,
     menu: Vec<MItem>,
     open_menu: Option<usize>,
@@ -222,7 +221,7 @@ impl App {
             title: NODATA.into(),
             ini_path: exe_dir().join("avese.ini"),
             first: true,
-            first_frame: std::time::Instant::now(),
+            startup_viewport_presented: false,
             start_files: files,
             menu,
             open_menu: None,
@@ -1312,19 +1311,13 @@ impl eframe::App for App {
         if self.first {
             self.first = false;
             dialogs::apply_interlocks(&mut self.store);
-            self.first_frame = std::time::Instant::now();
         }
-        // Create startup dialogs only after the root viewport has been
-        // presented; creating an owned viewport during the first frame can
-        // leave it blank on Windows, and a message box opened that early stays
-        // hidden while the disabled main window waits for it.
-        if !self.start_files.is_empty() {
-            if self.first_frame.elapsed() < START_FILES_DELAY {
-                ctx.request_repaint_after(START_FILES_DELAY);
-            } else {
-                let files = std::mem::take(&mut self.start_files);
-                self.load_files(&ctx, files);
-            }
+        // Do not start a command-line load until the root viewport has been
+        // rendered once. A fixed delay is unreliable on slow or remote Windows
+        // sessions and can leave a startup error dialog behind a disabled window.
+        if self.startup_viewport_presented && !self.start_files.is_empty() {
+            let files = std::mem::take(&mut self.start_files);
+            self.load_files(&ctx, files);
         }
         if !self.started_hwnd {
             self.dlg.main_hwnd = plat::find(None);
@@ -1426,6 +1419,12 @@ impl eframe::App for App {
         }
         if locked && ctx.input(|i| i.viewport().close_requested()) {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+        }
+        if !self.startup_viewport_presented {
+            self.startup_viewport_presented = true;
+            if !self.start_files.is_empty() {
+                ctx.request_repaint();
+            }
         }
     }
 
