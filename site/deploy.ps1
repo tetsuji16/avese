@@ -41,6 +41,12 @@ Copy-Item (Join-Path $PSScriptRoot 'ja') $local -Recurse
 Copy-Item (Join-Path $PSScriptRoot 'media') $local -Recurse
 Copy-Item (Join-Path $PSScriptRoot 'samples\samples.zip'), (Join-Path $PSScriptRoot 'samples\make_samples.py') (Join-Path $local 'samples')
 
-$publish = 'import sys; sys.path.insert(0, sys.argv[1]); from deploy_ftps import deploy; deploy(sys.argv[2], "/avese")'
-& python -I -c $publish $publisherDir $local
+$runner = Join-Path $work 'publish.py'
+Set-Content -LiteralPath $runner -Encoding utf8 -Value @'
+import sys
+sys.path.insert(0, sys.argv[1])
+from deploy_ftps import deploy
+deploy(sys.argv[2], "/avese")
+'@
+& python -I $runner $publisherDir $local
 exit $LASTEXITCODE
