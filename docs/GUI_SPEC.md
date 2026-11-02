@@ -9,6 +9,7 @@
 - TEdit = 枠なし TextEdit を凹みベベル内に置く（IME・コピペのため）。TSpinEdit = edit + 3D ボタン2個（SEdata* は EditorEnabled=false）。コンボのドロップダウンは Area。
 - ツールチップ: Hint の `|` より前を、約500ms 後にクラシックな黄色で表示。タブ順は TabOrder。点線フォーカス枠。Esc=Cancel、Enter=Default ボタン。`&x` は下線とアクセラレータ。
 - メニュー: Area によるカスタムポップアップ。アイコン欄あり、チェック付き画像項目はアイコンを凹ませ、画像なし項目はチェック記号、ショートカット文字を右側に。
+- メニュー幅は読みやすいフォントを使う方針（#32）に合わせて文字幅から決める。原作のフォントとは異なるため、ポップアップの幅も原作と一致しない。
 - ダイアログ: `show_viewport_immediate` で実 OS ウィンドウ。Windows では windows-sys でオーナー設定（GWLP_HWNDPARENT）、`EnableWindow(main,false)` で真のモーダル、bsDialog は WS_EX_DLGMODALFRAME でアイコンなし。HWND はスレッドのウィンドウをタイトルで列挙して探す。他 OS はメイン入力を無視するだけ。
 - 色/フォント選択: Win32 の ChooseColorW/ChooseFontW（他 OS は Issue）。ファイル選択は rfd。
 - 色: clBtnFace (240,240,240)、shadow 160、dk shadow 105、highlight 255、3dlight 227。参照 PNG で調整。
@@ -26,6 +27,7 @@ About には原作クレジットに加えて小さく「非公式 Rust 再実�
 ## フォーム要約（詳細は JSON）
 - Form1 "AV似非 - nodata" クライアント 552x354、MS Pゴシック -12、StatusBar1 h22、ControlBar1 alTop h64 RowSize30、ScrollBox1 alClient + Image1。ツールバーは JSON 参照。
 - Dlgconfig 「設定」 401x320; PageControl 5,5,391x276、マルチライン、TabHeight 18、初期 TSlegend。OK 240,290 74x24、キャンセル 319,290。タブ行: 俯瞰図 分布図 ベクトル 等高線 座標系 グリッド / 凡例 ラベル 入出力 表示 フォント 特殊 暫定。選択タブの行が下に移動する。
+- 原作の13タブの選択画面を照合し、391pxの PageControl で未選択タブの右端を、上記の順にそれぞれ x=73, 137, 206, 269, 332, 396 / x=62, 118, 177, 230, 291, 344, 396（原作ダイアログ画像内の位置）と測定した。拡幅後は累積位置を比例配分して丸め、選択タブは左右に2px広げて最後に描画する。
 - dlgAVI 連続処理 326x396（最小 300x200）Panel1 alBottom h100、savelist client。dlginputstr ラベルの追加 384x71。AboutBox バージョン情報 292x229。MeshProgress 三角メッシュ自動生成 280x81。
 - ファイルフィルタ: 開く "AV似非データファイル(*.txt;*.dat)|テキストファイル(*.txt)|データファイル(*.dat)|すべてのファイル(*.*)" 複数選択; 保存 "ビットマップファイル(*.bmp)|RLE 圧縮 ビットマップファイル(*.bmp)|ウィンドウズメタファイル(*.wmf)|エンハンストメタファイル(*.emf)|PNGファイル(*.png)" 既定名 default; 設定 "設定ファイル(*.ini)" 既定名 avese 拡張子 ini; AVI "AVI-Files (*.avi)" 既定名 default。
 
