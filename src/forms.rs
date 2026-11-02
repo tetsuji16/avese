@@ -13,21 +13,21 @@ pub struct Node {
 }
 
 impl Node {
-    fn localize(&mut self) {
+    fn localize(&mut self, language: crate::i18n::Language) {
         for key in ["Caption", "Hint"] {
             if let Some(value) = self.props.get(key).and_then(Value::as_str) {
-                let translated = crate::i18n::text(value);
+                let translated = crate::i18n::text_for(language, value);
                 self.props.insert(key.into(), Value::String(translated));
             }
         }
         if let Some(values) = self.props.get_mut("Items.Strings").and_then(Value::as_array_mut) {
             for value in values {
                 if let Some(source) = value.as_str() {
-                    *value = Value::String(crate::i18n::text(source));
+                    *value = Value::String(crate::i18n::text_for(language, source));
                 }
             }
         }
-        for child in &mut self.kids { child.localize(); }
+        for child in &mut self.kids { child.localize(language); }
     }
 
     pub fn from_value(v: &Value) -> Node {
@@ -138,6 +138,10 @@ pub struct Forms {
 
 impl Forms {
     pub fn load() -> Forms {
+        Self::load_for_language(crate::i18n::Language::detect())
+    }
+
+    pub(crate) fn load_for_language(language: crate::i18n::Language) -> Forms {
         let mut config = Node::parse(include_str!("../assets/forms/TDLGCONFIG.json"));
         // measured on the reference screenshots: OK/キャンセル sit 2px above the DFM Top (290)
         for k in config.kids.iter_mut().filter(|k| k.name == "OKBtn" || k.name == "CancelBtn") {
@@ -151,9 +155,9 @@ impl Forms {
             about: Node::parse(include_str!("../assets/forms/TABOUTBOX.json")),
             mesh: Node::parse(include_str!("../assets/forms/TMESHPROGRESS.json")),
         };
-        if crate::i18n::Language::detect().is_english() {
+        if language.is_english() {
             for form in [&mut forms.form1, &mut forms.config, &mut forms.avi, &mut forms.input, &mut forms.about, &mut forms.mesh] {
-                form.localize();
+                form.localize(language);
             }
         }
         for form in [&mut forms.config, &mut forms.avi, &mut forms.input, &mut forms.about, &mut forms.mesh] { form.widen(); }
