@@ -278,7 +278,11 @@ pub fn build_scene_with_progress(
         if scatter {
             plane::scatter(&ctx, &frame, &mut ops);
         } else {
-            if !plane::image_with_progress(&ctx, &frame, &mut ops, |p| progress(p * 0.35)) { return Err(CANCELLED.into()); }
+            // 分布図がオフなら塗らない。原作は白地に等高線だけを描く（#83）。
+            // 等高線は透明な層に描かれるので、地の色はページのまま残る。
+            if (s.graph || is_panel) && !plane::image_with_progress(&ctx, &frame, &mut ops, |p| progress(p * 0.35)) {
+                return Err(CANCELLED.into());
+            }
             if !is_panel && s.toko {
                 if !plane::contours_with_progress(&ctx, &frame, &mut ops, |p| progress(0.35 + p * 0.25)) { return Err(CANCELLED.into()); }
             }
@@ -462,5 +466,37 @@ mod tests {
             assert_eq!(pixel, &[c.0,c.1,c.2,255]);
         }
         assert_eq!(rgba[3], 0, "outside the circle must remain transparent");
+    }
+
+    /// Pixels that the image layers actually paint.
+    fn painted(b: &BuiltScene) -> usize {
+        b.scene
+            .ops
+            .iter()
+            .filter_map(|o| if let Op::Image { rgba, .. } = o { Some(rgba.chunks(4).filter(|p| p[3] > 0).count()) } else { None })
+            .sum()
+    }
+
+    #[test]
+    fn graph_off_leaves_the_plot_unfilled_but_keeps_contours() {
+        // #83: 分布図をオフにすると原作は白地に等高線だけを描く
+        let f = grid(11, 11, |x, y| Some(x + y));
+        let mut s = settings();
+        s.graph = true;
+        s.toko = true;
+        s.toko_by_count = true;
+        s.toko_count = 4;
+        let filled = painted(&build_scene(&f, &s, &[]).unwrap());
+        assert!(filled > 9_000, "the distribution graph should fill the plot ({filled})");
+
+        s.graph = false;
+        let b = build_scene(&f, &s, &[]).unwrap();
+        let only_lines = painted(&b);
+        assert!(only_lines > 0, "contours must still be drawn");
+        assert!(only_lines < filled / 10, "the fill must be gone ({only_lines} of {filled})");
+
+        // 等高線もオフなら何も塗らない
+        s.toko = false;
+        assert_eq!(painted(&build_scene(&f, &s, &[]).unwrap()), 0);
     }
 }
