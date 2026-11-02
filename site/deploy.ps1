@@ -1,4 +1,4 @@
-# Publishes the usage guide to http://o-server.main.jp/avese/
+# Publishes the usage guide to http://o-server.main.jp/avese/ over FTPS.
 # Usage: powershell -File site\deploy.ps1 -OServer <path to the o-server repository>
 param(
     [Parameter(Mandatory = $true)][string]$OServer
@@ -6,7 +6,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $envFile = Join-Path $OServer '.env'
-$deployScript = Join-Path $OServer 'deploy_webdav.py'
+$publisherDir = Join-Path $OServer 'hacker-news'
 
 $credentials = @{}
 foreach ($line in Get-Content -LiteralPath $envFile) {
@@ -17,16 +17,14 @@ foreach ($line in Get-Content -LiteralPath $envFile) {
     $key, $value = $trimmed -split '=', 2
     $credentials[$key.Trim()] = $value.Trim().Trim('"').Trim("'")
 }
+# The FTPS account is the same as the WebDAV one; deploy_ftps.py reads either name.
 $env:WEBDAV_USER = if ($credentials['WEBDAV_USER']) { $credentials['WEBDAV_USER'] } else { $credentials['WEBDAV_USR'] }
 $env:WEBDAV_PASS = $credentials['WEBDAV_PASS']
 if (-not $env:WEBDAV_USER -or -not $env:WEBDAV_PASS) {
     throw 'Set WEBDAV_USER (or WEBDAV_USR) and WEBDAV_PASS in the o-server .env file.'
 }
-if ($credentials['WEBDAV_HOST']) {
-    $env:WEBDAV_HOST = $credentials['WEBDAV_HOST']
-}
 
-# deploy_webdav.py writes its manifest next to LOCAL, so the published files are assembled in a temp folder.
+# deploy_ftps.py writes its manifest next to the local folder, so the published files are assembled in a temp folder.
 $work = Join-Path $env:TEMP 'avese-site-deploy'
 $local = Join-Path $work 'avese'
 if (Test-Path -LiteralPath $work) {
@@ -39,10 +37,10 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 Copy-Item (Join-Path $PSScriptRoot 'index.html'), (Join-Path $PSScriptRoot 'style.css') $local
+Copy-Item (Join-Path $PSScriptRoot 'ja') $local -Recurse
 Copy-Item (Join-Path $PSScriptRoot 'media') $local -Recurse
 Copy-Item (Join-Path $PSScriptRoot 'samples\samples.zip'), (Join-Path $PSScriptRoot 'samples\make_samples.py') (Join-Path $local 'samples')
 
-$env:LOCAL = $local
-$env:WEBDAV_BASE = '/avese'
-& python $deployScript
+$publish = 'import sys; sys.path.insert(0, sys.argv[1]); from deploy_ftps import deploy; deploy(sys.argv[2], "/avese")'
+& python -I -c $publish $publisherDir $local
 exit $LASTEXITCODE
