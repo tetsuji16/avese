@@ -102,7 +102,11 @@ pub fn image_with_progress(ctx: &Ctx, frame: &Frame, ops: &mut Vec<Op>, mut prog
                             let j = chunk_index * rows_per + row_index;
                             for i in 0..w {
                                 if i % 4096 == 0 && cancelled.load(Ordering::Relaxed) { return; }
-                                let p = frame.from_px_raw(frame.ox + i as f64 + 0.5, frame.oy + j as f64 + 0.5);
+                                // The original cylindrical panel raster uses integer
+                                // pixel positions. Half-pixel sampling shifts its
+                                // narrow rings noticeably when there are many rows.
+                                let offset = if frame.cyl.is_some() && frame.flip_y { 0.0 } else { 0.5 };
+                                let p = frame.from_px_raw(frame.ox + i as f64 + offset, frame.oy + j as f64 + offset);
                                 if let Some(z) = p.and_then(|(x, y)| ctx.field.sample(x, y)) {
                                     let c = ctx.color(z);
                                     row[i * 4..i * 4 + 4].copy_from_slice(&[c.0, c.1, c.2, 255]);

@@ -52,6 +52,8 @@ impl Frame {
     pub fn to_px(&self, x: f64, y: f64) -> (f32, f32) {
         if let Some(c) = &self.cyl {
             let k = self.cyl_scale();
+            // Panel rows are ordered from the outside towards the centre.
+            let y = if self.flip_y { c.r_max - (y - c.r_min) } else { y };
             let (dx, dy) = c.to_plane(x, y);
             let (cx, cy) = self.centre();
             return ((cx + dx * k) as f32, (cy - dy * k) as f32);
@@ -71,7 +73,15 @@ impl Frame {
             if dx.hypot(dy) > Self::span(c.r_min, c.r_max).abs() {
                 return None;
             }
-            return Some(c.to_data(dx, dy));
+            let (theta, radius) = c.to_data(dx, dy);
+            let radius = if self.flip_y {
+                // The centre belongs to the last panel row, whose upper
+                // boundary is exclusive when sampling panel data.
+                (c.r_max - (radius - c.r_min)).min(c.r_max.next_down())
+            } else {
+                radius
+            };
+            return Some((theta, radius));
         }
         let u = (px - self.ox) / self.w;
         let v = (py - self.oy) / self.h;
@@ -458,13 +468,22 @@ mod tests {
             let (sn, cs) = angle.to_radians().sin_cos();
             let (px, py) = (center.0 + 18.0 * cs, center.1 - 18.0 * sn);
             let hit = b.probe.at_field(px, py, &f).unwrap();
-            assert_eq!(hit.z, Some(col as f64));
+            assert_eq!(hit.z, Some((col + 4) as f64));
             let ix = (px - frame.ox) as usize;
             let iy = (py - frame.oy) as usize;
             let pixel = &rgba[(iy * *w as usize + ix) * 4..][..4];
-            let c = ctx.color(col as f64);
+            let c = ctx.color((col + 4) as f64);
             assert_eq!(pixel, &[c.0,c.1,c.2,255]);
+            let (outer_x, outer_y) = (center.0 + 42.0 * cs, center.1 - 42.0 * sn);
+            assert_eq!(b.probe.at_field(outer_x, outer_y, &f).unwrap().z, Some(col as f64));
+            let ix = (outer_x - frame.ox) as usize;
+            let iy = (outer_y - frame.oy) as usize;
+            let c = ctx.color(col as f64);
+            assert_eq!(&rgba[(iy * *w as usize + ix) * 4..][..4], &[c.0,c.1,c.2,255]);
         }
+        assert_eq!(b.probe.at_field(center.0, center.1, &f).unwrap().z, Some(4.0));
+        let c = ctx.color(4.0);
+        assert_eq!(&rgba[(50 * *w as usize + 50) * 4..][..4], &[c.0,c.1,c.2,255]);
         assert_eq!(rgba[3], 0, "outside the circle must remain transparent");
     }
 
