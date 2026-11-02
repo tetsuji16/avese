@@ -1075,16 +1075,11 @@ impl<'a> Renderer<'a> {
         let mut rects: Vec<(usize, Rect)> = vec![];
         for (slot, ri) in order.iter().enumerate() {
             let row = &rows[*ri];
-            let total: f32 = row.iter().map(|i| nat[*i]).sum();
             // comctl32 insets the tab rows by 2px on both sides
             let (rx0, rx1) = (r.min.x + 2.0, r.max.x - 2.0);
-            let scale = (rx1 - rx0) / total;
-            let mut x = rx0;
             let y = r.min.y + slot as f32 * th;
-            for (k, i) in row.iter().enumerate() {
-                let w = if k + 1 == row.len() { rx1 - x } else { (nat[*i] * scale).floor() };
-                rects.push((*i, Rect::from_min_size(Pos2::new(x, y), Vec2::new(w, th))));
-                x += w;
+            for (i, x0, x1) in tab_row_bounds(row, &nat, rx0, rx1) {
+                rects.push((i, Rect::from_min_max(Pos2::new(x0, y), Pos2::new(x1, y + th))));
             }
         }
         let mut hit: Option<usize> = None;
@@ -1102,7 +1097,9 @@ impl<'a> Renderer<'a> {
                 self.events.push(Ev::Change(n.name.clone()));
             }
         }
-        for (i, tr) in rects.iter() {
+        // The selected tab overlaps its neighbours by two pixels. Draw it
+        // last so the next tab cannot paint over its border.
+        for (i, tr) in rects.iter().filter(|(i, _)| *i != cur).chain(rects.iter().filter(|(i, _)| *i == cur)) {
             let selected = *i == cur;
             let t = if selected { tr.expand2(Vec2::new(2.0, 0.0)).with_min_y(tr.min.y - 2.0).with_max_y(tr.max.y + 1.0) } else { *tr };
             if selected {
@@ -1174,10 +1171,26 @@ impl<'a> Renderer<'a> {
 /// them per row). Anything else falls back to the same padding over the measured text.
 fn tab_width(caption: &str, text: f32) -> f32 {
     match caption {
-        "俯瞰図" => 63.0, "分布図" => 64.0, "ベクトル" => 69.0, "等高線" | "座標系" => 63.0, "グリッド" => 64.0,
-        "凡例" => 52.0, "ラベル" => 56.0, "入出力" => 59.0, "表示" => 53.0, "フォント" => 61.0, "特殊" => 53.0, "暫定" => 52.0,
+        "俯瞰図" | "分布図" => 64.0, "ベクトル" => 69.0, "等高線" | "座標系" => 63.0, "グリッド" => 64.0,
+        "凡例" => 53.0, "ラベル" => 56.0, "入出力" => 59.0, "表示" => 53.0, "フォント" => 61.0, "特殊" => 53.0, "暫定" => 52.0,
         _ => 40.0 + 0.5 * text,
     }
+}
+
+/// Justify a row using cumulative boundaries so rounding does not accumulate
+/// in the final tab when the dialog is widened.
+fn tab_row_bounds(row: &[usize], widths: &[f32], left: f32, right: f32) -> Vec<(usize, f32, f32)> {
+    let total: f32 = row.iter().map(|&i| widths[i]).sum();
+    let mut used = 0.0;
+    let mut x = left;
+    let mut bounds = Vec::with_capacity(row.len());
+    for (index, &i) in row.iter().enumerate() {
+        used += widths[i];
+        let end = if index + 1 == row.len() { right } else { left + ((right - left) * used / total).round() };
+        bounds.push((i, x, end));
+        x = end;
+    }
+    bounds
 }
 
 /// Greedy fill of tabs into rows of at most `limit` pixels.
@@ -1251,6 +1264,67 @@ mod modal_tests {
         let nat: Vec<f32> = pc.kids.iter().filter(|k| k.class == "TTabSheet").map(|s| tab_width(s.str("Caption"), 1000.0)).collect();
         let rows = tab_rows(&nat, pc.int("Width") as f32 / crate::forms::DIALOG_WIDEN);
         assert_eq!(rows.iter().map(Vec::len).collect::<Vec<_>>(), [6, 7]);
+    }
+
+    #[test]
+    fn tab_boundaries_match_original_reference_and_scale_without_drift() {
+        // The original 391px control has its unselected right borders at
+        // these x positions. Screenshots of all 13 selected tabs show the
+        // same base boundaries; the selected tab extends two pixels.
+        let names = ["俯瞰図", "分布図", "ベクトル", "等高線", "座標系", "グリッド", "凡例", "ラベル", "入出力", "表示", "フォント", "特殊", "暫定"];
+        let widths: Vec<f32> = names.iter().map(|name| tab_width(name, 0.0)).collect();
+        let first: Vec<usize> = (0..6).collect();
+        let second: Vec<usize> = (6..13).collect();
+        let edges = |row: &[usize], right: f32| {
+            tab_row_bounds(row, &widths, 10.0, right).iter().map(|(_, _, end)| (*end - 1.0) as i32).collect::<Vec<_>>()
+        };
+        assert_eq!(edges(&first, 397.0), [73, 137, 206, 269, 332, 396]);
+        assert_eq!(edges(&second, 397.0), [62, 118, 177, 230, 291, 344, 396]);
+        // A widened control distributes rounding throughout the row instead
+        // of pushing the accumulated error into its final tab.
+        assert_eq!(edges(&first, 514.0), [92, 176, 266, 348, 430, 513]);
+        assert_eq!(edges(&second, 514.0), [78, 151, 228, 297, 376, 445, 513]);
+    }
+
+    #[test]
+    fn every_selected_tab_draws_its_expanded_border_on_top() {
+        let forms = crate::forms::Forms::load_for_language(crate::i18n::Language::Japanese);
+        let pc = forms.config.find("TPCconfig").unwrap();
+        let sheets: Vec<_> = pc.kids.iter().filter(|n| n.class == "TTabSheet").collect();
+        let widths: Vec<_> = sheets.iter().map(|s| tab_width(s.str("Caption"), 0.0)).collect();
+        let (left, top, width, _) = pc.rect();
+        let rows = tab_rows(&widths, width as f32 / crate::forms::DIALOG_WIDEN);
+        for selected in 0..sheets.len() {
+            let row = rows.iter().find(|row| row.contains(&selected)).unwrap();
+            let bounds = tab_row_bounds(row, &widths, left as f32 + 2.0, (left + width) as f32 - 2.0);
+            let right = bounds.iter().find(|(i, _, _)| *i == selected).unwrap().2;
+            let ctx = egui::Context::default();
+            crate::fonts::install(&ctx);
+            let mut store = Store::default();
+            store.set_item_index("TPCconfig", selected as i32);
+            let assets = Assets::default();
+            let mut raw = egui::RawInput::default();
+            raw.screen_rect = Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(600.0, 400.0)));
+            let mut out = ctx.run_ui(raw, |ui| {
+                let mut renderer = Renderer::new(ui, &mut store, &assets);
+                renderer.draw_node(pc, Pos2::ZERO, &Fnt::form_default(), &mut vec![]);
+                renderer.finish();
+            });
+            let border_index = out.shapes.iter().position(|shape| match &shape.shape {
+                egui::Shape::Rect(rect) => rect.fill == DKSHADOW
+                    && (rect.rect.min.x - (right + 1.0)).abs() < 0.01
+                    && (rect.rect.min.y - (top as f32 + 18.0)).abs() < 0.01
+                    && (rect.rect.width() - 1.0).abs() < 0.01,
+                _ => false,
+            });
+            let covered = border_index.is_some_and(|index| out.shapes.iter().skip(index + 1).any(|shape| match &shape.shape {
+                egui::Shape::Rect(rect) if rect.fill.a() > 0 => rect.rect.contains(Pos2::new(right + 1.5, top as f32 + 22.0)),
+                _ => false,
+            }));
+            out.textures_delta.clear();
+            assert!(border_index.is_some(), "selected tab {} has no expanded right border", sheets[selected].name);
+            assert!(!covered, "selected tab {} has its right border covered", sheets[selected].name);
+        }
     }
 
     #[test]
