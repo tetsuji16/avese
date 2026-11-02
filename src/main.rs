@@ -13,6 +13,7 @@ mod icons;
 mod jobs;
 mod labels;
 mod ini;
+mod i18n;
 mod platform_win32;
 mod save_dialog;
 mod state;

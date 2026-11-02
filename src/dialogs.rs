@@ -16,6 +16,8 @@ pub const T_ABOUT: &str = "ﾊﾞｰｼﾞｮﾝ情報";
 // the original's caption is 三角メッシュ自動生成, but this window serves loading and batch jobs too
 pub const T_MESH: &str = "処理中";
 
+fn title(source: &'static str) -> String { crate::i18n::text(source) }
+
 const OPEN_FILTERS: [(&str, &[&str]); 4] = [
     ("aveseデータファイル(*.txt;*.dat)", &["txt", "dat"]),
     ("テキストファイル(*.txt)", &["txt"]),
@@ -24,20 +26,20 @@ const OPEN_FILTERS: [(&str, &[&str]); 4] = [
 ];
 
 pub fn notice(title: &str, text: &str) {
-    rfd::MessageDialog::new().set_title(title).set_description(text).set_level(rfd::MessageLevel::Info).show();
+    rfd::MessageDialog::new().set_title(crate::i18n::text(title)).set_description(crate::i18n::text(text)).set_level(rfd::MessageLevel::Info).show();
 }
 
 pub fn warn(title: &str, text: &str) {
-    rfd::MessageDialog::new().set_title(title).set_description(text).set_level(rfd::MessageLevel::Warning).show();
+    rfd::MessageDialog::new().set_title(crate::i18n::text(title)).set_description(crate::i18n::text(text)).set_level(rfd::MessageLevel::Warning).show();
 }
 
 pub fn error(title: &str, text: &str) {
-    rfd::MessageDialog::new().set_title(title).set_description(text).set_level(rfd::MessageLevel::Error).show();
+    rfd::MessageDialog::new().set_title(crate::i18n::text(title)).set_description(crate::i18n::text(text)).set_level(rfd::MessageLevel::Error).show();
 }
 
 /// Yes/No question; true for Yes.
 pub fn confirm(title: &str, text: &str) -> bool {
-    let r = rfd::MessageDialog::new().set_title(title).set_description(text).set_level(rfd::MessageLevel::Warning).set_buttons(rfd::MessageButtons::YesNo).show();
+    let r = rfd::MessageDialog::new().set_title(crate::i18n::text(title)).set_description(crate::i18n::text(text)).set_level(rfd::MessageLevel::Warning).set_buttons(rfd::MessageButtons::YesNo).show();
     matches!(r, rfd::MessageDialogResult::Yes)
 }
 
@@ -45,19 +47,19 @@ pub fn confirm(title: &str, text: &str) -> bool {
 pub enum IrregularChoice { Generate, Abort, Ignore }
 
 pub fn pick_open_files() -> Vec<std::path::PathBuf> {
-    let mut d = rfd::FileDialog::new().set_title("データロード");
+    let mut d = rfd::FileDialog::new().set_title(title("データロード"));
     for (n, e) in OPEN_FILTERS {
-        d = d.add_filter(n, e);
+        d = d.add_filter(crate::i18n::text(n), e);
     }
     d.pick_files().unwrap_or_default()
 }
 
 pub fn pick_ini_open() -> Option<std::path::PathBuf> {
-    rfd::FileDialog::new().set_title("設定の読込").add_filter("設定ファイル(*.ini)", &["ini"]).pick_file()
+    rfd::FileDialog::new().set_title(title("設定の読込")).add_filter(title("設定ファイル(*.ini)"), &["ini"]).pick_file()
 }
 
 pub fn pick_ini_save() -> Option<std::path::PathBuf> {
-    rfd::FileDialog::new().set_title("設定に名前を付けて保存").add_filter("設定ファイル(*.ini)", &["ini"]).set_file_name("avese.ini").save_file()
+    rfd::FileDialog::new().set_title(title("設定に名前を付けて保存")).add_filter(title("設定ファイル(*.ini)"), &["ini"]).set_file_name("avese.ini").save_file()
 }
 
 /// Read-only/colour interlocks between the settings checkboxes and their edit boxes.
@@ -101,7 +103,7 @@ pub struct Dialogs {
     pub batch_notice: Option<String>,
     picker: Option<Picker>,
     pub main_hwnd: Option<isize>,
-    styled: Vec<&'static str>,
+    styled: Vec<String>,
     blocked: Vec<isize>,
 }
 
@@ -168,10 +170,10 @@ impl Dialogs {
 
     /// Window that must receive the modal state for a native call (colour dialog, message box).
     pub fn top_hwnd(&self) -> Option<isize> {
-        let order: [(bool, &str); 5] = [(self.input, T_INPUT), (self.config.is_some(), T_CONFIG), (self.avi, T_AVI), (self.about, T_ABOUT), (self.mesh, T_MESH)];
+        let order: [(bool, String); 5] = [(self.input, title(T_INPUT)), (self.config.is_some(), title(T_CONFIG)), (self.avi, title(T_AVI)), (self.about, title(T_ABOUT)), (self.mesh, title(T_MESH))];
         for (on, t) in order {
             if on {
-                if let Some(h) = plat::find(Some(t)) {
+                if let Some(h) = plat::find(Some(&t)) {
                     return Some(h);
                 }
             }
@@ -211,7 +213,7 @@ impl Dialogs {
             let mut picker = self.picker.take();
             let nested_input_open = self.input;
             let this: &Dialogs = self;
-            let close = viewport(ctx, "config", T_CONFIG, size, None, false, sh.center, |ui| {
+            let close = viewport(ctx, "config", &title(T_CONFIG), size, None, false, sh.center, |ui| {
                 let blocked = nested_input_open || picker.is_some();
                 let (a, inp) = ui.add_enabled_ui(!blocked, |ui| config_body(ui, &form, &sh.forms.config, sh.store, sh.assets, this, &mut picker)).inner;
                 show_picker(ui, sh.store, &mut picker);
@@ -247,7 +249,7 @@ impl Dialogs {
             let form = &sh.forms.input;
             let size = client_size(form);
             let mut done: Option<bool> = None;
-            let c = viewport(ctx, "input", T_INPUT, size, None, false, sh.center, |ui| {
+            let c = viewport(ctx, "input", &title(T_INPUT), size, None, false, sh.center, |ui| {
                 let origin = ui.max_rect().min;
                 let mut r = Renderer::new(ui, sh.store, sh.assets);
                 r.draw_children(form, origin, &Fnt::form_default().with(form));
@@ -291,7 +293,7 @@ impl Dialogs {
             let mut notice = self.batch_notice.take();
             let me: &Dialogs = self;
             let mut req = None;
-            let c = viewport(ctx, "avi", T_AVI, size, Some(Vec2::new(292.0, 171.0)), true, sh.center, |ui| {
+            let c = viewport(ctx, "avi", &title(T_AVI), size, Some(Vec2::new(292.0, 171.0)), true, sh.center, |ui| {
                 req = ui.add_enabled_ui(notice.is_none() && !me.busy, |ui| avi_body(ui, &form, sh.store, sh.assets, me)).inner;
                 if let Some(text) = notice.as_deref() {
                     let mut close_notice = false;
@@ -318,7 +320,7 @@ impl Dialogs {
         }
         if self.about {
             let form = &sh.forms.about;
-            let c = viewport(ctx, "about", T_ABOUT, client_size(form), None, false, sh.center, |ui| {
+            let c = viewport(ctx, "about", &title(T_ABOUT), client_size(form), None, false, sh.center, |ui| {
                 let origin = ui.max_rect().min;
                 let mut r = Renderer::new(ui, sh.store, sh.assets);
                 r.draw_children(form, origin, &Fnt::form_default().with(form));
@@ -334,7 +336,7 @@ impl Dialogs {
         }
         if self.mesh {
             let form = &sh.forms.mesh;
-            let c = viewport(ctx, "mesh", T_MESH, client_size(form), None, false, sh.center, |ui| {
+            let c = viewport(ctx, "mesh", &title(T_MESH), client_size(form), None, false, sh.center, |ui| {
                 let origin = ui.max_rect().min;
                 let mut r = Renderer::new(ui, sh.store, sh.assets);
                 r.draw_children(form, origin, &Fnt::form_default().with(form));
@@ -351,12 +353,12 @@ impl Dialogs {
 
     /// Style new dialog windows (owner, dialog frame) and keep owners disabled while a dialog is open.
     fn sync_native(&mut self) {
-        let open: [(bool, &'static str); 5] = [(self.config.is_some(), T_CONFIG), (self.avi, T_AVI), (self.input, T_INPUT), (self.about, T_ABOUT), (self.mesh, T_MESH)];
+        let open: [(bool, String); 5] = [(self.config.is_some(), title(T_CONFIG)), (self.avi, title(T_AVI)), (self.input, title(T_INPUT)), (self.about, title(T_ABOUT)), (self.mesh, title(T_MESH))];
         for (on, t) in open {
             if on && !self.styled.contains(&t) {
-                if let Some(h) = plat::find(Some(t)) {
-                    let owner = if t == T_INPUT { plat::find(Some(T_CONFIG)).or(self.main_hwnd) } else { self.main_hwnd };
-                    if t != T_AVI {
+                if let Some(h) = plat::find(Some(&t)) {
+                    let owner = if t == title(T_INPUT) { plat::find(Some(&title(T_CONFIG))).or(self.main_hwnd) } else { self.main_hwnd };
+                    if t != title(T_AVI) {
                         plat::style_dialog(h, owner);
                     } else if let Some(o) = owner {
                         plat::style_dialog(h, Some(o));
@@ -544,9 +546,9 @@ fn show_picker(ui: &mut egui::Ui, store: &mut Store, picker: &mut Option<Picker>
     let mut cancelled = false;
     match active {
         Picker::Color { key, value } => {
-            let response = egui::Window::new("色の選択").collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, Vec2::ZERO).show(ui.ctx(), |ui| {
+            let response = egui::Window::new(title("色の選択")).collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, Vec2::ZERO).show(ui.ctx(), |ui| {
                 egui::color_picker::color_edit_button_srgba(ui, value, egui::color_picker::Alpha::Opaque);
-                ui.horizontal(|ui| { accepted = ui.button("OK").clicked(); cancelled = ui.button("キャンセル").clicked(); });
+                ui.horizontal(|ui| { accepted = ui.button("OK").clicked(); cancelled = ui.button(title("キャンセル")).clicked(); });
             });
             cancelled |= response.is_none();
             if accepted {
@@ -555,22 +557,22 @@ fn show_picker(ui: &mut egui::Ui, store: &mut Store, picker: &mut Option<Picker>
             }
         }
         Picker::Font { row, name, size, style } => {
-            let response = egui::Window::new("フォントの選択").collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, Vec2::ZERO).show(ui.ctx(), |ui| {
-                ui.label("フォント名");
+            let response = egui::Window::new(title("フォントの選択")).collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, Vec2::ZERO).show(ui.ctx(), |ui| {
+                ui.label(title("フォント名"));
                 ui.text_edit_singleline(name);
-                egui::ComboBox::from_label("候補").selected_text("フォント候補").show_ui(ui, |ui| {
+                egui::ComboBox::from_label(title("候補")).selected_text(title("フォント候補")).show_ui(ui, |ui| {
                     for family in ["ＭＳ Ｐゴシック", "ＭＳ ゴシック", "Noto Sans CJK JP", "IPAexゴシック", "游ゴシック", "Hiragino Sans", "Arial"] {
                         if ui.selectable_label(*name == family, family).clicked() { *name = family.into(); }
                     }
                 });
-                ui.add(egui::Slider::new(size, 1..=96).text("サイズ"));
+                ui.add(egui::Slider::new(size, 1..=96).text(title("サイズ")));
                 for (label, bit) in [("太字", 1), ("斜体", 2), ("下線", 4), ("取消線", 8)] {
                     let mut on = *style & bit != 0;
-                    if ui.checkbox(&mut on, label).changed() {
+                    if ui.checkbox(&mut on, title(label)).changed() {
                         if on { *style |= bit; } else { *style &= !bit; }
                     }
                 }
-                ui.horizontal(|ui| { accepted = ui.button("OK").clicked(); cancelled = ui.button("キャンセル").clicked(); });
+                ui.horizontal(|ui| { accepted = ui.button("OK").clicked(); cancelled = ui.button(title("キャンセル")).clicked(); });
             });
             cancelled |= response.is_none();
             if accepted {
@@ -659,11 +661,11 @@ fn avi_body(ui: &mut egui::Ui, form: &Node, store: &mut Store, assets: &Assets, 
             }
             "makeBMP" | "makeAVI" => {
                 if list.is_empty() {
-                    d.modal(|| notice("avese", "リストにファイルがありません。"));
+                    d.modal(|| notice("avese", &title("リストにファイルがありません。")));
                 } else if n == "makeBMP" {
-                    req = d.modal(|| rfd::FileDialog::new().set_title("BMP を作成するフォルダ").pick_folder()).map(BatchReq::Bmp);
+                    req = d.modal(|| rfd::FileDialog::new().set_title(title("BMP を作成するフォルダ")).pick_folder()).map(BatchReq::Bmp);
                 } else {
-                    let p = d.modal(|| rfd::FileDialog::new().set_title("AVI作成").add_filter("AVI-Files (*.avi)", &["avi"]).set_file_name("default.avi").save_file());
+                    let p = d.modal(|| rfd::FileDialog::new().set_title(title("AVI作成")).add_filter("AVI-Files (*.avi)", &["avi"]).set_file_name("default.avi").save_file());
                     req = p.map(|p| BatchReq::Avi(if p.extension().is_some_and(|e| e.eq_ignore_ascii_case("avi")) { p } else { p.with_added_extension("avi") }));
                 }
             }

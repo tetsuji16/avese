@@ -13,6 +13,23 @@ pub struct Node {
 }
 
 impl Node {
+    fn localize(&mut self) {
+        for key in ["Caption", "Hint"] {
+            if let Some(value) = self.props.get(key).and_then(Value::as_str) {
+                let translated = crate::i18n::text(value);
+                self.props.insert(key.into(), Value::String(translated));
+            }
+        }
+        if let Some(values) = self.props.get_mut("Items.Strings").and_then(Value::as_array_mut) {
+            for value in values {
+                if let Some(source) = value.as_str() {
+                    *value = Value::String(crate::i18n::text(source));
+                }
+            }
+        }
+        for child in &mut self.kids { child.localize(); }
+    }
+
     pub fn from_value(v: &Value) -> Node {
         Node {
             class: v["class"].as_str().unwrap_or("").to_string(),
@@ -134,6 +151,11 @@ impl Forms {
             about: Node::parse(include_str!("../assets/forms/TABOUTBOX.json")),
             mesh: Node::parse(include_str!("../assets/forms/TMESHPROGRESS.json")),
         };
+        if crate::i18n::Language::detect().is_english() {
+            for form in [&mut forms.form1, &mut forms.config, &mut forms.avi, &mut forms.input, &mut forms.about, &mut forms.mesh] {
+                form.localize();
+            }
+        }
         for form in [&mut forms.config, &mut forms.avi, &mut forms.input, &mut forms.about, &mut forms.mesh] { form.widen(); }
         forms
     }

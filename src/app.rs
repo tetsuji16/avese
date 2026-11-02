@@ -16,7 +16,8 @@ use egui::{Context, Id, Key, Modifiers, Order, Pos2, Rect, Sense, Vec2};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-const HELP_HTML: &str = include_str!("../assets/help.html");
+const HELP_HTML_JA: &str = include_str!("../assets/help.html");
+const HELP_HTML_EN: &str = include_str!("../assets/help.en.html");
 /// A progress window appears only for jobs that take longer than this.
 const PROGRESS_DELAY: std::time::Duration = std::time::Duration::from_millis(400);
 const START_FILES_DELAY: std::time::Duration = std::time::Duration::from_millis(100);
@@ -35,6 +36,8 @@ enum PendingIrregular {
 }
 
 const IRREGULAR_BUTTONS: [&str; 3] = ["はい(Y)", "中止(A)", "無視(I)"];
+
+fn irregular_button_labels() -> [String; 3] { IRREGULAR_BUTTONS.map(crate::i18n::text) }
 
 fn irregular_shortcut(key: Key) -> Option<dialogs::IrregularChoice> {
     match key {
@@ -109,7 +112,7 @@ fn key_name(code: i32) -> String {
 }
 
 fn build_menu(n: &Node) -> MItem {
-    let cap = n.str("Caption").to_string();
+    let cap = crate::i18n::text(n.str("Caption"));
     MItem {
         name: n.name.clone(),
         sep: cap == "-",
@@ -326,10 +329,14 @@ impl App {
         let s = Settings::from_store(&self.store);
         let need = pipeline::required_bytes(&loaded, &s);
         if jobs::over_limit(need, s.max_bmp_mb) {
-            let msg = format!("イメージのサイズが {} MB になり、設定された上限 {} MB を超えます。\n描画を続けますか？", need.div_ceil(1024 * 1024), s.max_bmp_mb);
+            let msg = if crate::i18n::english_mode() {
+                format!("The image requires {} MB, exceeding the configured limit of {} MB.\nContinue rendering?", need.div_ceil(1024 * 1024), s.max_bmp_mb)
+            } else {
+                format!("イメージのサイズが {} MB になり、設定された上限 {} MB を超えます。\n描画を続けますか？", need.div_ceil(1024 * 1024), s.max_bmp_mb)
+            };
             if !self.dlg.modal(|| dialogs::confirm("avese", &msg)) {
                 self.loaded = Some(loaded);
-                self.status_msg = "描画を中止しました".into();
+                self.status_msg = crate::i18n::text("描画を中止しました");
                 return;
             }
         }
@@ -355,7 +362,7 @@ impl App {
         match pending {
             PendingIrregular::Load(mut b) => {
                 if choice == dialogs::IrregularChoice::Abort {
-                    self.status_msg = "データ読み込みを中止しました".into();
+                    self.status_msg = crate::i18n::text("データ読み込みを中止しました");
                     return;
                 }
                 if choice == dialogs::IrregularChoice::Ignore {
@@ -374,7 +381,7 @@ impl App {
             PendingIrregular::Reparse { mut loaded, store } => match choice {
                 dialogs::IrregularChoice::Abort => {
                     self.store = store;
-                    self.status_msg = "データ読み込みを中止しました".into();
+                    self.status_msg = crate::i18n::text("データ読み込みを中止しました");
                 }
                 dialogs::IrregularChoice::Generate => {
                     jobs::readback(&mut self.store, &loaded.field);
@@ -419,31 +426,32 @@ impl App {
     fn show_irregular_modal(&mut self, ctx: &Context) {
         if self.pending_irregular.is_none() { return; }
         let mut choice = None;
+        let button_labels = irregular_button_labels();
         let modal = egui::Modal::new(Id::new("irregular-grid-choice")).show(ctx, |ui| {
             ui.set_min_width(350.0);
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new(egui_phosphor::regular::WARNING)
                     .font(egui::FontId::new(24.0, egui::FontFamily::Name("phosphor".into())))
                     .color(egui::Color32::from_rgb(210, 150, 0)));
-                ui.heading("警告");
+                ui.heading(crate::i18n::text("警告"));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.small_button("×").on_hover_text("中止").clicked() {
+                    if ui.small_button("×").on_hover_text(crate::i18n::text("中止")).clicked() {
                         choice = Some(irregular_close_choice());
                     }
                 });
             });
             ui.separator();
-            ui.label("非構造格子データです\n三角メッシュを自動生成しますか？\n（時間がかかる場合があります）");
+            ui.label(crate::i18n::text("非構造格子データです\n三角メッシュを自動生成しますか？\n（時間がかかる場合があります）"));
             ui.add_space(8.0);
             ui.horizontal(|ui| {
-                let yes = ui.button(IRREGULAR_BUTTONS[0]);
+                let yes = ui.button(&button_labels[0]);
                 if !self.irregular_focus_initialized {
                     yes.request_focus();
                     self.irregular_focus_initialized = true;
                 }
                 if yes.clicked() { choice = Some(dialogs::IrregularChoice::Generate); }
-                if ui.button(IRREGULAR_BUTTONS[1]).clicked() { choice = Some(dialogs::IrregularChoice::Abort); }
-                if ui.button(IRREGULAR_BUTTONS[2]).clicked() { choice = Some(dialogs::IrregularChoice::Ignore); }
+                if ui.button(&button_labels[1]).clicked() { choice = Some(dialogs::IrregularChoice::Abort); }
+                if ui.button(&button_labels[2]).clicked() { choice = Some(dialogs::IrregularChoice::Ignore); }
             });
         });
         if choice.is_none() {
@@ -488,7 +496,7 @@ impl App {
             }
             Err(e) => {
                 if e == jobs::CANCELLED {
-                    self.status_msg = "描画を中止しました".into();
+                    self.status_msg = crate::i18n::text("描画を中止しました");
                     return;
                 }
                 self.canvas_tex = None;
@@ -577,7 +585,7 @@ impl App {
                             } else {
                                 self.loaded = Some(loaded);
                             }
-                            self.status_msg = "メッシュ生成を中止しました".into();
+                            self.status_msg = crate::i18n::text("メッシュ生成を中止しました");
                         }
                         Err(e) => {
                             if self.previous.is_some() {
@@ -634,7 +642,12 @@ impl App {
             BatchReq::Bmp(dir) => {
                 let targets = batch::bmp_targets(&dir, &files);
                 let exist = targets.iter().filter(|t| t.exists()).count();
-                if exist > 0 && !self.dlg.modal(|| dialogs::confirm("avese", &format!("{exist} 個のファイルが既にあります。上書きしますか？"))) {
+                let prompt = if crate::i18n::english_mode() {
+                    format!("{exist} file(s) already exist. Overwrite?")
+                } else {
+                    format!("{exist} 個のファイルが既にあります。上書きしますか？")
+                };
+                if exist > 0 && !self.dlg.modal(|| dialogs::confirm("avese", &prompt)) {
                     return;
                 }
                 BatchKind::Bmp(targets)
@@ -642,7 +655,7 @@ impl App {
             BatchReq::Avi(path) => {
                 let fps = self.store.position("SEframerate");
                 if fps <= 0 {
-                    self.dlg.modal(|| dialogs::notice("avese", "フレームレートには 1 以上を指定してください。"));
+                    self.dlg.modal(|| dialogs::notice("avese", &crate::i18n::text("フレームレートには 1 以上を指定してください。")));
                     return;
                 }
                 let size = self.store.checked("CBAVIsize").then(|| (self.store.position("SEAVIwitdh"), self.store.position("SEAVIheight")));
@@ -677,7 +690,7 @@ impl App {
     }
 
     fn no_image(&self) {
-        self.dlg.modal(|| dialogs::notice("avese", "イメージがありません。先にデータを読み込んでください。"));
+        self.dlg.modal(|| dialogs::notice("avese", &crate::i18n::text("イメージがありません。先にデータを読み込んでください。")));
     }
 
     fn close_data(&mut self) {
@@ -696,7 +709,8 @@ impl App {
     /// Our own help page, written to the temp folder and opened with the default browser.
     fn open_help(&self) {
         let p = std::env::temp_dir().join("avese-help.html");
-        if let Err(e) = std::fs::write(&p, HELP_HTML) {
+        let help = if crate::i18n::english_mode() { HELP_HTML_EN } else { HELP_HTML_JA };
+        if let Err(e) = std::fs::write(&p, help) {
             self.show_error(&format!("ヘルプを書き出せません: {e}"));
             return;
         }
@@ -732,7 +746,7 @@ impl App {
             }
             "menreload" | "TBReload" => match self.data_path.clone() {
                 Some(p) => self.start_load(ctx, p),
-                None => self.dlg.modal(|| dialogs::notice("avese", "再読み込みするデータがありません。")),
+                None => self.dlg.modal(|| dialogs::notice("avese", &crate::i18n::text("再読み込みするデータがありません。"))),
             },
             "menload2" => self.dlg.avi = true,
             "mensave" | "TBsave" => self.save_image(),
@@ -1067,8 +1081,8 @@ impl App {
                 let ir = Rect::from_center_size(rr.center(), Vec2::splat(icon_size));
                 crate::icons::draw_tb(&pp, &self.assets, k.int("ImageIndex").max(0) as usize, ir, en, false);
                 let hint = match k.name.as_str() {
-                    "TBRedraw" => "再描画：現在のデータと設定で画像を描き直す",
-                    "TBReload" => "再読み込み：データファイルを読み直して描画する",
+                    "TBRedraw" => if crate::i18n::english_mode() { "Redraw: render current data with current settings" } else { "再描画：現在のデータと設定で画像を描き直す" },
+                    "TBReload" => if crate::i18n::english_mode() { "Reload: read the data file and render again" } else { "再読み込み：データファイルを読み直して描画する" },
                     _ => k.hint(),
                 };
                 r.tip(id, hint, resp.hovered());
@@ -1109,7 +1123,8 @@ impl App {
         let text = |from: f32, to: f32, s: &str| p.with_clip_rect(Rect::from_min_max(Pos2::new(from + 2.0, r.min.y + 2.0), Pos2::new(to, r.max.y))).text(Pos2::new(from + 4.0, r.center().y + 1.0), egui::Align2::LEFT_CENTER, s, font.clone(), egui::Color32::BLACK);
         text(r.min.x, r.min.x + 100.0, x);
         text(r.min.x + 102.0, r.min.x + 200.0, y);
-        text(r.min.x + 202.0, r.max.x - 16.0, if z.is_empty() { &self.status_msg } else { z });
+        let status = if z.is_empty() { crate::i18n::text(&self.status_msg) } else { z.to_owned() };
+        text(r.min.x + 202.0, r.max.x - 16.0, &status);
         // size grip: three diagonal strokes, each a white pixel followed by two gray ones
         fill(p, Rect::from_min_max(Pos2::new(r.max.x - 16.0, r.max.y - 16.0), r.max), FACE);
         let (lim, base) = (r.max.x - 2.0, r.max.y - 2.0);
