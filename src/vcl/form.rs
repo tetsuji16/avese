@@ -455,6 +455,22 @@ impl<'a> Renderer<'a> {
         self.set_hover(n, id, &resp);
     }
 
+    /// `TextEdit` centers its galley using egui's row height, which is taller
+    /// than the VCL font cell. Give it a slightly expanded rect so the glyph
+    /// ink is centered in the control, and clip the painting (selection and
+    /// cursor) back to the real control rectangle.
+    fn put_edit(&mut self, rect: Rect, font: &FontId, te: egui::TextEdit<'_>) -> egui::Response {
+        let row = self.ui.ctx().fonts_mut(|f| f.row_height(font));
+        let extra = (row - rect.height()).max(0.0);
+        if extra <= 0.0 {
+            return self.ui.put(rect, te);
+        }
+        let er = rect.expand2(Vec2::new(0.0, extra / 2.0));
+        let mut child = self.ui.new_child(egui::UiBuilder::new().max_rect(er));
+        child.set_clip_rect(rect.intersect(self.ui.clip_rect()));
+        child.put(er, te)
+    }
+
     fn edit(&mut self, n: &Node, r: Rect, id: Id, f: &Fnt, en: bool, _spin: bool) {
         let p = self.p();
         let ctx = self.ui.ctx().clone();
@@ -477,12 +493,12 @@ impl<'a> Renderer<'a> {
             .id(id)
             .frame(egui::Frame::NONE)
             .margin(egui::Margin::symmetric(1, 0))
-            .font(font)
+            .font(font.clone())
             .text_color(if en { col(f.color) } else { GRAYTEXT })
             .vertical_align(egui::Align::Center)
             .desired_width(inner.width())
             .interactive(en && !ro);
-        let resp = self.ui.put(inner, te);
+        let resp = self.put_edit(inner, &font, te);
         self.tabs.push((self.cur_path.clone(), id));
         // a page switch focuses the first tab stop and selects the whole text, as the original does
         let sel_key = id.with("select_all");
@@ -563,16 +579,17 @@ impl<'a> Renderer<'a> {
         let mut s = self.store.text(&n.name).to_string();
         let old = s.clone();
         if editable {
+            let font = f.id();
             let te = egui::TextEdit::singleline(&mut s)
                 .id(id)
                 .frame(egui::Frame::NONE)
                 .margin(egui::Margin::symmetric(1, 0))
-                .font(f.id())
+                .font(font.clone())
                 .text_color(if en { col(f.color) } else { GRAYTEXT })
                 .vertical_align(egui::Align::Center)
                 .desired_width(er.width())
                 .interactive(en);
-            let resp = self.ui.put(er, te);
+            let resp = self.put_edit(er, &font, te);
             self.tabs.push((self.cur_path.clone(), id));
             s.retain(|c| c.is_ascii_digit() || c == '-');
             if s != old {

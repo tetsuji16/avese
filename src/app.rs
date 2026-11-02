@@ -20,7 +20,6 @@ const HELP_HTML_JA: &str = include_str!("../assets/help.html");
 const HELP_HTML_EN: &str = include_str!("../assets/help.en.html");
 /// A progress window appears only for jobs that take longer than this.
 const PROGRESS_DELAY: std::time::Duration = std::time::Duration::from_millis(400);
-const START_FILES_DELAY: std::time::Duration = std::time::Duration::from_millis(100);
 
 enum Job {
     Load(Handle<Built>),
@@ -123,6 +122,17 @@ fn build_menu(n: &Node) -> MItem {
     }
 }
 
+/// #82: 原作のファイルメニューには終了項目がないため、末尾に足す。
+/// `assets/forms` は原作の DFM から作り直すので、ここで足して再生成に耐えるようにする。
+fn add_exit_item(menu: &mut [MItem]) {
+    let Some(file) = menu.iter_mut().find(|m| m.name == "mentopload") else { return };
+    if file.kids.iter().any(|k| k.name == "menexit") {
+        return;
+    }
+    file.kids.push(MItem { name: "N10".into(), sep: true, cap: "-".into(), sc: String::new(), img: None, kids: Vec::new() });
+    file.kids.push(MItem { name: "menexit".into(), sep: false, cap: "アプリを閉じる(&Q)".into(), sc: "Alt+F4".into(), img: None, kids: Vec::new() });
+}
+
 /// View item behind a menu entry or tool button name.
 fn item_of(name: &str) -> Option<Item> {
     let s = name.strip_prefix("TB").or_else(|| name.strip_prefix("men"))?;
@@ -171,7 +181,7 @@ pub struct App {
     title: String,
     ini_path: PathBuf,
     first: bool,
-    first_frame: std::time::Instant,
+    startup_viewport_presented: bool,
     start_files: Vec<PathBuf>,
     menu: Vec<MItem>,
     open_menu: Option<usize>,
@@ -215,7 +225,8 @@ impl App {
             assets.about = Some(texture.clone());
             assets.app = Some(texture);
         }
-        let menu = forms.form1.find("MainMenu1").map(|m| m.kids.iter().map(build_menu).collect()).unwrap_or_default();
+        let mut menu: Vec<MItem> = forms.form1.find("MainMenu1").map(|m| m.kids.iter().map(build_menu).collect()).unwrap_or_default();
+        add_exit_item(&mut menu);
         App {
             forms,
             store,
@@ -225,7 +236,7 @@ impl App {
             title: NODATA.into(),
             ini_path: exe_dir().join("avese.ini"),
             first: true,
-            first_frame: std::time::Instant::now(),
+            startup_viewport_presented: false,
             start_files: files,
             menu,
             open_menu: None,
@@ -752,6 +763,8 @@ impl App {
             "mensave" | "TBsave" => self.save_image(),
             "menClipbrd" | "TBclip" => self.copy_clipboard(),
             "menclose" => self.close_data(),
+            // #82: アプリを閉じる。設定の自動保存は eframe の終了処理（on_exit）が行う。
+            "menexit" => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
             "menredraw" | "TBRedraw" => self.redraw(ctx),
             "menmeshcreate" => self.create_mesh(ctx),
             "menconfig" | "TBConfig" => self.dlg.open_config(&self.store),
@@ -1315,6 +1328,36 @@ mod shortcut_tests {
         assert!(!menu_item_enabled("menmeshcreate", true, Some(&mesh)));
         assert!(!menu_item_enabled("menredraw", false, Some(&loaded)));
     }
+
+    #[test]
+    fn file_menu_ends_with_the_exit_command() {
+        let mut menu = vec![MItem { name: "mentopload".into(), sep: false, cap: "ファイル(&F)".into(), sc: String::new(), img: None, kids: Vec::new() }];
+        add_exit_item(&mut menu);
+        let kids = &menu[0].kids;
+        assert_eq!(kids.len(), 2);
+        assert!(kids[0].sep);
+        assert_eq!(kids[1].name, "menexit");
+        let (cap, _, accel) = parse_caption(&kids[1].cap);
+        assert_eq!(cap, "アプリを閉じる(Q)", "原作の表記にならい `&` だけを落とす");
+        assert_eq!(accel, Some('Q'));
+        assert_eq!(kids[1].sc, "Alt+F4");
+        add_exit_item(&mut menu);
+        assert_eq!(menu[0].kids.len(), 2, "二重に足さない");
+    }
+
+    #[test]
+    fn exit_command_closes_the_window() {
+        let ctx = Context::default();
+        let forms = Forms::load();
+        let store = Settings::default_store();
+        let mut app = App::new(&ctx, forms, store, Layout::default(), vec![]);
+        let _ = ctx.begin_pass(Default::default());
+        app.action(&ctx, "menexit");
+        let mut out = ctx.end_pass();
+        let closed = out.viewport_output.values().any(|v| v.commands.iter().any(|c| matches!(c, egui::ViewportCommand::Close)));
+        out.textures_delta.clear();
+        assert!(closed, "menexit should ask the window to close");
+    }
 }
 
 impl eframe::App for App {
@@ -1327,19 +1370,13 @@ impl eframe::App for App {
         if self.first {
             self.first = false;
             dialogs::apply_interlocks(&mut self.store);
-            self.first_frame = std::time::Instant::now();
         }
-        // Create startup dialogs only after the root viewport has been
-        // presented; creating an owned viewport during the first frame can
-        // leave it blank on Windows, and a message box opened that early stays
-        // hidden while the disabled main window waits for it.
-        if !self.start_files.is_empty() {
-            if self.first_frame.elapsed() < START_FILES_DELAY {
-                ctx.request_repaint_after(START_FILES_DELAY);
-            } else {
-                let files = std::mem::take(&mut self.start_files);
-                self.load_files(&ctx, files);
-            }
+        // Do not start a command-line load until the root viewport has been
+        // rendered once. A fixed delay is unreliable on slow or remote Windows
+        // sessions and can leave a startup error dialog behind a disabled window.
+        if self.startup_viewport_presented && !self.start_files.is_empty() {
+            let files = std::mem::take(&mut self.start_files);
+            self.load_files(&ctx, files);
         }
         if !self.started_hwnd {
             self.dlg.main_hwnd = plat::find(None);
@@ -1441,6 +1478,12 @@ impl eframe::App for App {
         }
         if locked && ctx.input(|i| i.viewport().close_requested()) {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+        }
+        if !self.startup_viewport_presented {
+            self.startup_viewport_presented = true;
+            if !self.start_files.is_empty() {
+                ctx.request_repaint();
+            }
         }
     }
 
