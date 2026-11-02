@@ -1,7 +1,33 @@
-# avese（非公式 Rust 再実装）
+# avese
 
-「AV似非」に影響を受け、Rust と egui（eframe 0.37）でクリーンルーム実装したソフトウェアです。
-**非公式**であり、原作者・原作とは関係ありません。原作の exe には実行時に依存しません。
+avese は、数値計算の結果などの 3 次元データを、分布図、ベクトル図、等高線図、俯瞰図にするソフトです。テキストファイルをウィンドウに落とすだけで図になります。
+
+**[使い方ガイド（動画つき）](http://o-server.main.jp/avese/)** ・ **[ダウンロード](https://github.com/tetsuji16/avese/releases)**
+
+[![avese の画面。ベクトルと等高線を重ねた分布図。画像を押すと使い方ガイドを開きます](site/media/quick.png)](http://o-server.main.jp/avese/#start)
+
+| 分布図 | ベクトル | 等高線 |
+|:---:|:---:|:---:|
+| ![分布図](site/media/g-dist.png) | ![ベクトル](site/media/g-vector.png) | ![等高線](site/media/g-contour.png) |
+| **俯瞰図** | **円筒座標** | **三角メッシュ** |
+| ![俯瞰図](site/media/g-land.png) | ![円筒座標](site/media/g-cyl.png) | ![三角メッシュ](site/media/g-mesh.png) |
+
+## はじめる
+
+1. [Releases](https://github.com/tetsuji16/avese/releases) から Windows (x64) 用の ZIP をダウンロードして展開し、`avese.exe` を起動します。インストールは要りません。ほかの OS では[ソースからビルド](#ビルド)してください。
+2. データファイルをウィンドウにドラッグ＆ドロップします。試すデータは[サンプルデータ](http://o-server.main.jp/avese/samples/samples.zip)にあります。
+3. ツールバーで表示を切り替えて「再描画」を押します。設定ダイアログでの変更は OK で反映されます。
+4. 「セーブ」で画像を保存します。複数のファイルをまとめてドロップすると「連続処理」が開き、BMP や AVI を作れます。
+
+データはテキストで、1 行が 1 データ点です。値は空白、タブ、コンマで区切ります。
+
+```
+# X  Y  Z  U  V
+0  0  1.5  0.2  0.1
+1  0  1.8  0.3  0.1
+```
+
+列の割り当て、穴の書き方、ラベル、設定の埋め込みなどは[使い方ガイド](http://o-server.main.jp/avese/#data)で説明しています。
 
 ## 機能
 
@@ -16,7 +42,7 @@ UI は OS の言語設定に合わせて日本語/英語を自動選択します
 
 設計は [docs/RENDERING.md](docs/RENDERING.md) にあります。原作との画素単位の一致は目標にしていません。 画面の文字には、利用可能な日本語 sans フォントを優先します。描画画像の文字は設定で選択できます。
 
-## 使い方
+## コマンドライン
 
 ```
 avese データ.txt
@@ -36,6 +62,8 @@ avese --avi 出力.avi --fps 10 [--frame-size 320x240] [--ini 設定.ini] [--set
 cargo build --release
 cargo test
 ```
+
+使い方ガイドは [site/](site/) にあります。
 
 ### 原作のサンプルを使う検証
 
@@ -78,3 +106,7 @@ python -I tools/export_forms.py
 - GUI で追加したラベルは INI に保存し、同じ設定を使うデータに表示します。データファイルには書きません。ラベルは Unicode を保持するため、INI 内で UTF-8 の 16 進表記にしています。
 - 描画は進捗ウィンドウから中止できます。一部の等高線・ベクトル処理では、中止まで時間がかかる場合があります。
 - クリップボードは Windows のみです。
+
+---
+
+<sub>avese は、AV似非 (AVS を簡素化したソフト) を Rust で書き直したものです。AVS および AV似非 の開発元とは関係ありません。</sub>
