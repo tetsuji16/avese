@@ -1197,6 +1197,45 @@ mod shortcut_tests {
     use super::*;
 
     #[test]
+    fn main_window_text_does_not_overlap() {
+        for language in [crate::i18n::Language::Japanese, crate::i18n::Language::English] {
+            let ctx = Context::default();
+            crate::fonts::install(&ctx);
+            let forms = Forms::load_for_language(language);
+            let store = Store::from_forms(&[&forms.form1, &forms.config, &forms.avi, &forms.input, &forms.about, &forms.mesh]);
+            let mut app = App::new(&ctx, forms, store, Layout::default(), vec![]);
+            let mut raw = egui::RawInput::default();
+            raw.screen_rect = Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(900.0, 200.0)));
+            let mut out = ctx.run_ui(raw, |ui| {
+                let mut acts = Vec::new();
+                app.menu_bar(ui, Rect::from_min_size(Pos2::ZERO, Vec2::new(900.0, MENU_H)), false);
+                app.control_bar(ui, Rect::from_min_size(Pos2::new(0.0, MENU_H), Vec2::new(900.0, BAR_H)), &mut acts, false);
+            });
+            let texts: Vec<_> = out.shapes.iter().filter_map(|shape| match &shape.shape {
+                // Toolbar icons are composed from layered private-use glyphs.
+                egui::Shape::Text(text) if !text.galley.job.text.trim().is_empty()
+                    && !text.galley.job.text.chars().any(|c| ('\u{e000}'..='\u{f8ff}').contains(&c)) => Some(text),
+                _ => None,
+            }).collect();
+            let mut overlaps = Vec::new();
+            for (i, a) in texts.iter().enumerate() {
+                let ar = a.galley.mesh_bounds.translate(a.pos.to_vec2());
+                for b in &texts[i + 1..] {
+                    let br = b.galley.mesh_bounds.translate(b.pos.to_vec2());
+                    let intersection = ar.intersect(br);
+                    if intersection.width() > 0.5 && intersection.height() > 0.5 {
+                        overlaps.push(format!("{:?} {:?} / {:?} {:?}", a.galley.job.text, ar, b.galley.job.text, br));
+                    }
+                }
+            }
+            let count = texts.len();
+            out.textures_delta.clear();
+            assert!(count >= app.menu.len(), "no main window text rendered");
+            assert!(overlaps.is_empty(), "overlapping main window text ({language:?}):\n{}", overlaps.join("\n"));
+        }
+    }
+
+    #[test]
     fn exit_saves_settings_and_labels_only_when_enabled() {
         let path = std::env::temp_dir().join(format!("avese-autosave-{}-{:?}.ini", std::process::id(), std::thread::current().id()));
         let forms = Forms::load();

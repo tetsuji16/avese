@@ -53,7 +53,11 @@ fn system_locale() -> Option<String> {
 
 /// Translate a Japanese source string. Unknown strings are preserved to avoid losing data.
 pub fn text(source: &str) -> String {
-    if !Language::detect().is_english() {
+    text_for(Language::detect(), source)
+}
+
+pub fn text_for(language: Language, source: &str) -> String {
+    if !language.is_english() {
         return source.to_owned();
     }
     if let Some(translated) = english(source) { return translated.to_owned(); }
@@ -151,11 +155,11 @@ pub fn english(source: &str) -> Option<&'static str> {
             "Change"
         }
         "ソート" => "Sort",
-        "↑" => "Move Up",
-        "↓" => "Move Down",
+        "↑" => "↑",
+        "↓" => "↓",
         "文字列" => "Text",
         "データ入力形式" => "Data Format",
-        "行のデータを読み飛ばす" => "Skip Data Rows",
+        "行のデータを読み飛ばす" => "rows from start",
         "アプリケーションを終了する時に設定を保存する" => {
             "Save settings on exit"
         }
@@ -221,7 +225,7 @@ pub fn english(source: &str) -> Option<&'static str> {
         "形状" => "Shape",
         "点の形状" => "Point Shape",
         "横幅" => "Width",
-        "長さ" => "Length",
+        "長さ" => "Len.",
         "横倍率" => "Horizontal Scale",
         "縦倍率" => "Vertical Scale",
         "上下左右の余白" => "Margin",
@@ -233,8 +237,8 @@ pub fn english(source: &str) -> Option<&'static str> {
         "グラデーションのタイプ" => "Gradient Type",
         "折り返す" => "Wrap Colors",
         "反転する" => "Reverse Colors",
-        "基準値を指定" => "Set Reference Value",
-        "等高線の数" => "Number of Contours",
+        "基準値を指定" => "Use Reference",
+        "等高線の数" => "Contours",
         "等高線の間隔" => "Contour Interval",
         "等高線の色" => "Contour Color",
         "矢印の色" => "Arrow Color",
@@ -243,14 +247,14 @@ pub fn english(source: &str) -> Option<&'static str> {
         "ベクトルの長さ" => "Vector Length",
         "矢印をつける" => "Show Arrowheads",
         "矢印の大きさを統一する" => "Use Fixed Arrowhead Size",
-        "線の幅" => "Line Width",
+        "線の幅" => "Width",
         "座標軸の矢印の大きさ" => "Axis Arrowhead Size",
         "軸の太さ" => "Axis Width",
         "フレームレート（fps）" => "Frame Rate (fps)",
         "ビットマップ （8bpp）" => "Bitmap (8 bpp)",
         "ウィンドウズメタファイル" => "Windows Metafile",
         "複数データロード" => "Load Multiple Data Files",
-        "先頭から" => "Skip from start",
+        "先頭から" => "Skip",
         "オフセット（X）" => "X Offset",
         "オフセット（Y）" => "Y Offset",
         "場所" => "Location",
@@ -394,8 +398,8 @@ pub fn english(source: &str) -> Option<&'static str> {
 #[allow(unreachable_patterns)]
 fn form_word(source: &str) -> Option<&'static str> {
     Some(match source {
-        "  横倍率" => " Horizontal Scale",
-        "  縦倍率" => " Vertical Scale",
+        "  横倍率" => " H scale",
+        "  縦倍率" => " V scale",
         "Xの最大値" => "X Maximum",
         "Xの最小値" => "X Minimum",
         "Yの最大値" => "Y Maximum",
@@ -503,7 +507,7 @@ fn form_word(source: &str) -> Option<&'static str> {
         "終了時に自動保存する" => "Save automatically on exit",
         "背景色の変更" => "Change Background Color",
         "自動" => "Automatic",
-        "行のデータを読み飛ばす" => "Skip Data Rows",
+        "行のデータを読み飛ばす" => "rows from start",
         "表示（&V）" => "Display(&V)",
         "角度をデフォルトに戻す" => "Reset Angles to Defaults",
         "設定に名前を付けて保存（&A）..." => "Save Settings As(&A)...",
@@ -518,7 +522,7 @@ fn form_word(source: &str) -> Option<&'static str> {
         "軸目盛\tterminal\t6\t0" => "Axis Ticks\tterminal\t6\t0",
         "軸目盛の数字を付ける" => "Show Axis Tick Labels",
         "追加(&A)" => "Add(&A)",
-        "長さ" => "Length",
+        "長さ" => "Len.",
         "間引く" => "Decimate",
         "面で表示" => "Show Surface",
         "ｒ" => "r",

@@ -1287,6 +1287,89 @@ mod modal_tests {
     }
 
     #[test]
+    fn settings_page_text_does_not_overlap() {
+        for language in [crate::i18n::Language::Japanese, crate::i18n::Language::English] {
+            let forms = crate::forms::Forms::load_for_language(language);
+            let io_caption = forms.config.find("TSIO").unwrap().str("Caption");
+            assert_eq!(io_caption, if language.is_english() { "I/O" } else { "入出力" });
+            let pc = forms.config.find("TPCconfig").unwrap();
+            let pages: Vec<_> = pc.kids.iter().filter(|n| n.class == "TTabSheet").collect();
+            let mut overlaps = Vec::new();
+            for (index, page) in pages.iter().enumerate() {
+                let ctx = egui::Context::default();
+                crate::fonts::install(&ctx);
+                let mut store = Store::from_forms(&[&forms.form1, &forms.config, &forms.avi, &forms.input, &forms.about, &forms.mesh]);
+                store.set_item_index("TPCconfig", index as i32);
+                let assets = Assets::default();
+                let mut raw = egui::RawInput::default();
+                raw.screen_rect = Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(700.0, 500.0)));
+                let mut out = ctx.run_ui(raw, |ui| {
+                    let mut renderer = Renderer::new(ui, &mut store, &assets);
+                    renderer.draw_node(pc, Pos2::ZERO, &Fnt::form_default(), &mut vec![]);
+                    renderer.finish();
+                });
+                let texts: Vec<_> = out.shapes.iter().filter_map(|shape| match &shape.shape {
+                    egui::Shape::Text(text) if !text.galley.job.text.trim().is_empty() => Some(text),
+                    _ => None,
+                }).collect();
+                let text_count = texts.len();
+                for (i, a) in texts.iter().enumerate() {
+                    let ar = a.galley.mesh_bounds.translate(a.pos.to_vec2());
+                    for b in &texts[i + 1..] {
+                        let br = b.galley.mesh_bounds.translate(b.pos.to_vec2());
+                        let intersection = ar.intersect(br);
+                        if intersection.width() > 0.5 && intersection.height() > 0.5 {
+                            overlaps.push(format!("{}: {:?} {:?} / {:?} {:?}", page.name, a.galley.job.text, ar, b.galley.job.text, br));
+                        }
+                    }
+                }
+                out.textures_delta.clear();
+                assert!(text_count >= pages.len(), "no text rendered on {}", page.name);
+            }
+            assert!(overlaps.is_empty(), "overlapping settings text ({language:?}):\n{}", overlaps.join("\n"));
+        }
+    }
+
+    #[test]
+    fn other_dialog_text_does_not_overlap() {
+        for language in [crate::i18n::Language::Japanese, crate::i18n::Language::English] {
+            let forms = crate::forms::Forms::load_for_language(language);
+            for form in [&forms.avi, &forms.input, &forms.about, &forms.mesh] {
+                let ctx = egui::Context::default();
+                crate::fonts::install(&ctx);
+                let mut store = Store::from_forms(&[&forms.form1, &forms.config, &forms.avi, &forms.input, &forms.about, &forms.mesh]);
+                let assets = Assets::default();
+                let mut raw = egui::RawInput::default();
+                raw.screen_rect = Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(700.0, 600.0)));
+                let mut out = ctx.run_ui(raw, |ui| {
+                    let mut renderer = Renderer::new(ui, &mut store, &assets);
+                    renderer.draw_children(form, Pos2::ZERO, &Fnt::form_default().with(form));
+                    renderer.finish();
+                });
+                let texts: Vec<_> = out.shapes.iter().filter_map(|shape| match &shape.shape {
+                    egui::Shape::Text(text) if !text.galley.job.text.trim().is_empty() => Some(text),
+                    _ => None,
+                }).collect();
+                let text_count = texts.len();
+                let mut overlaps = Vec::new();
+                for (i, a) in texts.iter().enumerate() {
+                    let ar = a.galley.mesh_bounds.translate(a.pos.to_vec2());
+                    for b in &texts[i + 1..] {
+                        let br = b.galley.mesh_bounds.translate(b.pos.to_vec2());
+                        let intersection = ar.intersect(br);
+                        if intersection.width() > 0.5 && intersection.height() > 0.5 {
+                            overlaps.push(format!("{:?} {:?} / {:?} {:?}", a.galley.job.text, ar, b.galley.job.text, br));
+                        }
+                    }
+                }
+                out.textures_delta.clear();
+                assert!(text_count > 0, "no text rendered on {}", form.name);
+                assert!(overlaps.is_empty(), "overlapping {} text ({language:?}):\n{}", form.name, overlaps.join("\n"));
+            }
+        }
+    }
+
+    #[test]
     fn page_switch_focuses_the_first_tab_stop_of_the_shown_page() {
         let ctx = egui::Context::default();
         let mut store = Store::default();
