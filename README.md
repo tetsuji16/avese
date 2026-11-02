@@ -1,25 +1,27 @@
 # avese
 
-avese は、数値計算の結果などの 3 次元データを、分布図、ベクトル図、等高線図、俯瞰図にするソフトです。テキストファイルをウィンドウに落とすだけで図になります。
+English | [日本語](README.ja.md)
 
-**[使い方ガイド（動画つき）](http://o-server.main.jp/avese/)** ・ **[ダウンロード](https://github.com/tetsuji16/avese/releases)**
+avese turns 3D data from numerical simulations and measurements into distribution plots, vector plots, contour plots and bird's-eye views. Drop a text file onto the window and the plot appears.
 
-[![avese の画面。ベクトルと等高線を重ねた分布図。画像を押すと使い方ガイドを開きます](site/media/quick.png)](http://o-server.main.jp/avese/#start)
+**[User guide with videos](http://o-server.main.jp/avese/)** ・ **[Download](https://github.com/tetsuji16/avese/releases/latest)**
 
-| 分布図 | ベクトル | 等高線 |
+[![avese showing vectors over a distribution plot. Click to open the user guide](site/media/quick.png)](http://o-server.main.jp/avese/#start)
+
+| Distribution | Vectors | Contours |
 |:---:|:---:|:---:|
-| ![分布図](site/media/g-dist.png) | ![ベクトル](site/media/g-vector.png) | ![等高線](site/media/g-contour.png) |
-| **俯瞰図** | **円筒座標** | **三角メッシュ** |
-| ![俯瞰図](site/media/g-land.png) | ![円筒座標](site/media/g-cyl.png) | ![三角メッシュ](site/media/g-mesh.png) |
+| ![Distribution](site/media/g-dist.png) | ![Vectors](site/media/g-vector.png) | ![Contours](site/media/g-contour.png) |
+| **Bird's-eye view** | **Cylindrical** | **Triangular mesh** |
+| ![Bird's-eye view](site/media/g-land.png) | ![Cylindrical](site/media/g-cyl.png) | ![Triangular mesh](site/media/g-mesh.png) |
 
-## はじめる
+## Get started
 
-1. [Releases](https://github.com/tetsuji16/avese/releases) から Windows (x64) 用の ZIP をダウンロードして展開し、`avese.exe` を起動します。インストールは要りません。ほかの OS では[ソースからビルド](#ビルド)してください。
-2. データファイルをウィンドウにドラッグ＆ドロップします。試すデータは[サンプルデータ](http://o-server.main.jp/avese/samples/samples.zip)にあります。
-3. ツールバーで表示を切り替えて「再描画」を押します。設定ダイアログでの変更は OK で反映されます。
-4. 「セーブ」で画像を保存します。複数のファイルをまとめてドロップすると「連続処理」が開き、BMP や AVI を作れます。
+1. Download the Windows (x64) ZIP from the [latest release](https://github.com/tetsuji16/avese/releases/latest), extract it and run `avese.exe`. Nothing needs to be installed. On other OSes, [build from source](#build).
+2. Drag and drop a data file onto the window. [Sample data](http://o-server.main.jp/avese/samples/samples.zip) is available to try.
+3. Switch the plot in the toolbar and press Redraw. Changes in the settings dialog take effect with OK.
+4. Save the image with Save. Drop several files together to open Batch Processing, which makes BMP files or an AVI.
 
-データはテキストで、1 行が 1 データ点です。値は空白、タブ、コンマで区切ります。
+Data is text, one data point per line. Separate values with spaces, tabs or commas.
 
 ```
 # X  Y  Z  U  V
@@ -27,86 +29,53 @@ avese は、数値計算の結果などの 3 次元データを、分布図、�
 1  0  1.8  0.3  0.1
 ```
 
-列の割り当て、穴の書き方、ラベル、設定の埋め込みなどは[使い方ガイド](http://o-server.main.jp/avese/#data)で説明しています。
+Column assignment, holes, labels and embedded settings are explained in the [user guide](http://o-server.main.jp/avese/#data).
 
-## 機能
+## Features
 
-- **データ**: 格子、三角メッシュ（Delaunay 自動生成）、パネル。設定の埋め込み、`IncludeINI`、`Labels`、Shift-JIS と UTF-8。
-- **平面図**: 分布図（線形、3 次スプライン）、散布図、パネル、ベクトル、等高線。カーテシアン座標と円筒座標。
-- **俯瞰図**: 面と格子線。視点の指定。
-- **装飾**: 座標軸、グリッド、目盛、データ点、凡例、ラベル、9 種類のカラースケール（既定は Google の Turbo）。
-- **出力**: BMP（8bit、RLE8）、PNG、EMF、WMF、無圧縮 8bit AVI、クリップボード（DIB、拡張メタファイル）。連続処理での BMP と AVI の作成。
-- **GUI**: メニュー、ツールバー、設定ダイアログ、連続処理、ラベルの追加、進捗表示、ステータスバーの座標表示、ドラッグ＆ドロップ、INI の読み書き、内蔵ヘルプ。
+- **Data**: grids, triangular meshes (automatic Delaunay), panels. Embedded settings, `IncludeINI`, `Labels`, Shift-JIS and UTF-8.
+- **Plan views**: distribution (linear, cubic spline), scatter, panel, vectors, contours. Cartesian and cylindrical coordinates.
+- **Bird's-eye view**: surface and grid lines, adjustable viewpoint.
+- **Decoration**: axes, grid, ticks, data points, legend, labels, nine color scales (the default is Google's Turbo).
+- **Output**: BMP (8-bit, RLE8), PNG, EMF, WMF, uncompressed 8-bit AVI, clipboard (DIB, enhanced metafile). Batch creation of BMP and AVI.
+- **GUI**: menus, toolbars, settings dialog, batch processing, label editing, progress display, coordinates in the status bar, drag and drop, INI load and save, built-in help.
 
-UI は OS の言語設定に合わせて日本語/英語を自動選択します。Windows はユーザーの地域設定、macOS は AppleLocale、Linux/Unix は `LC_ALL` / `LC_MESSAGES` / `LANG` を参照します。英語以外は日本語で表示します。
+The interface switches between Japanese and English automatically. Windows uses the user's regional setting, macOS uses AppleLocale, and Linux and Unix use `LC_ALL`, `LC_MESSAGES` and `LANG`. Anything that is not English is shown in Japanese.
 
-設計は [docs/RENDERING.md](docs/RENDERING.md) にあります。原作との画素単位の一致は目標にしていません。 画面の文字には、利用可能な日本語 sans フォントを優先します。描画画像の文字は設定で選択できます。
+The design is described in [docs/RENDERING.md](docs/RENDERING.md) (Japanese). Pixel-exact agreement with the original is not a goal.
 
-## コマンドライン
+## Command line
 
 ```
-avese データ.txt
-avese --render データ.txt 出力.png [--rle] [--ini 設定.ini] [--set キー=値]...
-avese --avi 出力.avi --fps 10 [--frame-size 320x240] [--ini 設定.ini] [--set キー=値]... データ1.txt データ2.txt ...
+avese data.txt
+avese --render data.txt out.png [--rle] [--ini settings.ini] [--set key=value]...
+avese --avi out.avi --fps 10 [--frame-size 320x240] [--ini settings.ini] [--set key=value]... data1.txt data2.txt ...
 ```
 
-`--render` の出力形式は拡張子（`.png`、`.bmp`、`.emf`、`.wmf`）で決まります。
+The format of `--render` output follows the extension (`.png`, `.bmp`, `.emf`, `.wmf`).
 
-読み込んだ点データは「再描画」→「三角メッシュを生成」で三角メッシュに変換できます。元データに `Mesh AutoCreate` を指定する方法も利用できます。
+Loaded point data can be turned into a triangular mesh with Redraw → Generate triangular mesh, or by writing `Mesh AutoCreate` in the data.
 
-ラベルは「設定」→「詳細設定」→「ラベル」の「追加」から入力できます。GUI で追加したラベルは設定とともに保存されます。原作のヘルプではラベルをデータファイルに直接記述する方式で、この GUI 操作は本再実装の拡張です。
-
-## ビルド
+## Build
 
 ```
 cargo build --release
 cargo test
 ```
 
-使い方ガイドは [site/](site/) にあります。
+The user guide lives in [site/](site/).
 
-### 原作のサンプルを使う検証
+Original samples are not part of this repository. See [README.ja.md](README.ja.md) for how to run the tests that compare against them, for extracting assets from a local copy of the original, and for the list of known differences.
 
-原作のサンプルと ini を手元に置くと、パーサ・補間・描画・INI の往復を原作のデータで確認できます。`AVESE_ORIGINAL_DIR` に `sample1.txt`〜`sample6.txt` と `sample4.ini` のあるフォルダを指定してください（既定は `original avese`）。
+## License
 
-```
-AVESE_ORIGINAL_DIR=/path/to/samples cargo test -- --ignored
-```
+[MIT License](LICENSE).
 
-このフォルダは著作物のためリポジトリに含めません。指定しない場合、これらのテストは `ignored` のまま飛ばされます。
-
-## アセットの取り出し（任意）
-
-アプリのアイコンは同梱されているため、原作の exe は実行に不要です。原作の資料を調べる場合は、手元の exe から次のコマンドで `assets/local/`（git 管理外）に画像を取り出せます。
-
-```
-python -I tools/extract_assets.py
-python -I tools/export_forms.py
-```
-
-ツールバーの一般操作には Phosphor Icons、グラフ操作には AI で生成した独自画像や描画した記号を使い、2D・3D は文字で表示します。アプリのロゴには生成した独自画像を使います。`assets/forms/` のフォーム JSON は、原作の DFM から取り出したラベルや座標などのレイアウトで、画像などのバイナリは含みません。
-
-## ライセンス
-
-[MIT License](LICENSE) です。
-
-- 原作の資産は MIT の対象外です。原作の exe、ヘルプ、サンプル、取り出した画像は、このリポジトリに含めないでください（`.gitignore` 済み）。
-- MS ゴシック等のフォントは同梱しません。実行時にインストール済みフォントを検索し、日本語フォントを利用します。
-- 一般操作アイコンは [Phosphor Icons](https://phosphoricons.com/)（MIT）を使っています。
-- 等高線の追跡は [contour](https://crates.io/crates/contour)、Turbo の色は [colorous](https://crates.io/crates/colorous) を使っています。
-
-## 既知の差異
-
-- 描画は画素単位で原作と一致しません。文字の字形も GDI と異なります。
-- `pixels_per_point` は OS の値のままで、倍率の高い画面では原作と物理サイズが異なります。
-- 連続処理中は、Windows では進捗画面を表示してからメインウィンドウを隠します。他 OS ではメインウィンドウを表示したままです。
-- 設定ダイアログの `TBeta`/`TBphi` と `SEeta`/`SEphi` は 1 対 1 で連動します。DFM の範囲（-45～45、0～85）・ヒント・既定値（30）が一致するため、変換式は恒等としています。角度プレビュー（PBangle）は原作の実測に合わせた斜投影で、前面の大きさは変わらず、奥の面が η で横に、φ で縦にずれます（φ=60、70 で原作と 1 画素差）。
-- ダイアログは OS ウィンドウで、Windows ではオーナー設定とメイン無効化でモーダルにしています。他 OS ではメインの入力を無視する方式で、色・フォントの選択にはアプリ内の画面を使います。
-- 太字と斜体は、そのフォントに実書体があれば実書体を使い、ないものだけを二重打ちと傾きで合成します（詳しくは [docs/TEXT_RENDERING.md](docs/TEXT_RENDERING.md)）。ヒンティングはしないので、字形は GDI と完全には一致しません。
-- GUI で追加したラベルは INI に保存し、同じ設定を使うデータに表示します。データファイルには書きません。ラベルは Unicode を保持するため、INI 内で UTF-8 の 16 進表記にしています。
-- 描画は進捗ウィンドウから中止できます。一部の等高線・ベクトル処理では、中止まで時間がかかる場合があります。
-- クリップボードは Windows のみです。
+- Assets of the original software are not covered by the MIT license. Do not add the original exe, help, samples or extracted images to this repository (they are in `.gitignore`).
+- Fonts such as MS Gothic are not bundled. avese searches the installed fonts at run time and uses a Japanese font.
+- General-purpose toolbar icons use [Phosphor Icons](https://phosphoricons.com/) (MIT).
+- Contour tracing uses the [contour](https://crates.io/crates/contour) crate, and the Turbo colors use [colorous](https://crates.io/crates/colorous).
 
 ---
 
-<sub>avese は、AV似非 (AVS を簡素化したソフト) を Rust で書き直したものです。AVS および AV似非 の開発元とは関係ありません。</sub>
+<sub>avese is a Rust rewrite of AV似非 (a simplified version of AVS). It is not affiliated with the developers of AVS or AV似非.</sub>

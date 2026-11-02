@@ -1,14 +1,16 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>avese 使い方ガイド</title>
-<meta name="description" content="avese は、3 次元データを分布図、ベクトル図、等高線図、俯瞰図にする Rust 製の可視化ソフトです。使い方を動画つきで説明します。">
-<meta property="og:title" content="avese 使い方ガイド">
-<meta property="og:description" content="3 次元データを分布図、ベクトル図、等高線図、俯瞰図にする可視化ソフトの使い方。">
+<title>avese User Guide</title>
+<meta name="description" content="avese is a Rust visualizer that turns 3D data into distribution plots, vector plots, contour plots and bird's-eye views. This guide explains how to use it, with videos.">
+<meta property="og:title" content="avese User Guide">
+<meta property="og:description" content="How to use avese, a visualizer that turns 3D data into distribution, vector, contour and bird's-eye plots.">
 <meta property="og:image" content="http://o-server.main.jp/avese/media/quick.png">
 <link rel="icon" href="media/logo.png">
+<link rel="alternate" hreflang="en" href="http://o-server.main.jp/avese/">
+<link rel="alternate" hreflang="ja" href="http://o-server.main.jp/avese/ja/">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -16,85 +18,87 @@
 <header class="top">
   <div class="top-in">
     <a class="brand" href="#"><img src="media/logo.png" alt=""><span>avese</span></a>
-    <nav aria-label="主なページ内リンク">
-      <a href="#start">はじめる</a>
-      <a href="#plots">図の種類</a>
-      <a href="#data">データの書き方</a>
-      <a href="#settings">設定</a>
-      <a href="#output">出力</a>
-      <a href="#cli">コマンドライン</a>
-      <a href="#download">ダウンロード</a>
+    <nav aria-label="On this page">
+      <a href="#start">Get started</a>
+      <a href="#plots">Plot types</a>
+      <a href="#data">Data format</a>
+      <a href="#settings">Settings</a>
+      <a href="#output">Output</a>
+      <a href="#cli">Command line</a>
+      <a href="#download">Download</a>
     </nav>
+    <a class="lang" href="ja/" hreflang="ja" lang="ja">日本語</a>
   </div>
 </header>
 
 <div class="hero">
   <div class="hero-in">
     <div>
-      <h1>数値データを、<br>色と線で見る。</h1>
-      <p class="lead">avese は、数値計算の結果などの 3 次元データを、分布図、ベクトル図、等高線図、俯瞰図にするソフトです。テキストファイルをウィンドウに落とすだけで図になります。</p>
-      <p class="facts">無料・オープンソース (MIT) ／ インストール不要 ／ Windows 版を配布、他の OS はソースからビルド</p>
+      <h1>See your numbers<br>in color and lines.</h1>
+      <p class="lead">avese turns 3D data from numerical simulations and measurements into distribution plots, vector plots, contour plots and bird's-eye views. Drop a text file onto the window and the plot appears.</p>
+      <p class="facts">Free and open source (MIT) / No installation / Windows build provided, other OSes build from source</p>
       <div class="btns">
-        <a class="btn" href="#download">ダウンロード</a>
-        <a class="btn ghost" href="#start">使い方を見る</a>
+        <a class="btn" href="#download">Download</a>
+        <a class="btn ghost" href="#start">See how it works</a>
       </div>
     </div>
     <figure>
-      <video src="media/wave.webm" poster="media/wave.png" width="580" height="448" autoplay loop muted playsinline aria-label="2 つの波源の干渉を描いた分布図のアニメーション"></video>
+      <video src="media/wave.webm" poster="media/wave.png" width="580" height="448" autoplay loop muted playsinline aria-label="Animated distribution plot of two interfering wave sources"></video>
     </figure>
   </div>
 </div>
 
-<div class="crumb"><a href="/">ホーム</a> &gt; avese 使い方ガイド</div>
+<div class="crumb"><a href="/">Home</a> &gt; avese User Guide</div>
 
 <div class="cards-wrap">
   <div class="cards">
-    <a class="card" href="#start"><b>はじめる</b><span>起動してデータを読み込み、図を描くまで</span></a>
-    <a class="card" href="#plots"><b>図の種類</b><span>分布図からベクトル、俯瞰図、円筒座標まで</span></a>
-    <a class="card" href="#data"><b>データの書き方</b><span>列の並び、穴、ラベル、設定の埋め込み</span></a>
-    <a class="card" href="#settings"><b>設定を変える</b><span>色、範囲、俯瞰の角度などの調整</span></a>
-    <a class="card" href="#output"><b>画像と動画の出力</b><span>PNG、BMP、EMF、WMF、連続処理で AVI</span></a>
-    <a class="card" href="#cli"><b>コマンドライン</b><span>ウィンドウを開かずに画像を作る</span></a>
+    <a class="card" href="#start"><b>Get started</b><span>Launch, load data and draw a plot</span></a>
+    <a class="card" href="#plots"><b>Plot types</b><span>From distribution and vectors to bird's-eye and cylindrical</span></a>
+    <a class="card" href="#data"><b>Data format</b><span>Columns, holes, labels and embedded settings</span></a>
+    <a class="card" href="#settings"><b>Change settings</b><span>Colors, ranges, view angles and more</span></a>
+    <a class="card" href="#output"><b>Images and video</b><span>PNG, BMP, EMF, WMF, and AVI from batch processing</span></a>
+    <a class="card" href="#cli"><b>Command line</b><span>Make images without opening a window</span></a>
   </div>
 </div>
 
 <div class="layout">
-  <aside class="toc" aria-label="目次">
-    <b>目次</b>
-    <a href="#start">はじめる</a>
-    <a href="#screen">画面の見かた</a>
-    <a href="#plots">図の種類</a>
-    <a href="#data">データの書き方</a>
-    <a href="#settings">設定を変える</a>
-    <a href="#bird">俯瞰図</a>
-    <a href="#output">保存と出力</a>
-    <a href="#batch">連続処理と動画</a>
-    <a href="#cli">コマンドライン</a>
-    <a href="#download">ダウンロード</a>
-    <a href="#about">このソフトについて</a>
+  <aside class="toc" aria-label="Contents">
+    <b>CONTENTS</b>
+    <a href="#start">Get started</a>
+    <a href="#screen">The main window</a>
+    <a href="#plots">Plot types</a>
+    <a href="#data">Data format</a>
+    <a href="#settings">Change settings</a>
+    <a href="#bird">Bird's-eye view</a>
+    <a href="#output">Saving and output</a>
+    <a href="#batch">Batch and video</a>
+    <a href="#cli">Command line</a>
+    <a href="#download">Download</a>
+    <a href="#about">About</a>
   </aside>
 
   <main>
     <section id="start">
-      <h2>はじめる</h2>
-      <p>インストールは要りません。次の手順で、最初の図が描けます。</p>
+      <h2>Get started</h2>
+      <p>There is nothing to install. Follow these steps to draw your first plot.</p>
       <ol class="steps">
-        <li><a href="#download">ダウンロード</a>した ZIP を展開し、<code>avese.exe</code> を起動します。</li>
-        <li>データファイルをウィンドウにドラッグ＆ドロップします。ツールバーの左端のボタンからも選べます。手元にデータがなければ、<a href="samples/samples.zip">サンプルデータ</a>の <code>flow.txt</code> を使ってください。</li>
-        <li>ツールバーで「ベクトル」や「等高線」を切り替えて、「再描画」を押します。ボタンの名前は、マウスを乗せると出ます。</li>
-        <li>図の上でマウスを動かすと、その位置の X、Y、Z の値がステータスバーに出ます。</li>
+        <li><a href="#download">Download</a> the ZIP, extract it and run <code>avese.exe</code>.</li>
+        <li>Drag and drop a data file onto the window, or use the leftmost toolbar button. If you have no data yet, use <code>flow.txt</code> from the <a href="samples/samples.zip">sample data</a>.</li>
+        <li>Switch on Vectors or Contours in the toolbar and press Redraw. Hover over a button to see its name.</li>
+        <li>Move the mouse over the plot to read X, Y and Z at that position in the status bar.</li>
       </ol>
       <figure class="shot">
         <video src="media/quick.webm" poster="media/quick.png" width="786" height="683" controls muted playsinline preload="none"></video>
-        <figcaption>動画: ベクトルと等高線を重ねて、マウスで値を読む (14 秒)</figcaption>
+        <figcaption>Video: overlay vectors and contours, then read values with the mouse (14 s)</figcaption>
       </figure>
-      <p class="note">ツールバーの切り替えは、押しただけでは図に反映されません。最後に「再描画」を押します。</p>
+      <p class="note">Toolbar toggles do not change the plot by themselves. Press Redraw at the end.</p>
+      <p class="note">The app and the screenshots on this page show the Japanese interface. avese picks Japanese or English from your OS language, so on an English system the same buttons are labeled in English.</p>
     </section>
 
     <section id="screen">
-      <h2>画面の見かた</h2>
+      <h2>The main window</h2>
       <div class="pinned">
-        <img src="media/quick.png" width="786" height="683" alt="avese のメインウィンドウ。上にメニューと 2 段のツールバー、中央に図、下にステータスバーがある" loading="lazy">
+        <img src="media/quick.png" width="786" height="683" alt="The avese main window: a menu and two toolbar rows on top, the plot in the middle and a status bar at the bottom" loading="lazy">
         <span class="box" style="left:2.1%;top:7.7%;width:11.1%;height:4.1%"></span>
         <span class="box" style="left:15%;top:7.7%;width:37.4%;height:4.1%"></span>
         <span class="box" style="left:54.7%;top:7.7%;width:13.7%;height:4.1%"></span>
@@ -114,56 +118,56 @@
       </div>
       <div class="table-wrap">
         <table>
-          <tr><th>番号</th><th>部分</th><th>ボタン</th></tr>
-          <tr><td><span class="key">1</span></td><td>ファイル</td><td class="wrap">データを開く、画像を保存、クリップボードにコピー</td></tr>
-          <tr><td><span class="key">2</span></td><td>図の大きさ</td><td class="wrap">幅か高さを基準に選んでピクセル数を指定。縦倍率と横倍率は別に指定できます</td></tr>
-          <tr><td><span class="key">3</span></td><td>操作</td><td class="wrap">再描画、再読込、設定、ヘルプ</td></tr>
-          <tr><td><span class="key">4</span></td><td>2D / 3D</td><td class="wrap">平面図と俯瞰図の切り替え</td></tr>
-          <tr><td><span class="key">5</span></td><td>座標系</td><td class="wrap">XY (直交座標) と 円筒座標</td></tr>
-          <tr><td><span class="key">6</span></td><td>図の種類</td><td class="wrap">分布図、散布図、パネル</td></tr>
-          <tr><td><span class="key">7</span></td><td>重ねるもの</td><td class="wrap">ベクトル、等高線、座標軸、グリッド、データ点</td></tr>
-          <tr><td><span class="key">8</span></td><td>ステータスバー</td><td class="wrap">マウスの位置の X、Y、Z。円筒座標では θ、r。俯瞰図では出ません</td></tr>
+          <tr><th>No.</th><th>Area</th><th>Buttons</th></tr>
+          <tr><td><span class="key">1</span></td><td>File</td><td class="wrap">Open data, save the image, copy to the clipboard</td></tr>
+          <tr><td><span class="key">2</span></td><td>Plot size</td><td class="wrap">Pick width or height as the reference and set the pixel count. Vertical and horizontal scales can be set separately</td></tr>
+          <tr><td><span class="key">3</span></td><td>Actions</td><td class="wrap">Redraw, reload, settings, help</td></tr>
+          <tr><td><span class="key">4</span></td><td>2D / 3D</td><td class="wrap">Switch between the plan view and the bird's-eye view</td></tr>
+          <tr><td><span class="key">5</span></td><td>Coordinates</td><td class="wrap">XY (Cartesian) or cylindrical</td></tr>
+          <tr><td><span class="key">6</span></td><td>Plot type</td><td class="wrap">Distribution, scatter, panel</td></tr>
+          <tr><td><span class="key">7</span></td><td>Overlays</td><td class="wrap">Vectors, contours, axes, grid, data points</td></tr>
+          <tr><td><span class="key">8</span></td><td>Status bar</td><td class="wrap">X, Y and Z under the mouse (θ and r in cylindrical coordinates). Not shown in the bird's-eye view</td></tr>
         </table>
       </div>
     </section>
 
     <section id="plots">
-      <h2>図の種類</h2>
-      <p>どの図も、ツールバーか<a href="#settings">設定</a>で切り替えられます。下の図はサンプルデータから avese で作ったもので、<code>--set</code> の値は<a href="#cli">コマンドライン</a>で同じ図を作るときの指定です。</p>
+      <h2>Plot types</h2>
+      <p>Every plot can be switched on from the toolbar or the <a href="#settings">settings</a>. The images below were made from the sample data with avese. The <code>--set</code> values are what you pass on the <a href="#cli">command line</a> to get the same plot.</p>
       <div class="gallery">
-        <figure><img src="media/g-dist.png" alt="円柱まわりの圧力の分布図" loading="lazy"><figcaption><b>分布図</b>Z の値を色で塗ります。Z に <code>-</code> を書いた点は白く抜けます。</figcaption></figure>
-        <figure><img src="media/g-vector.png" alt="分布図に速度ベクトルを重ねた図" loading="lazy"><figcaption><b>ベクトル</b>U、V 列を矢印で描きます。<code>CBvector=1</code>。間引きは <code>CBskipx=1 EDstepx=4</code> など。</figcaption></figure>
-        <figure><img src="media/g-contour.png" alt="等高線だけの図" loading="lazy"><figcaption><b>等高線</b><code>CBtoko=1 SEtoko=16</code> で 16 本。<code>CBgraph=0</code> で分布図を消せます。</figcaption></figure>
-        <figure><img src="media/g-axes.png" alt="座標軸とグリッドと等高線を重ねた図" loading="lazy"><figcaption><b>座標軸とグリッド</b><code>CBaxis=1 CBaxistitle=1 CBgrid=1</code>。軸名は <code>EDXtitle</code> などで指定します。</figcaption></figure>
-        <figure><img src="media/g-land.png" alt="山と谷のある面の俯瞰図" loading="lazy"><figcaption><b>俯瞰図</b><code>CBland=1 CBsurface=1</code> で面として描きます。高さは <code>SElandheight</code>。</figcaption></figure>
-        <figure><img src="media/g-cyl.png" alt="円筒座標の分布図とベクトル" loading="lazy"><figcaption><b>円筒座標</b><code>RBcartesian=0 RBcylindrical=1</code>。X、Y 列を θ (度)、r として読みます。</figcaption></figure>
-        <figure><img src="media/g-mesh.png" alt="不規則な点から作った三角メッシュの分布図" loading="lazy"><figcaption><b>三角メッシュ</b>格子に乗らない点も、データに <code>Mesh AutoCreate</code> と書けば面にできます。</figcaption></figure>
-        <figure><img src="media/g-scat.png" alt="計測点を色付きの点で描いた散布図" loading="lazy"><figcaption><b>散布図</b>点をそのまま色で描きます。<code>CBscatter=1 SEdotsize=5</code>。</figcaption></figure>
-        <figure><img src="media/g-panel.png" alt="マス目状に塗り分けたパネル図" loading="lazy"><figcaption><b>パネル</b>Z だけを格子状に並べたファイルを、マス目で塗ります。<code>CBpanel=1</code>。</figcaption></figure>
+        <figure><img src="media/g-dist.png" alt="Distribution plot of pressure around a cylinder" loading="lazy"><figcaption><b>Distribution</b>Colors the plot by the Z value. A point with <code>-</code> in the Z column is left blank (white).</figcaption></figure>
+        <figure><img src="media/g-vector.png" alt="Velocity vectors over a distribution plot" loading="lazy"><figcaption><b>Vectors</b>Draws the U and V columns as arrows. <code>CBvector=1</code>. Thin them out with <code>CBskipx=1 EDstepx=4</code> and so on.</figcaption></figure>
+        <figure><img src="media/g-contour.png" alt="A contour-only plot" loading="lazy"><figcaption><b>Contours</b>16 lines with <code>CBtoko=1 SEtoko=16</code>. Hide the distribution with <code>CBgraph=0</code>.</figcaption></figure>
+        <figure><img src="media/g-axes.png" alt="Axes, grid and contours drawn together" loading="lazy"><figcaption><b>Axes and grid</b><code>CBaxis=1 CBaxistitle=1 CBgrid=1</code>. Set axis titles with <code>EDXtitle</code> and friends.</figcaption></figure>
+        <figure><img src="media/g-land.png" alt="Bird's-eye view of a surface with a peak and a valley" loading="lazy"><figcaption><b>Bird's-eye view</b>Draw it as a surface with <code>CBland=1 CBsurface=1</code>. Height is <code>SElandheight</code>.</figcaption></figure>
+        <figure><img src="media/g-cyl.png" alt="Distribution plot and vectors in cylindrical coordinates" loading="lazy"><figcaption><b>Cylindrical</b><code>RBcartesian=0 RBcylindrical=1</code>. The X and Y columns are read as θ (degrees) and r.</figcaption></figure>
+        <figure><img src="media/g-mesh.png" alt="Distribution plot on a triangular mesh built from irregular points" loading="lazy"><figcaption><b>Triangular mesh</b>Points that are not on a grid become a surface when the data contains <code>Mesh AutoCreate</code>.</figcaption></figure>
+        <figure><img src="media/g-scat.png" alt="Scatter plot of measurement points as colored dots" loading="lazy"><figcaption><b>Scatter</b>Draws each point as a colored dot. <code>CBscatter=1 SEdotsize=5</code>.</figcaption></figure>
+        <figure><img src="media/g-panel.png" alt="Panel plot colored cell by cell" loading="lazy"><figcaption><b>Panel</b>Colors a file of Z values laid out as a grid, cell by cell. <code>CBpanel=1</code>.</figcaption></figure>
       </div>
     </section>
 
     <section id="data">
-      <h2>データの書き方</h2>
-      <p>データはテキストファイルです。文字コードは Shift-JIS と UTF-8 のどちらも読めます。1 行が 1 データ点で、値は空白、タブ、コンマで区切ります。</p>
+      <h2>Data format</h2>
+      <p>Data is a text file. Both Shift-JIS and UTF-8 are read. Each line is one data point, and values are separated by spaces, tabs or commas.</p>
       <pre><code># X  Y  Z  U  V
 0  0  1.5  0.2  0.1
 1  0  1.8  0.3  0.1
 2  0  -    0    0</code></pre>
-      <p>どの列を X、Y、Z、U、V として読むかは、設定の「入出力」で変えられます。ほかに次の書き方が使えます。</p>
+      <p>Which column is read as X, Y, Z, U and V can be changed in the I/O tab of the settings. These forms are also available.</p>
       <div class="table-wrap">
         <table>
-          <tr><th>書き方</th><th>意味</th></tr>
-          <tr><td><code>-</code> (Z の位置)</td><td class="wrap">その点の周囲を描かず、白く抜きます</td></tr>
-          <tr><td>空行、記号や英字で始まる行</td><td class="wrap">読み飛ばします</td></tr>
-          <tr><td><code>Labels x,y,文字列</code></td><td class="wrap">画像の (x, y) 画素に文字を置きます。原点は左上です。数値より前に書きます。「ラベル表示」がオンのときに描かれます</td></tr>
-          <tr><td><code>Mesh AutoCreate</code></td><td class="wrap">格子状でない点を三角形に自動分割します。数値より前に書きます</td></tr>
-          <tr><td><code>[AVESE.EXE]</code> の節</td><td class="wrap"><code>キー=値</code> の形で設定を埋め込みます。設定「データファイルから設定を読みこむ」がオンのときに有効です</td></tr>
-          <tr><td><code>IncludeINI "名前.ini"</code></td><td class="wrap">別の設定ファイルを読み込みます</td></tr>
+          <tr><th>Syntax</th><th>Meaning</th></tr>
+          <tr><td><code>-</code> (in the Z position)</td><td class="wrap">Leaves the area around that point blank (white)</td></tr>
+          <tr><td>Blank lines, lines starting with a symbol or letter</td><td class="wrap">Skipped</td></tr>
+          <tr><td><code>Labels x,y,text</code></td><td class="wrap">Places text at pixel (x, y) of the image, with the origin at the top left. Write it before the numbers. Drawn when Show labels is on</td></tr>
+          <tr><td><code>Mesh AutoCreate</code></td><td class="wrap">Splits points that are not on a grid into triangles automatically. Write it before the numbers</td></tr>
+          <tr><td>A <code>[AVESE.EXE]</code> section</td><td class="wrap">Embeds settings as <code>key=value</code> lines. Effective when "Read settings from the data file" is on</td></tr>
+          <tr><td><code>IncludeINI "name.ini"</code></td><td class="wrap">Loads another settings file</td></tr>
         </table>
       </div>
-      <p>円筒座標では X、Y が θ、r になり、U、V は θ 方向、r 方向の成分です。「パネル状」を選ぶと Z だけを格子状に並べたファイルとして読み、1 行目が画像の一番上になります。</p>
-      <h3>設定を埋め込む例</h3>
+      <p>In cylindrical coordinates X and Y are θ and r, and U and V are the θ and r components. With the panel type, the file is read as a grid of Z values only, and the first line becomes the top of the image.</p>
+      <h3>Embedding settings</h3>
       <pre><code>[AVESE.EXE]
 SEsize=640
 CBvector=1
@@ -173,30 +177,30 @@ CBvector=1
     </section>
 
     <section id="settings">
-      <h2>設定を変える</h2>
-      <p>ツールバーの「設定」ボタンで設定ダイアログを開きます。変更して OK を押すと、その設定で描き直します。</p>
+      <h2>Change settings</h2>
+      <p>Open the settings dialog with the Settings button in the toolbar. Press OK to redraw with the new settings.</p>
       <figure class="shot">
         <video src="media/settings.webm" poster="media/settings.png" width="786" height="683" controls muted playsinline preload="none"></video>
-        <figcaption>動画: グラデーションを変え、さらに反転する (19 秒)</figcaption>
+        <figcaption>Video: change the gradient, then reverse it (19 s)</figcaption>
       </figure>
       <div class="table-wrap">
         <table>
-          <tr><th>タブ</th><th>内容</th></tr>
-          <tr><td>凡例</td><td class="wrap">凡例の表示、Z の範囲指定、グラデーションの種類・色数・反転・折り返し、凡例の大きさ</td></tr>
-          <tr><td>入出力</td><td class="wrap">列の割り当て、読み飛ばす行数、パネルの転置、スプライン補間、データチェック</td></tr>
-          <tr><td>ラベル</td><td class="wrap">ラベルのフォント、画面上で追加するラベルの一覧</td></tr>
-          <tr><td>表示</td><td class="wrap">余白、背景色と前景色、各部分のフォント</td></tr>
-          <tr><td>特殊</td><td class="wrap">終了時の設定保存、ビットマップの大きさの上限、画像の形式</td></tr>
-          <tr><td>俯瞰図</td><td class="wrap">高さ、面で表示、視点の角度 (η、φ)</td></tr>
-          <tr><td>分布図</td><td class="wrap">散布図の点の大きさと形</td></tr>
-          <tr><td>ベクトル</td><td class="wrap">間引き、長さ、色、矢印、基準値</td></tr>
-          <tr><td>等高線</td><td class="wrap">本数、範囲、色</td></tr>
-          <tr><td>座標系、グリッド</td><td class="wrap">座標系、線の幅、矢印、タイトル、目盛</td></tr>
+          <tr><th>Tab</th><th>Contents</th></tr>
+          <tr><td>Legend</td><td class="wrap">Show the legend, set the Z range, gradient type, color count, reversal and folding, legend size</td></tr>
+          <tr><td>I/O</td><td class="wrap">Column assignment, lines to skip, panel transposition, spline interpolation, data check</td></tr>
+          <tr><td>Labels</td><td class="wrap">Label font, and the list of labels added on screen</td></tr>
+          <tr><td>Display</td><td class="wrap">Margins, background and foreground colors, fonts for each part</td></tr>
+          <tr><td>Advanced</td><td class="wrap">Save settings on exit, bitmap size limit, image format</td></tr>
+          <tr><td>3D View</td><td class="wrap">Height, draw as a surface, view angles (η, φ)</td></tr>
+          <tr><td>Distribution</td><td class="wrap">Dot size and shape for scatter plots</td></tr>
+          <tr><td>Vectors</td><td class="wrap">Thinning, length, color, arrowheads, reference value</td></tr>
+          <tr><td>Contours</td><td class="wrap">Number of lines, range, color</td></tr>
+          <tr><td>Coordinates, Grid</td><td class="wrap">Coordinate system, line width, arrows, titles, ticks</td></tr>
         </table>
       </div>
-      <p>データの範囲は、読み込むたびに読み取り専用の欄に表示されます。「指定する」をオンにした項目だけ、入力した値が使われます。設定は「設定保存」で <code>avese.exe</code> と同じフォルダの <code>avese.ini</code> に保存され、次の起動時に読み込まれます。</p>
-      <h3>グラデーション</h3>
-      <p>9 種類から選べます。既定は smooth colors-1 です。コマンドラインでは <code>CBtype=0</code> から <code>8</code> で指定します。</p>
+      <p>The data range is shown in read-only fields each time data is loaded. A value you type is used only for items whose "Specify" box is checked. Save settings writes <code>avese.ini</code> next to <code>avese.exe</code>, and it is loaded at the next start.</p>
+      <h3>Gradients</h3>
+      <p>Choose from nine gradients. The default is smooth colors-1. On the command line, use <code>CBtype=0</code> to <code>8</code>.</p>
       <div class="grads">
         <figure><img src="media/grad0.png" alt="" loading="lazy"><figcaption>smooth colors-1</figcaption></figure>
         <figure><img src="media/grad1.png" alt="" loading="lazy"><figcaption>smooth colors-2</figcaption></figure>
@@ -211,103 +215,104 @@ CBvector=1
     </section>
 
     <section id="bird">
-      <h2>俯瞰図</h2>
-      <p>設定の「俯瞰図」タブで「俯瞰図」をオンにして OK を押します。視点は η と φ の数値か、プレビューの横のスライダーで変えます。プレビューの箱が動くので、向きを確かめながら調整できます。</p>
+      <h2>Bird's-eye view</h2>
+      <p>In the 3D View tab of the settings, turn on the bird's-eye view and press OK. Change the viewpoint with the numbers η and φ, or with the sliders next to the preview. The box in the preview moves, so you can check the direction as you adjust.</p>
       <figure class="shot">
         <video src="media/bird.webm" poster="media/bird.png" width="786" height="683" controls muted playsinline preload="none"></video>
-        <figcaption>動画: 俯瞰図に切り替え、視点を変える (20 秒)</figcaption>
+        <figcaption>Video: switch to the bird's-eye view and change the viewpoint (20 s)</figcaption>
       </figure>
     </section>
 
     <section id="output">
-      <h2>保存と出力</h2>
-      <p>「セーブ」のファイルの種類で形式を選びます。拡張子を付けずに名前を入れると、選んだ種類の拡張子が付きます。</p>
+      <h2>Saving and output</h2>
+      <p>Choose the format with the file type in Save Image. If you type a name without an extension, the extension of the chosen type is added.</p>
       <div class="table-wrap">
         <table>
-          <tr><th>形式</th><th>内容</th></tr>
-          <tr><td>PNG</td><td class="wrap">Web や資料に向いた画像</td></tr>
-          <tr><td>BMP</td><td class="wrap">256 色ビットマップ。無圧縮と RLE 圧縮</td></tr>
-          <tr><td>EMF、WMF</td><td class="wrap">メタファイル</td></tr>
-          <tr><td>AVI</td><td class="wrap">無圧縮の動画。<a href="#batch">連続処理</a>で作ります</td></tr>
-          <tr><td>クリップボード</td><td class="wrap">「コピー」で送ります。設定の「イメージの取り扱い」でビットマップか EMF を選びます。Windows のみです</td></tr>
+          <tr><th>Format</th><th>Notes</th></tr>
+          <tr><td>PNG</td><td class="wrap">Good for the web and documents</td></tr>
+          <tr><td>BMP</td><td class="wrap">256-color bitmap, uncompressed or RLE-compressed</td></tr>
+          <tr><td>EMF, WMF</td><td class="wrap">Metafiles</td></tr>
+          <tr><td>AVI</td><td class="wrap">Uncompressed video, made with <a href="#batch">batch processing</a></td></tr>
+          <tr><td>Clipboard</td><td class="wrap">Sent with Copy. Image Options in the settings chooses bitmap or EMF. Windows only</td></tr>
         </table>
       </div>
     </section>
 
     <section id="batch">
-      <h2>連続処理と動画</h2>
-      <p>複数のファイルを選ぶか、まとめてドロップすると「連続処理」ダイアログが開きます。計算のステップごとの結果を、連番の画像や動画にできます。</p>
+      <h2>Batch and video</h2>
+      <p>Select several files, or drop them together, and the Batch Processing dialog opens. It turns the result of each calculation step into numbered images or a video.</p>
       <div class="two">
         <figure class="shot">
-          <img src="media/batch.png" width="786" height="683" alt="連続処理ダイアログ。ファイルの一覧と、ソート、追加、削除、BMP作成、AVI作成のボタンがある" loading="lazy">
-          <figcaption>連続処理ダイアログ</figcaption>
+          <img src="media/batch.png" width="786" height="683" alt="The Batch Processing dialog with a file list and buttons for sort, add, delete, create BMP and create AVI" loading="lazy">
+          <figcaption>The Batch Processing dialog</figcaption>
         </figure>
         <div>
           <ol class="steps">
-            <li>「追加」「削除」「ソート」「↑」「↓」で一覧を整えます。ソートは数字を数として比べるので、frame2 は frame10 より前に並びます。</li>
-            <li>「BMP作成」は、ファイルごとに <code>ファイル名.bmp</code> を保存します。</li>
-            <li>「AVI作成」は、一覧の順に 1 コマずつ並べた無圧縮 AVI を作ります。「フレームレート」でコマ数を、「サイズ指定」で大きさを決めます。</li>
+            <li>Arrange the list with Add, Delete, Sort, ↑ and ↓. Sort compares digits as numbers, so frame2 comes before frame10.</li>
+            <li>Create BMP saves <code>filename.bmp</code> for each file.</li>
+            <li>Create AVI makes an uncompressed AVI with one frame per file, in list order. Frame Rate sets the frames per second, and Set Size sets the dimensions.</li>
           </ol>
-          <p class="note">色の範囲がコマごとに変わらないよう、「凡例」タブで Z の最小値と最大値を指定しておくと動画が見やすくなります。ページ先頭の波の動画は −2 から 2 に固定しています。</p>
+          <p class="note">To keep the color range from changing from frame to frame, set the Z minimum and maximum in the Legend tab. The wave video at the top of this page is fixed to −2 to 2.</p>
         </div>
       </div>
     </section>
 
     <section id="cli">
-      <h2>コマンドライン</h2>
-      <p>ウィンドウを開かずに画像や動画を作れます。計算の後処理に組み込むときに使います。</p>
-      <pre><code>avese データ.txt
-avese --render データ.txt 出力.png [--rle] [--ini 設定.ini] [--set キー=値]...
-avese --avi 出力.avi --fps 10 [--frame-size 640x480] [--ini 設定.ini] [--set キー=値]... データ1.txt データ2.txt ...</code></pre>
-      <p>出力の形式は拡張子で決まります (<code>.png</code>、<code>.bmp</code>、<code>.emf</code>、<code>.wmf</code>)。<code>--rle</code> を付けると <code>.bmp</code> が RLE 圧縮になります。設定は <code>--ini</code> のファイル、<code>--set</code> の順に適用されます。</p>
-      <h3>例</h3>
+      <h2>Command line</h2>
+      <p>Make images and videos without opening a window. This is handy when you add avese to the post-processing of a calculation.</p>
+      <pre><code>avese data.txt
+avese --render data.txt out.png [--rle] [--ini settings.ini] [--set key=value]...
+avese --avi out.avi --fps 10 [--frame-size 640x480] [--ini settings.ini] [--set key=value]... data1.txt data2.txt ...</code></pre>
+      <p>The output format follows the extension (<code>.png</code>, <code>.bmp</code>, <code>.emf</code>, <code>.wmf</code>). Add <code>--rle</code> to make a <code>.bmp</code> RLE-compressed. Settings are applied in order: the <code>--ini</code> file first, then <code>--set</code>.</p>
+      <h3>Examples</h3>
       <pre><code>avese --render flow.txt vector.png --set SEsize=520 --set CBvector=1 --set CBskipx=1 --set CBskipy=1 --set EDstepx=4 --set EDstepy=4
 avese --avi wave.avi --fps 12 --frame-size 640x480 --set CBenZmin=1 --set EDenZmin=-2 --set CBenZmax=1 --set EDenZmax=2 wave/wave01.txt wave/wave02.txt wave/wave03.txt</code></pre>
-      <h3>よく使うキー</h3>
+      <h3>Common keys</h3>
       <div class="table-wrap">
         <table>
-          <tr><th>キー</th><th>意味</th></tr>
-          <tr><td><code>SEsize</code></td><td class="wrap">図の大きさ (ピクセル)</td></tr>
-          <tr><td><code>CBgraph</code>, <code>CBscatter</code>, <code>CBpanel</code></td><td class="wrap">分布図、散布図、パネル (0 か 1)</td></tr>
-          <tr><td><code>CBvector</code>, <code>CBtoko</code></td><td class="wrap">ベクトル、等高線 (0 か 1)</td></tr>
-          <tr><td><code>CBskipx</code>, <code>CBskipy</code>, <code>EDstepx</code>, <code>EDstepy</code></td><td class="wrap">ベクトルの間引きの有無と間隔</td></tr>
-          <tr><td><code>SEtoko</code></td><td class="wrap">等高線の本数</td></tr>
-          <tr><td><code>CBaxis</code>, <code>CBgrid</code>, <code>CBpoint</code>, <code>CBlegend</code></td><td class="wrap">座標軸、グリッド、データ点、凡例 (0 か 1)</td></tr>
-          <tr><td><code>CBland</code>, <code>CBsurface</code>, <code>SElandheight</code>, <code>SEeta</code>, <code>SEphi</code></td><td class="wrap">俯瞰図、面で表示、高さ、視点の角度</td></tr>
-          <tr><td><code>CBtype</code>, <code>CBreverse</code>, <code>CBfold</code></td><td class="wrap">グラデーションの種類 (0 から 8)、反転、折り返し</td></tr>
-          <tr><td><code>CBenZmin</code>, <code>EDenZmin</code>, <code>CBenZmax</code>, <code>EDenZmax</code></td><td class="wrap">Z の範囲の指定</td></tr>
+          <tr><th>Key</th><th>Meaning</th></tr>
+          <tr><td><code>SEsize</code></td><td class="wrap">Plot size in pixels</td></tr>
+          <tr><td><code>CBgraph</code>, <code>CBscatter</code>, <code>CBpanel</code></td><td class="wrap">Distribution, scatter, panel (0 or 1)</td></tr>
+          <tr><td><code>CBvector</code>, <code>CBtoko</code></td><td class="wrap">Vectors, contours (0 or 1)</td></tr>
+          <tr><td><code>CBskipx</code>, <code>CBskipy</code>, <code>EDstepx</code>, <code>EDstepy</code></td><td class="wrap">Whether to thin out vectors, and the step</td></tr>
+          <tr><td><code>SEtoko</code></td><td class="wrap">Number of contour lines</td></tr>
+          <tr><td><code>CBaxis</code>, <code>CBgrid</code>, <code>CBpoint</code>, <code>CBlegend</code></td><td class="wrap">Axes, grid, data points, legend (0 or 1)</td></tr>
+          <tr><td><code>CBland</code>, <code>CBsurface</code>, <code>SElandheight</code>, <code>SEeta</code>, <code>SEphi</code></td><td class="wrap">Bird's-eye view, surface, height, view angles</td></tr>
+          <tr><td><code>CBtype</code>, <code>CBreverse</code>, <code>CBfold</code></td><td class="wrap">Gradient type (0 to 8), reversal, folding</td></tr>
+          <tr><td><code>CBenZmin</code>, <code>EDenZmin</code>, <code>CBenZmax</code>, <code>EDenZmax</code></td><td class="wrap">Fix the Z range</td></tr>
         </table>
       </div>
     </section>
 
     <section id="download">
-      <h2>ダウンロード</h2>
-      <p>Windows (x64) 用のファイルを <a href="https://github.com/tetsuji16/avese/releases">GitHub の Releases</a> で配布しています。現在はプレビュー版です。</p>
+      <h2>Download</h2>
+      <p>The latest stable release is v1.0.0, for Windows (x64). Extract the ZIP and run <code>avese.exe</code>. No installation is needed.</p>
       <div class="btns">
-        <a class="btn" href="https://github.com/tetsuji16/avese/releases">Releases を開く</a>
+        <a class="btn" href="https://github.com/tetsuji16/avese/releases/download/v1.0.0/avese-v1.0.0-windows-x64.zip">Download v1.0.0 (ZIP)</a>
       </div>
-      <p>ほかの OS では、Rust を入れてソースからビルドしてください。クリップボードは Windows のみです。</p>
+      <p>Release notes and older versions are on <a href="https://github.com/tetsuji16/avese/releases">GitHub Releases</a>.</p>
+      <p>On other OSes, install Rust and build from source. The clipboard works on Windows only.</p>
       <pre><code>git clone https://github.com/tetsuji16/avese.git
 cd avese
 cargo build --release</code></pre>
-      <h3>サンプルデータ</h3>
-      <p><a href="samples/samples.zip">samples.zip</a> (約 1 MB) に、このページの図を作ったデータが入っています。データはすべて数式から作ったもので、作り方は <a href="samples/make_samples.py">make_samples.py</a> にあります。</p>
+      <h3>Sample data</h3>
+      <p><a href="samples/samples.zip">samples.zip</a> (about 1 MB) contains the data behind the plots on this page. All of it is generated from formulas; see <a href="samples/make_samples.py">make_samples.py</a> for how.</p>
       <div class="table-wrap">
         <table>
-          <tr><th>ファイル</th><th>内容</th></tr>
-          <tr><td><code>flow.txt</code></td><td class="wrap">一様流の中の円柱まわりの流れ。圧力係数と速度、円柱の内側は穴</td></tr>
-          <tr><td><code>peaks.txt</code></td><td class="wrap">山と谷のある面</td></tr>
-          <tr><td><code>polar.txt</code></td><td class="wrap">円筒座標の例</td></tr>
-          <tr><td><code>scatter.txt</code></td><td class="wrap">格子に乗らない 600 点</td></tr>
-          <tr><td><code>panel.txt</code></td><td class="wrap">Z だけを格子状に並べたパネル用のデータ</td></tr>
-          <tr><td><code>wave/</code></td><td class="wrap">2 つの波源の干渉、24 コマ。連続処理と動画の例</td></tr>
+          <tr><th>File</th><th>Contents</th></tr>
+          <tr><td><code>flow.txt</code></td><td class="wrap">Flow around a cylinder in a uniform stream: pressure coefficient and velocity, with the inside of the cylinder as a hole</td></tr>
+          <tr><td><code>peaks.txt</code></td><td class="wrap">A surface with peaks and valleys</td></tr>
+          <tr><td><code>polar.txt</code></td><td class="wrap">An example in cylindrical coordinates</td></tr>
+          <tr><td><code>scatter.txt</code></td><td class="wrap">600 points that are not on a grid</td></tr>
+          <tr><td><code>panel.txt</code></td><td class="wrap">Z values laid out as a grid, for the panel type</td></tr>
+          <tr><td><code>wave/</code></td><td class="wrap">Two interfering wave sources, 24 frames. An example for batch processing and video</td></tr>
         </table>
       </div>
     </section>
 
     <section id="about">
-      <h2>このソフトについて</h2>
-      <p>ライセンスは <a href="https://github.com/tetsuji16/avese/blob/main/LICENSE">MIT License</a> です。不具合の報告やソースコードは <a href="https://github.com/tetsuji16/avese">GitHub</a> にあります。画面の言語は OS の設定に合わせて日本語か英語になります。</p>
+      <h2>About</h2>
+      <p>avese is released under the <a href="https://github.com/tetsuji16/avese/blob/main/LICENSE">MIT License</a>. Report problems and find the source code on <a href="https://github.com/tetsuji16/avese">GitHub</a>. The interface language follows your OS setting, Japanese or English.</p>
     </section>
   </main>
 </div>
@@ -315,7 +320,7 @@ cargo build --release</code></pre>
 <footer>
   <div class="foot-in">
     <p><a href="https://github.com/tetsuji16/avese">GitHub</a> ・ <a href="https://github.com/tetsuji16/avese/blob/main/LICENSE">MIT License</a></p>
-    <p class="fine">avese は、AV似非 (AVS を簡素化したソフト) を Rust で書き直したものです。AVS および AV似非 の開発元とは関係ありません。</p>
+    <p class="fine">avese is a Rust rewrite of AV似非 (a simplified version of AVS). It is not affiliated with the developers of AVS or AV似非.</p>
   </div>
 </footer>
 
