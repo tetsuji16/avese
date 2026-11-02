@@ -41,8 +41,8 @@ pub fn pick(use_wmf: bool) -> Option<(PathBuf, ImageFormat)> {
     // extension afterwards, ask again for the actual destination.
     if target != path && target.exists() {
         let answer = rfd::MessageDialog::new()
-            .set_title("画像のセーブ")
-            .set_description(format!("{} は既に存在します。上書きしますか？", target.display()))
+            .set_title(crate::i18n::text("画像のセーブ"))
+            .set_description(if crate::i18n::english_mode() { format!("{} already exists. Overwrite?", target.display()) } else { format!("{} は既に存在します。上書きしますか？", target.display()) })
             .set_level(rfd::MessageLevel::Warning)
             .set_buttons(rfd::MessageButtons::YesNo)
             .show();
@@ -66,13 +66,13 @@ mod imp {
     pub fn pick(index: u32) -> Option<(PathBuf, ImageFormat)> {
         let mut filter: Vec<u16> = vec![];
         for (name, ext, _) in FILTERS {
-            filter.extend(wide(name));
+            filter.extend(wide(&crate::i18n::text(name)));
             filter.push(0);
             filter.extend(wide(&format!("*.{ext}")));
             filter.push(0);
         }
         filter.push(0);
-        let title: Vec<u16> = wide("画像のセーブ").into_iter().chain([0]).collect();
+        let title: Vec<u16> = wide(&crate::i18n::text("画像のセーブ")).into_iter().chain([0]).collect();
         let mut file = [0u16; 1024];
         for (i, c) in wide("default").into_iter().enumerate() {
             file[i] = c;
@@ -105,17 +105,17 @@ mod imp {
         // after choosing a BMP destination instead of presenting two identical filters.
         let initial = if index == default_index(true) { "default.wmf" } else { "default.bmp" };
         let p = rfd::FileDialog::new()
-            .set_title("画像のセーブ（拡張子で形式を指定）")
+            .set_title(crate::i18n::text("画像のセーブ（拡張子で形式を指定）"))
             .set_file_name(initial)
-            .add_filter("画像ファイル (*.bmp;*.png;*.emf;*.wmf)", &["bmp", "png", "emf", "wmf"])
+            .add_filter(crate::i18n::text("画像ファイル (*.bmp;*.png;*.emf;*.wmf)"), &["bmp", "png", "emf", "wmf"])
             .save_file()?;
         let fmt = ImageFormat::from_extension(&p).unwrap_or(ImageFormat::Bmp);
         if fmt != ImageFormat::Bmp {
             return Some((p, fmt));
         }
         let answer = rfd::MessageDialog::new()
-            .set_title("BMP の圧縮")
-            .set_description("RLE 圧縮を使用しますか？")
+            .set_title(crate::i18n::text("BMP の圧縮"))
+            .set_description(crate::i18n::text("RLE 圧縮を使用しますか？"))
             .set_buttons(rfd::MessageButtons::YesNoCancel)
             .show();
         match answer {

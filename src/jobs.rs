@@ -59,7 +59,7 @@ impl<T> Handle<T> {
         match self.rx.try_recv() {
             Ok(r) => Some(r),
             Err(TryRecvError::Empty) => None,
-            Err(TryRecvError::Disconnected) => Some(Err("処理が中断されました".into())),
+            Err(TryRecvError::Disconnected) => Some(Err(crate::i18n::text("処理が中断されました"))),
         }
     }
 }
@@ -70,7 +70,7 @@ pub fn spawn<T: Send + 'static>(ctx: &egui::Context, f: impl FnOnce(&Sh) -> Resu
     let sh = Arc::new(Sh::new());
     let (sh2, ctx2) = (sh.clone(), ctx.clone());
     std::thread::spawn(move || {
-        let r = catch_unwind(AssertUnwindSafe(|| f(&sh2))).unwrap_or_else(|_| Err("処理中にエラーが発生しました".into()));
+        let r = catch_unwind(AssertUnwindSafe(|| f(&sh2))).unwrap_or_else(|_| Err(crate::i18n::text("処理中にエラーが発生しました")));
         let _ = tx.send(r);
         ctx2.request_repaint();
     });
@@ -194,12 +194,18 @@ pub fn batch_job(ctx: &egui::Context, files: Vec<String>, base: Store, kind: Bat
                     Err(e) => errs.push(e),
                 }
             }
-            if errs.is_empty() { Ok(format!("{done} 個の BMP ファイルを作成しました。")) } else { Err(format!("{done} 個作成、{} 個失敗しました。\n{}", errs.len(), errs.join("\n"))) }
+            if errs.is_empty() {
+                Ok(if crate::i18n::english_mode() { format!("Created {done} BMP file(s).") } else { format!("{done} 個の BMP ファイルを作成しました。") })
+            } else if crate::i18n::english_mode() {
+                Err(format!("Created {done}; {} file(s) failed.\n{}", errs.len(), errs.join("\n")))
+            } else {
+                Err(format!("{done} 個作成、{} 個失敗しました。\n{}", errs.len(), errs.join("\n")))
+            }
         }
         BatchKind::Avi { path, fps, size } => {
             let first = match files.first() {
                 Some(f) => render_file(f, &base, sh)?,
-                None => return Err("ファイルがありません".into()),
+                None => return Err(crate::i18n::text("ファイルがありません")),
             };
             let [fw, fh] = first.size();
             let (w, h) = batch::avi_size(size, (fw as u32, fh as u32));
@@ -226,7 +232,7 @@ pub fn batch_job(ctx: &egui::Context, files: Vec<String>, base: Store, kind: Bat
                     if sh.cancelled() { Err(CANCELLED.to_string()) } else { Ok(()) }
                 },
             ).map_err(|e| if sh.cancelled() { CANCELLED.to_string() } else { e })?;
-            Ok(format!("{} フレーム ({w} x {h}) の AVI ファイルを作成しました。", files.len()))
+            Ok(if crate::i18n::english_mode() { format!("Created an AVI with {} frames ({w} × {h}).", files.len()) } else { format!("{} フレーム ({w} x {h}) の AVI ファイルを作成しました。", files.len()) })
         }
     })
 }
@@ -271,9 +277,10 @@ pub fn probe_cells(hit: Option<ProbeHit>, cyl: bool) -> [String; 3] {
 
 /// Warning list for a message box: the first ten, then a count.
 pub fn warnings_text(w: &[String]) -> String {
-    let mut s = w.iter().take(10).cloned().collect::<Vec<_>>().join("\n");
+    let mut s = w.iter().take(10).map(|message| crate::i18n::text(message)).collect::<Vec<_>>().join("\n");
     if w.len() > 10 {
-        s += &format!("\n... 他 {} 件", w.len() - 10);
+        if crate::i18n::english_mode() { s += &format!("\n... {} more", w.len() - 10); }
+        else { s += &format!("\n... 他 {} 件", w.len() - 10); }
     }
     s
 }

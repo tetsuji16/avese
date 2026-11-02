@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>avese Help</title>
+<style>
+body { font-family: "Segoe UI", Arial, sans-serif; max-width: 46em; margin: 1.5em auto; padding: 0 1em; line-height: 1.6; color: #222; }
+h1 { font-size: 1.5em; border-bottom: 2px solid #0078d4; }
+h2 { font-size: 1.2em; margin-top: 1.8em; border-bottom: 1px solid #ccc; }
+code, pre { background: #f3f3f3; font-family: Consolas, monospace; }
+pre { padding: .6em .8em; overflow-x: auto; }
+</style>
+</head>
+<body>
+<h1>avese Help</h1>
+<p>avese turns three-dimensional numeric data into distribution, vector, contour, and bird's-eye plots. It is an unofficial Rust reimplementation inspired by the 2001 Delphi application AVese.</p>
+
+<h2>Getting started</h2>
+<ol>
+<li>Choose <b>File &gt; Load Data</b>, or drag data files onto the window. The data is loaded and plotted.</li>
+<li>Open <b>Settings</b> to change the plot. Press OK to apply the settings. After changing display toggles on the toolbar or menu, choose <b>Redraw</b>.</li>
+<li>Use <b>Save Image</b> to export a picture, or <b>Copy to Clipboard</b> to copy it.</li>
+</ol>
+<p>Selecting or dropping several files opens Batch Processing.</p>
+
+<h2>Data files</h2>
+<p>Data files are plain text in Shift-JIS or UTF-8. Each row contains one point; separate values with spaces, tabs, or commas.</p>
+<pre>X  Y  Z  U  V
+0  0  1.5  0.2  0.1
+1  0  1.8  0.3  0.1</pre>
+<ul>
+<li>Choose the columns for X, Y, Z, U, and V in Settings &gt; I/O. In cylindrical coordinates, X and Y represent θ and r, while U and V are their vector components.</li>
+<li>Use a hyphen in the Z column for a missing point. Its surrounding cells are left blank.</li>
+<li>Select Panel Plot for data arranged as rows of Z values. The first row appears at the top.</li>
+<li>Blank lines and lines beginning with comment characters or letters are skipped.</li>
+<li>Before the numeric rows, <code>Labels x,y,text</code> adds a label at image pixel (x,y). Enable Labels to display it.</li>
+<li><code>Mesh AutoCreate</code> triangulates scattered points automatically.</li>
+<li>Enable loading settings from data to read embedded <code>[AVESE.EXE]</code> key/value settings and <code>IncludeINI "file.ini"</code>.</li>
+</ul>
+
+<h2>Settings</h2>
+<p>Settings are grouped into Legend, I/O, Bird's-eye View, Distribution, Vectors, Contours, Coordinates, Grid, Labels, Display, Fonts, and Advanced. Read-only fields show the data ranges; enable a range checkbox to use a custom value.</p>
+<p>Plot size is controlled by Size and Reference Length on the toolbar. Horizontal and vertical scale can be set separately. Settings are saved to <code>avese.ini</code> beside the application and loaded at startup.</p>
+
+<h2>Status bar</h2>
+<p>Move the pointer over a 2D plot to see its X, Y, and Z values. Cylindrical plots show θ and r. The status bar does not probe bird's-eye views.</p>
+
+<h2>Export and clipboard</h2>
+<p>Choose an output type in Save Image: 256-color bitmap, RLE bitmap, PNG, EMF, or WMF. Copy to Clipboard uses the bitmap or EMF format selected under Image Options.</p>
+
+<h2>Batch processing</h2>
+<p>Use Add, Remove, Sort, and the up/down buttons to arrange files. Sort compares numbers naturally (frame2 comes before frame10).</p>
+<ul>
+<li><b>Create BMP</b> renders each file and saves it as <code>filename.bmp</code> in the selected folder.</li>
+<li><b>Create AVI</b> writes an uncompressed AVI in list order. Frame Rate sets frames per second. Set Size to resize frames; otherwise the first file's image size is used.</li>
+</ul>
+<p>Each file starts with a copy of the current settings, so embedded settings in one file do not carry over to the next.</p>
+
+<h2>Command line</h2>
+<p>Render without opening a window. Use <code>--ini</code> for a settings file and <code>--set key=value</code> for individual options.</p>
+<pre>avese --render data.txt output.png [--rle] [--ini settings.ini] [--set CBmode=1]
+avese --avi output.avi --fps 10 [--frame-size 640x480] data1.txt data2.txt</pre>
+<p>The output extension selects PNG, BMP, EMF, or WMF. Use <code>--rle</code> for RLE-compressed BMP.</p>
+</body>
+</html>
