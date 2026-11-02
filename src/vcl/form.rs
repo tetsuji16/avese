@@ -1131,7 +1131,24 @@ impl<'a> Renderer<'a> {
             path.push(0);
             let old = self.enter_group(s);
             for k in &s.kids {
-                self.draw_node(k, org, f, path);
+                let mut child_org = org;
+                // The original form composes Uθ and Vr from separate labels.
+                // The wider replacement font can extend past the original
+                // subscript position, so reserve the actual base glyph width.
+                if s.name == "TSIO" {
+                    let base_name = match k.name.as_str() {
+                        "Label30" => Some("Label48"),
+                        "Label31" => Some("Label49"),
+                        _ => None,
+                    };
+                    if let Some(base) = base_name.and_then(|name| s.kids.iter().find(|node| node.name == name)) {
+                        let (base_x, _, _, _) = base.rect();
+                        let (sub_x, _, _, _) = k.rect();
+                        let width = text_size(&p, base.str("Caption"), &f.with(base).id()).x;
+                        child_org.x += (base_x as f32 + width + 1.0 - sub_x as f32).max(0.0);
+                    }
+                }
+                self.draw_node(k, child_org, f, path);
             }
             self.group = old;
             path.pop();
@@ -1234,6 +1251,39 @@ mod modal_tests {
         let nat: Vec<f32> = pc.kids.iter().filter(|k| k.class == "TTabSheet").map(|s| tab_width(s.str("Caption"), 1000.0)).collect();
         let rows = tab_rows(&nat, pc.int("Width") as f32 / crate::forms::DIALOG_WIDEN);
         assert_eq!(rows.iter().map(Vec::len).collect::<Vec<_>>(), [6, 7]);
+    }
+
+    #[test]
+    fn io_subscript_does_not_overlap_its_base_glyph() {
+        let ctx = egui::Context::default();
+        crate::fonts::install(&ctx);
+        let forms = crate::forms::Forms::load();
+        let pc = forms.config.find("TPCconfig").unwrap();
+        let io = pc.kids.iter().filter(|n| n.class == "TTabSheet").position(|n| n.name == "TSIO").unwrap();
+        let mut store = Store::default();
+        store.set_item_index("TPCconfig", io as i32);
+        let assets = Assets::default();
+        let mut raw = egui::RawInput::default();
+        raw.screen_rect = Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(600.0, 400.0)));
+        let mut out = ctx.run_ui(raw, |ui| {
+            let mut renderer = Renderer::new(ui, &mut store, &assets);
+            renderer.draw_node(pc, Pos2::ZERO, &Fnt::form_default(), &mut vec![]);
+            renderer.finish();
+        });
+        let texts: Vec<_> = out.shapes.iter().filter_map(|shape| match &shape.shape {
+            egui::Shape::Text(text) => Some(text),
+            _ => None,
+        }).collect();
+        for (base_text, sub_text) in [("U", "θ"), ("V", "ｒ")] {
+            let base = texts.iter().filter(|text| text.galley.job.text == base_text)
+                .max_by(|a, b| a.pos.y.total_cmp(&b.pos.y)).expect("lower base label");
+            let sub = texts.iter().filter(|text| text.galley.job.text == sub_text && text.pos.x > base.pos.x)
+                .min_by(|a, b| a.pos.x.total_cmp(&b.pos.x)).expect("subscript label");
+            let base_ink = base.galley.mesh_bounds.translate(base.pos.to_vec2());
+            let sub_ink = sub.galley.mesh_bounds.translate(sub.pos.to_vec2());
+            assert!(base_ink.max.x <= sub_ink.min.x, "{base_text} and {sub_text} overlap: {base_ink:?}, {sub_ink:?}");
+        }
+        out.textures_delta.clear();
     }
 
     #[test]
