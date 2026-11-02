@@ -205,6 +205,8 @@ pub struct App {
     previous: Option<AppPrevious>,
     pending_irregular: Option<PendingIrregular>,
     irregular_focus_initialized: bool,
+    #[cfg(test)]
+    test_error_hook: Option<fn(&str)>,
 }
 
 pub fn exe_dir() -> PathBuf {
@@ -259,6 +261,8 @@ impl App {
             previous: None,
             pending_irregular: None,
             irregular_focus_initialized: false,
+            #[cfg(test)]
+            test_error_hook: None,
         }
     }
 
@@ -267,6 +271,11 @@ impl App {
     }
 
     fn show_error(&self, text: &str) {
+        #[cfg(test)]
+        if let Some(hook) = self.test_error_hook {
+            hook(text);
+            return;
+        }
         self.dlg.modal(|| dialogs::error("avese", text));
     }
 
@@ -1195,6 +1204,111 @@ fn shortcut_actions(ctx: &Context, in_text: bool) -> Vec<&'static str> {
 #[cfg(test)]
 mod shortcut_tests {
     use super::*;
+
+    thread_local! {
+        static GUI_SMOKE_ERRORS: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+    }
+
+    fn record_smoke_error(message: &str) {
+        GUI_SMOKE_ERRORS.with(|errors| errors.borrow_mut().push(message.to_owned()));
+    }
+
+    #[test]
+    fn gui_smoke_load_settings_errors_recovery() {
+        struct Fixture(PathBuf);
+        impl Drop for Fixture {
+            fn drop(&mut self) { let _ = std::fs::remove_file(&self.0); }
+        }
+        #[derive(Debug)]
+        struct Dropped(PathBuf);
+        impl egui::DroppedFile for Dropped {
+            fn path(&self) -> &Path { &self.0 }
+            fn bytes(&self) -> Result<Vec<u8>, String> { std::fs::read(&self.0).map_err(|e| e.to_string()) }
+        }
+        let path = std::env::temp_dir().join(format!("avese-gui-smoke-{}-{:?}.txt", std::process::id(), std::thread::current().id()));
+        let fixture = Fixture(path);
+        std::fs::write(&fixture.0, b"[AVESE.EXE]\nSEsize=100\n[DATA]\n0 0 1\n1 0 2\n0 1 3\n1 1 4\n").unwrap();
+        let oversized = Fixture(fixture.0.with_extension("oversized.txt"));
+        std::fs::write(&oversized.0, b"[AVESE.EXE]\nSEsize=20000\n[DATA]\n0 0 1\n1 0 2\n0 1 3\n1 1 4\n").unwrap();
+        let missing = fixture.0.with_extension("missing.txt");
+        GUI_SMOKE_ERRORS.with(|errors| errors.borrow_mut().clear());
+
+        let ctx = Context::default();
+        ctx.set_embed_viewports(true);
+        crate::fonts::install(&ctx);
+        let forms = Forms::load();
+        let store = Store::from_forms(&[&forms.form1, &forms.config, &forms.avi, &forms.input, &forms.about, &forms.mesh]);
+        let mut app = App::new(&ctx, forms, store, Layout::default(), vec![fixture.0.clone()]);
+        // The headless test has no native window to find or disable.
+        app.started_hwnd = true;
+        app.test_error_hook = Some(record_smoke_error);
+        let mut frame = eframe::Frame::_new_kittest();
+        let mut draw = |app: &mut App, events: Vec<egui::Event>, dropped: Option<PathBuf>| {
+            let mut raw = egui::RawInput::default();
+            raw.screen_rect = Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1000.0, 700.0)));
+            raw.events = events;
+            if let Some(path) = dropped { raw.dropped_files.push(Arc::new(Dropped(path))); }
+            let mut output = ctx.run_ui(raw, |ui| eframe::App::ui(app, ui, &mut frame));
+            output.textures_delta.clear();
+        };
+        draw(&mut app, vec![], None);
+        assert!(app.startup_viewport_presented && app.job.is_none());
+        assert_eq!(app.start_files.len(), 1, "startup load must wait for the first frame");
+        draw(&mut app, vec![], None);
+        assert!(app.start_files.is_empty(), "the next frame starts the load");
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while app.rendered.is_none() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            draw(&mut app, vec![], None);
+            assert!(GUI_SMOKE_ERRORS.with(|errors| errors.borrow().is_empty()), "unexpected load or render error");
+        }
+        assert!(app.rendered.is_some() && app.canvas_tex.is_some(), "the data should render");
+        assert!(app.title.contains(fixture.0.file_name().unwrap().to_str().unwrap()));
+
+        let key = |key, modifiers| egui::Event::Key { key, physical_key: Some(key), pressed: true, repeat: false, modifiers };
+        draw(&mut app, vec![key(Key::O, Modifiers::COMMAND)], None);
+        assert!(app.dlg.config.is_some(), "Ctrl+O opens settings");
+        let legend_before = app.store.checked("CBlegend");
+        app.store.set_checked("CBlegend", !legend_before);
+        draw(&mut app, vec![key(Key::Escape, Modifiers::NONE)], None);
+        assert!(app.dlg.config.is_none(), "Escape cancels settings");
+        assert_eq!(app.store.checked("CBlegend"), legend_before, "cancel restores the setting");
+        assert!(app.rendered.is_some(), "cancelling settings keeps the rendered image");
+
+        // Drop an oversized plot to exercise the render-error path without
+        // showing a blocking native message box in the headless test.
+        draw(&mut app, vec![], Some(oversized.0.clone()));
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while GUI_SMOKE_ERRORS.with(|errors| errors.borrow().is_empty()) && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            draw(&mut app, vec![], None);
+        }
+        let errors = GUI_SMOKE_ERRORS.with(|errors| errors.borrow().clone());
+        assert_eq!(errors.len(), 1, "expected one rendering error: {errors:?}");
+        assert!(errors[0].contains("画像が大きすぎます"), "unexpected error: {errors:?}");
+
+        // A normal dropped file still loads after a render failure.
+        draw(&mut app, vec![], Some(fixture.0.clone()));
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while app.rendered.is_none() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            draw(&mut app, vec![], None);
+        }
+        assert!(app.rendered.is_some(), "a valid file should render after an error");
+
+        // A missing dropped file reports a read error and preserves the image.
+        draw(&mut app, vec![], Some(missing.clone()));
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while GUI_SMOKE_ERRORS.with(|errors| errors.borrow().len() < 2) && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            draw(&mut app, vec![], None);
+        }
+        let errors = GUI_SMOKE_ERRORS.with(|errors| errors.borrow().clone());
+        assert_eq!(errors.len(), 2, "expected one read error after the rendering error: {errors:?}");
+        assert!(errors[1].contains(missing.file_name().unwrap().to_str().unwrap()));
+        assert!(app.rendered.is_some(), "a failed read should leave the previous image visible");
+    }
 
     #[test]
     fn main_window_text_does_not_overlap() {
